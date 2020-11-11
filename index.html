@@ -1,11 +1,59 @@
 <!doctype html>
 
-<html lang="en">
-<head>
-	<title>Otakuball Test</title>
+<html lang="en"> 
+<head> 
+    <meta charset="UTF-8" />
+    <title>Otakuball Lite</title>
+
+    <!--load all the scripts here-->
+    <script src="pixi/pixi.js"></script>
+    <script src="pixi/pixi-filters.js"></script>
+    <script src="pixi/pixi-keyboard.js"></script>
+    <script src="pixi/pixi-sound.js"></script>
+
+    <script src="game/main.js"></script>
+
+    <script src="game/media.js"></script>
+    <script src="game/data.js"></script>
+
+    <script src="game/collision.js"></script>
+    <script src="game/sprite.js"></script>
+    <script src="game/paddle.js"></script>
+    <script src="game/ball.js"></script>
+    <script src="game/brick.js"></script>
+    <script src="game/powerup.js"></script>
+    <script src="game/projectile.js"></script>
+    <script src="game/particle.js"></script>
+    <script src="game/enemy.js"></script>
+
+    <script src="game/playstate.js"></script>
+    <script src="game/editorstate.js"></script>
+    <script src="game/teststate.js"></script>
+
+    <script src="game/brick_movement.js"></script>
+
+    <style type="text/css">
+        body {
+            max-width: 800px;
+            margin: auto;        
+        }
+    </style>
 </head>
 
 <body>
-	<h1> HELLO WORLD </h1>
+<script type="text/javascript">
+    init();
+</script>
+
+<h3> Level Import/Export: </h3>
+
+<textarea id="textbox" name="level_string" rows="4" cols="100">
+</textarea>
+
+<p>
+Game too small? You can use your browser's zoom feature 
+to make it bigger.
+</p>
+
 </body>
 </html>

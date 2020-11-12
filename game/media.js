@@ -73,8 +73,11 @@ function printText(string, font, tint=0x000000, scale=1, x=0, y=0){
 }
 
 //creates a PIXI.Sprite (not Sprite) using the texture string
-function makeSprite(texstr){
-	return new PIXI.Sprite(media.textures[texstr]);
+function makeSprite(texstr, scale=1, x=0, y=0){
+	let sprite = new PIXI.Sprite(media.textures[texstr]);
+	sprite.position.set(x, y);
+	sprite.scale.set(scale);
+	return sprite;
 }
 
 //list of all textures to be loaded
@@ -141,6 +144,8 @@ let recursive_sound_names = [
 		"detonator_explode",
 		"invisible_reveal",
 		"antilaser_hit",
+		"alien_hit",
+		"alien_death",
 	]],
 	["ball/", [
 	]],
@@ -396,6 +401,12 @@ media.createAnimations = function(){
 	for (let i = 0; i < 3; i++){
 		let name = "brick_jumper_" + i;
 		create(name, "brick_jumper", 0, i, 14, 1);
+	}
+
+	//conveyor brick
+	for (let i = 0; i < 4; i++){
+		let name = "conveyor_" + i;
+		create(name, "brick_main", 4+i, 21, 1, 3);
 	}
 
 	//menacer coating

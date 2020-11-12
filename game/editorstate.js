@@ -83,7 +83,7 @@ class EditorState{
 		this.initRightWidget();
 
 		//initial selection
-		this.selectedTool = this.tools.free;
+		this.selectedTool = null;
 		this.selectedBrick = null;
 		this.selectedPatch = null;
 		this.selectedMode = null;
@@ -105,6 +105,34 @@ class EditorState{
 		this.add("hud", text);
 		this.add("hud", text2);
 		this.add("hud", text3);
+
+		//Play Button
+		let butt = new Button(10, 45, 150, 50);
+		butt.add(makeSprite("editorbutton_2_0", 3, 5, -2));
+		butt.add(printText(
+			"Play","arcade", 0x000000, 1.5, 55, 10
+		));
+		let state = this;
+		butt.onClick = function(){
+			state.startGame();
+		}
+		this.add("hud", butt);
+
+		//Import/Export buttons
+		butt = new Button(10, 350, 100, 35);
+		butt.add(printText(
+			"Import", "arcade", 0x000000, 1, 7, 8
+		));
+		this.add("hud", butt);
+
+		butt = new Button(10, 395, 100, 35);
+		butt.add(printText(
+			"Export", "arcade", 0x000000, 1, 7, 8
+		));
+		butt.onClick = function(){
+			state.exportLevel();
+		}
+		this.add("hud", butt);
 
 		this.stateName = "editorstate";
 	}
@@ -348,7 +376,7 @@ class EditorState{
 
 		let panel = new PIXI.Container();
 		panel.x = 10;
-		panel.y = DIM.ceiling + 20;
+		panel.y = DIM.ceiling + 40;
 		this.add("hud", panel);
 
 		this.toolButtons = [];

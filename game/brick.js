@@ -619,9 +619,10 @@ class ConveyorBrick extends Brick{
 	};
 
 	static speeds = [
-		0.005,
-		0.01,
-		0.02,
+		//[mag, anispd]
+		[0.005, 0.0625],
+		[0.01, 0.125],
+		[0.02, 0.25]
 	]
 
 	//speedLevel is in range [0, 1, 2]
@@ -629,8 +630,12 @@ class ConveyorBrick extends Brick{
 		let [i, xn, yn] = ConveyorBrick.data[dir];
 		let j = speedLevel;
 		super(`brick_main_${i}_${21+j}`, x, y);
-		let mag = ConveyorBrick.speeds[speedLevel];
+		let [mag, anispd] = ConveyorBrick.speeds[speedLevel];
 		this.steerArgs = [xn, yn, mag, 0.01];
+
+		this.setTexture("brick_invis");
+		let anistr = "conveyor_" + i;
+		this.addAnim("cycle", anistr, anispd, true, true);
 	}
 
 	//only handle balls
@@ -826,10 +831,12 @@ class AlienBrick extends Brick{
 			this.addAnim(name, name, 0.0625, true);
 		}
 		this.playAnim("alien_0");
+		this.hitSound = "alien_hit";
+		this.deathSound = "alien_death";
 		this.healthLevel = 4;
 		let times = AlienBrick.actionTimes;
-		this.actionTimerMax = times[this.healthLevel];
-		this.actionTimer = this.actionTimerMax;
+		this.actionDelay = times[this.healthLevel];
+		this.actionTimer = this.actionDelay;
 		this.moveCount = 25;
 	}
 
@@ -840,7 +847,7 @@ class AlienBrick extends Brick{
 		if (level < this.healthLevel){
 			this.healthLevel = level;
 			let times = AlienBrick.actionTimes;
-			this.actionTimerMax = times[level];
+			this.actionDelay = times[level];
 			if (level <= 0)
 				this.stopAnim();
 			else
@@ -909,7 +916,7 @@ class AlienBrick extends Brick{
 		if (this.healthLevel > 0){
 			this.actionTimer -= delta;
 			if (this.actionTimer <= 0){
-				this.actionTimer += this.actionTimerMax;
+				this.actionTimer += this.actionDelay;
 				this.takeAction();
 			}
 		}

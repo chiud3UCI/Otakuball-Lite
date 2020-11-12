@@ -156,6 +156,9 @@ function setup(){
 			this.stage.removeChildren();
 			if (this.top)
 				this.stage.addChild(this.top.stage);
+			//also clear mouse buttons
+			mouse.m1 = 0;
+			mouse.m2 = 0;
 		},
 
 		//add and emplace will be used frequently

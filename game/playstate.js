@@ -106,6 +106,24 @@ class PlayState{
 		this.add("balls", ball);
 		paddle.attachBall(ball, true);
 
+
+		//Text
+		this.add("hud", printText(
+			"Test Mode", "windows", 0x000000, 2, 10, 10
+		));
+
+		//Stop Button
+		let butt = new Button(10, 45, 150, 50);
+		butt.add(makeSprite("editorbutton_2_1", 3, 5, -2));
+		butt.add(printText(
+			"Stop","arcade",0x000000, 1.5, 55, 10
+		));
+		let state = this;
+		butt.onClick = function(){
+			game.pop();
+		}
+		this.add("hud", butt);
+
 		//testing mode
 		this.initPowerupButtons();
 		this.initEnemyButtons();
@@ -328,7 +346,7 @@ class PlayState{
 	initEnemyButtons(){
 		let panel = new PIXI.Container();
 		panel.x = 10;
-		panel.y = 10;
+		panel.y = 170;
 		for (let i = 0; i < 10; i++){
 			let x = (i % 6) * 24;
 			let y = Math.floor(i/6) * 24;
@@ -340,7 +358,7 @@ class PlayState{
 
 	initCheckboxes(){
 		let x = 20;
-		let y = DIM.ceiling;
+		let y = DIM.ceiling + 150;
 		let text = "Disable Pit";
 		let val = cheats.disable_pit;
 		let func = function(state){

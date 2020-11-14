@@ -106,6 +106,11 @@ class PlayState{
 		this.add("balls", ball);
 		paddle.attachBall(ball, true);
 
+		//create powerup spawner
+		this.powerupSpawner = new PowerupSpawner(
+			0.15,
+			DEFAULT_WEIGHTS,
+		);
 
 		//Text
 		this.add("hud", printText(
@@ -546,7 +551,7 @@ class PlayState{
 	//generator
 	*activeBalls(){
 		for (let ball of this.balls.children){
-			if (ball.active)
+			if (ball.isActive())
 				yield ball;
 		}
 	}

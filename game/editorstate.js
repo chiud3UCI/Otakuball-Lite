@@ -123,6 +123,9 @@ class EditorState{
 		butt.add(printText(
 			"Import", "arcade", 0x000000, 1, 7, 8
 		));
+		butt.onClick = function(){
+			state.importLevel();
+		}
 		this.add("hud", butt);
 
 		butt = new Button(10, 395, 100, 35);
@@ -392,8 +395,15 @@ class EditorState{
 		panel.addChild(this.toolButtonHighlight);
 	}
 
-	
+	//resets the level to its default state
+	reset(){
+		for (let node of this.allNodes)
+			node.setBrick(null);
+		for (let butt of this.enemyButtons)
+			butt.setState(false);
 
+		this.cycler.setCurrentSlot(0);
+	}
 
 	add(name, obj){
 		this[name].addChild(obj);
@@ -402,7 +412,6 @@ class EditorState{
 	remove(name, obj){
 		this[name].removeChild(obj);
 	}
-
 
 	update(delta){
 		if (keyboard.isPressed(keycode.ESCAPE)){
@@ -493,6 +502,29 @@ class EditorState{
 		return level;
 	}
 
+	loadLevel(level){
+		//needs to take in account of optional properties
+		//reset the level first
+		this.reset();
+		//apply bricks and patches
+		for (let [i, j, id, patch] of level.bricks){
+			let node = this.grid[i][j];
+			node.setBrick(id);
+			if (patch){
+				for (let pair of Object.entries(patch))
+					node.setPatch(pair);
+			}
+		}
+		//set enemy spawning
+		if (level.enemies){
+			let butts = this.enemyButtons;
+			let [values] = level.enemies;
+			for (let [i, val] of values.entries())
+				butts[i].setState(val); //implicit cast to boolean
+		}
+
+	}
+
 	//writes the level json to the textbox
 	exportLevel(){
 		let level = this.createLevel();
@@ -501,9 +533,21 @@ class EditorState{
 		textbox.value = str;
 	}
 
+	importLevel(){
+		let textbox = document.getElementById("textbox");
+		let str = textbox.value;
+		let level = null;
+		try{
+			level = JSON.parse(str);
+		} catch (err) {
+			console.error("ERROR: Invalid import string.");
+		}
+		if (level)
+			this.loadLevel(level);
+	}
+
 	startGame(){
 		let level = this.createLevel();
-
 		game.push(new PlayState(level));
 	}
 }

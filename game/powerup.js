@@ -15,8 +15,52 @@ var powerupNames = [
 	"Yoga", "Y-Return", "Buzzer", "Zeal", "Zen Shove"
 ];
 
+var DISABLE_INACTIVE = true;
+
+class PowerupSpawner{
+	constructor(globalRate, weights){
+		this.globalRate = globalRate;
+		//don't modify the original weights
+		weights = weights.slice();
+
+		if (DISABLE_INACTIVE){
+			for (let i = 0; i < weights.length; i++){
+				if (!powerupFunc[i])
+					weights[i] = 0;
+			}
+		}
+
+		this.sum = weights.reduce((a, b) => a + b, 0);
+		this.weights = weights;
+	}
+
+	//randomly decide if powerup should spawn
+	//will be false if all weights are 0
+	canSpawn(){
+		return (
+			this.sum > 0 &&
+			Math.random() < this.globalRate
+		);
+	}
+
+	//get a random powerup id or null if all weights are 0
+	getId(){
+		if (this.sum == 0)
+			return null;
+		let n = Math.random() * this.sum;
+		for (let [i, w] of this.weights.entries()){
+			n -= w;
+			if (n <= 0)
+				return i;
+		}
+	}
+}
+
 class Powerup extends Sprite{
 	constructor(x, y, id){
+		if (id === null || id === undefined)
+			console.error("Invalid Powerup ID");
+		
 		let tex = "powerup_default_" + id;
 		super(tex, x, y, 0, 0.1);
 

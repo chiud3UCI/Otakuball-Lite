@@ -282,12 +282,29 @@ class NullBrick extends Brick{
 }
 
 class NormalBrick extends Brick{
+	//return arguments for a random colored brick
+	static randomColor(){
+		let n = randRange(0, 123+1);
+		let i = n % 6;
+		let j = Math.floor(n / 6);
+		return [i, j];
+	}
+
 	constructor(x, y, i, j){
 		let tex = "brick_main_" + i + "_" + j;
 		super(tex, x, y);
 		this.normalInfo = {i, j};
 
 		this.brickType = "normal";
+	}
+
+	onDeath(){
+		let spawner = game.top.powerupSpawner;
+		if (spawner.canSpawn()){
+			let id = spawner.getId();
+			let pow = new Powerup(this.x, this.y, id);
+			game.emplace("powerups", pow);
+		}
 	}
 }
 
@@ -925,6 +942,153 @@ class AlienBrick extends Brick{
 	}
 }
 
+class RainbowBrick extends Brick{
+	constructor(x, y){
+		super("brick_main_7_7", x, y);
+	}
+
+	onDeath(){
+		super.onDeath();
+
+		let grid = game.top.brickGrid;
+		let empty = [];
+		let [i0, j0] = getGridPos(this.x, this.y);
+		for (let i = i0-1; i <= i0+1; i++){
+			for (let j = j0-1; j <= j0+1; j++){
+				if (i == i0 && j == j0)
+					continue;
+				if (grid.isEmpty(i, j))
+					empty.push([i, j]);
+			}
+		}
+
+		if (empty.length == 0)
+			return;
+
+		//remove 0 to n-1 elements from empty
+		let numRemove = randRange(0, empty.length);
+		for (let n = 0; n < numRemove; n++){
+			let index = randRange(0, empty.length);
+			empty.splice(index, 1);
+		}
+
+		for (let [i, j] of empty){
+			let [x, y] = getGridPosInv(i, j);
+			let [ni, nj] = NormalBrick.randomColor();
+			let br = new NormalBrick(this.x, this.y, ni, nj);
+			br.setTravel(x, y, "time", 250);
+			game.emplace("bricks", br);
+		}
+	}
+}
+
+class GateBrick extends Brick{
+	constructor(x, y, gateId, exitOnly){
+		let e = exitOnly ? 1 : 0;
+		let tex = `brick_gate_${e}_${gateId}`;
+		super(tex, x, y);
+		this.health = 1000;
+		this.armor = 1000;
+		this.gateId = gateId;
+		this.exitOnly = exitOnly;
+
+		this.ballQueue = [];
+		this.ballDelay = 0;
+		//keep track of recently exited balls
+		this.recentBalls = new Map();
+
+		//flashing animation
+		let anistr = `gate_flash_${gateId}_${e}`;
+		let ani = this.addAnim("flash", anistr, 0.25);
+		ani.onCompleteCustom = () => {
+			this.ejectBall();
+		}
+	}
+
+	//ignore everything but balls
+	checkSpriteHit(ball){
+		if (this.exitOnly)
+			return [false];
+		if (ball.gameType != "ball")
+			return [false];
+		if (this.recentBalls.has(ball))
+			return [false];
+		return super.checkSpriteHit(ball);
+	}
+
+	onSpriteHit(ball, norm, mag){
+		//prevent the ball from reentering this gate
+		//for 3 seconds
+		// this.recentBalls.set(ball, 3000);
+
+		let exits = [];
+		for (let br of game.get("bricks")){
+			if (br != this && br.gateId == this.gateId)
+				exits.push(br);
+		}
+
+		if (exits.length == 0)
+			return;
+
+		let gate = exits[randRange(exits.length)];
+		gate.addToQueue(ball);
+		playSound("gate_enter_1");
+		playSound("gate_enter_2");
+	}
+
+	addToQueue(ball){
+		this.ballQueue.push(ball);
+		ball.moveTo(this.x, this.y);
+		ball.teleporting = true;
+		ball.visible = false;
+	}
+
+	//pop ball from queue and eject it from this gate
+	ejectBall(){
+		let ball = this.ballQueue.shift();
+		this.recentBalls.set(ball, 3000);
+		ball.teleporting = false;
+		ball.visible = true;
+	}
+
+	update(delta){
+		let recent = this.recentBalls;
+		for (let [ball, time] of recent.entries()){
+			time -= 0;
+			if (time <= 0)
+				recent.delete(ball);
+			else
+				recent.set(ball, time);
+		}
+
+		if (this.ballDelay > 0)
+			this.ballDelay -= delta;
+		else if (this.ballQueue.length > 0){
+			this.ballDelay = 750;
+			this.playAnim("flash");
+		}
+
+		super.update(delta);
+	}
+}
+
+class TriggerBrick extends Brick{
+	constructor(x, y, switchId){
+	}
+}
+
+class SwitchBrick extends Brick{
+
+}
+
+class FlipBrick extends Brick{
+
+}
+
+class StrongFlipBrick extends Brick{
+
+}
+
 var brickClasses = {
 	Brick,
 	NormalBrick,
@@ -941,4 +1105,6 @@ var brickClasses = {
 	DetonatorBrick,
 	GlassBrick,
 	AlienBrick,
+	RainbowBrick,
+	GateBrick,
 }

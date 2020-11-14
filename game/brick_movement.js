@@ -11,10 +11,6 @@ function manageBrickMovement(delta){
 		return (a.y > b.y) ? 1 : -1;
 	}
 
-	function deltaEqual(a, b, epsilon=0.001){
-		return (Math.abs(a-b) < epsilon);
-	}
-
 	//Step 1: Sort all the bricks based on row or column
 	let bricks = game.get("bricks");
 	let rows = [];

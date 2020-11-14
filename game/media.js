@@ -92,6 +92,7 @@ let recursive_texture_names = [
 		"jumper",
 		"split",
 		"patches",
+		"brick_gate",
 	]],
 
 	["paddles/", [
@@ -146,6 +147,8 @@ let recursive_sound_names = [
 		"antilaser_hit",
 		"alien_hit",
 		"alien_death",
+		"gate_enter_1",
+		"gate_enter_2",
 	]],
 	["ball/", [
 	]],
@@ -245,6 +248,7 @@ media.processTextures = function(){
 	partition("jumper", "brick_jumper");
 	partition("split", "brick_split");
 	partition("brick_regen", "brick_regen");
+	partition("brick_gate", "brick_gate");
 	//also create an invisible brick texture
 	this.textures["brick_invis"] = this.textures["brick_main_12_13"];
 
@@ -407,6 +411,22 @@ media.createAnimations = function(){
 	for (let i = 0; i < 4; i++){
 		let name = "conveyor_" + i;
 		create(name, "brick_main", 4+i, 21, 1, 3);
+	}
+
+	//gate flash for both normal and exitOnly
+	for (let i = 0; i < 4; i++){
+		for (let e = 0; e < 2; e++){
+			let name = `gate_flash_${i}_${e}`;
+			let pair = [
+				`brick_gate_${2}_${i}`,
+				`brick_gate_${e}_${i}`
+			];
+			let arr = [];
+			//repeat animation
+			for (let j = 0; j < 4; j++) 
+				arr = arr.concat(pair);
+			this.animations[name] = arr;
+		}
 	}
 
 	//menacer coating

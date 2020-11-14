@@ -54,6 +54,16 @@ var brickData = {
 			[8, 18, "ShooterBrick", [2]],
 			[7, 4, "GlassBrick", []],
 			[7, 5, "AlienBrick", []],
+			[7, 7, "RainbowBrick", []],
+			[7, 8, "GateBrick", [0, false]],
+			[7, 9, "GateBrick", [1, false]],
+			[7, 10, "GateBrick", [2, false]],
+			[7, 11, "GateBrick", [3, false]],
+			[12, 13, "GateBrick", [0, true]],
+			[12, 14, "GateBrick", [1, true]],
+			[12, 15, "GateBrick", [2, true]],
+			[12, 16, "GateBrick", [3, true]],
+
 		]
 
 		let conveyor = [];

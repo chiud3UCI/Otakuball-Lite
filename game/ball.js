@@ -42,10 +42,8 @@ class Ball extends Sprite{
 		//lets the ball pierce only one time
 		this.pierceOverride = false;
 
-		//active means the ball is able to freely move
-		//if the ball is not active, then it is usually
-		//stuck to a paddle, inside a gate brick, or parachuting(?)
-		this.active = true;
+		this.stuckBounceTimer = 0;
+		this.storedAngle = 0;
 
 		this.gameType = "ball";
 	}
@@ -61,6 +59,16 @@ class Ball extends Sprite{
 		return ball;
 	}
 
+	//check to see if ball should freely move and collide with
+	//the other game objects
+	isActive(){
+		return !(
+			this.stuckToPaddle ||
+			this.parachuting ||
+			this.teleporting
+		)
+	}
+
 	//revert ball back to its old self
 	normal(){
 		this.setTexture("ball_main_0_0");
@@ -72,12 +80,47 @@ class Ball extends Sprite{
 		this.pierce = false;
 	}
 
+	//due to the ball bouncing off of corners,
+	//the ball might travel at a near-horizontal path,
+	//bouncing between walls hundreds of times before reaching the paddle
+	//This will force the ball to go at a 45 degree angle
+	//if it bounces at a low enough angle for a long enough time
+	preventLowAngleBounce(xn, yn){
+		let rad = Math.abs(Math.atan2(this.vy, this.vx));
+		let angle = rad * 180 / Math.PI;
+		// let isVertical = Math.floor((angle+45)/90) % 2 == 1;
+		angle = Math.min(angle, 180 - angle);
+		angle = Math.min(angle, 90 - angle);
+
+		if (angle > 10 || !deltaEqual(angle, this.storedAngle))
+			this.stuckBounceTimer = 0;
+		this.storedAngle = angle;
+
+		if (this.stuckBounceTimer >= 5000){
+			let vx = this.vx;
+			let vy = this.vy;
+			let sign_x = (vx > 0) ? 1 : -1;
+			let sign_y = (vy > 0) ? 1 : -1;
+			let sign_vert = (Math.abs(vy) > Math.abs(vx)) 
+				? -1 : 1;
+			let rot = 15 * Math.PI / 180;
+			rot *= sign_x * sign_y * sign_vert;
+			[vx, vy] = Vector.rotate(vx, vy, rot);
+			this.vx = vx;
+			this.vy = vy;
+			// console.log(rot);
+		}
+
+		
+	}
+
 	handleCollision(xn, yn){
 		if (!this.validCollision(xn, yn))
 			return;
 		let dot = (this.vx*xn) + (this.vy*yn);
 		this.vx -= (2*dot*xn);
 		this.vy -= (2*dot*yn);
+		this.preventLowAngleBounce(xn, yn);
 	}
 
 	//check whether the normal vector and the ball's velocity
@@ -124,7 +167,7 @@ class Ball extends Sprite{
 	}
 
 	update(delta){
-		if (!this.active)
+		if (!this.isActive())
 			return;
 
 		if (this.steer){
@@ -154,6 +197,8 @@ class Ball extends Sprite{
 			this.handleCollision(0, 1);
 		else if (cheats.disable_pit && y1 > DIM.h)
 			this.handleCollision(0, -1);
+
+		this.stuckBounceTimer += delta;
 
 		super.update(delta);
 	}

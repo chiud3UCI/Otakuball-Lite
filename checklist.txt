@@ -1,0 +1,19 @@
+-Implement the rest of the bricks
+-Finalize the brick id ordering (do not change it later)
+-Implement Backgrounds!
+-Convert all levels from lua to javascript
+-Create Main Menu
+-Create Level Select
+-Create Campaign
+-Implement more powerups!
+-Implement remaining 
+
+-Implement the rest of the powerups
+
+Plan for converting the lua levels to javascript
+1. Export the lua brickdata as a json object
+2. Export the javascript brickdata as a json object
+3. Create a mapping of brick ids from lua -> json
+	a. modify the json objects first so the arguments match
+4. Export the mapping as a json object
+5. Read each level into lua and export into json using the mapping

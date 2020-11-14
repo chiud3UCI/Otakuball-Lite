@@ -66,7 +66,7 @@ class Paddle extends Sprite{
 			offset = Math.max(-w/2, Math.min(w/2, ball.x - this.x));
 		this.stuckBalls.push([ball, offset]);
 		ball.moveTo(this.x + offset, this.y - 8 - ball.radius);
-		ball.active = false;
+		ball.stuckToPaddle = true;
 		this.reboundBall(ball);
 	}
 
@@ -75,7 +75,7 @@ class Paddle extends Sprite{
 			return;
 
 		for (let [ball, offset] of this.stuckBalls)
-			ball.active = true;
+			ball.stuckToPaddle = false;
 
 		this.stuckBalls = [];
 	}

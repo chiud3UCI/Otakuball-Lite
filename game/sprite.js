@@ -29,6 +29,10 @@ class Sprite extends PIXI.Sprite{
 		//almost all sprites are scaled 2x
 		this.scale.set(sx, sy);
 		this.position.set(x, y);
+		this.rotation = angle; //radians
+
+		//die if sprite goes out of bounds
+		this.boundCheck = false;
 
 		this.anim = {};
 		this.isAnimating = false;
@@ -172,6 +176,11 @@ class Sprite extends PIXI.Sprite{
 		return ani;
 	}
 
+	removeAnim(name){
+		delete this.anim[name];
+	}
+
+
 	playAnim(name){
 		this.stopAnim();
 		let ani = this.anim[name];
@@ -204,9 +213,9 @@ class Sprite extends PIXI.Sprite{
 			game.top.add("hud", this.debugHitbox);		
 		}
 		let hb = this.debugHitbox;
-		let [x0, y0, x1, y1] = this.getAABB(true);
+		let [x0, y0, x1, y1] = this.getAABB();
 		hb.clear();
-		hb.lineStyle(2, 0xFFFFFF);
+		hb.lineStyle(1, 0x00FFFF);
 		hb.drawRect(x0, y0, x1-x0, y1-y0);
 	}
 
@@ -253,9 +262,6 @@ class Sprite extends PIXI.Sprite{
 
 	//returns [bool, norm, mag]
 	checkSpriteHit(obj){
-		//preliminary checking
-		if (!obj.canHit(this))
-			return [false];
 		//check if bounding boxes overlap
 		if (!this.checkOverlap(obj))
 			return [false];
@@ -283,6 +289,14 @@ class Sprite extends PIXI.Sprite{
 	//Currently, PIXI.Sprite and all parents do not have an update() method.
 	//However, PIXI.AnimatedSprite does has an update() method.
 	update(delta){
+		if (this.boundCheck){
+			let [x0, y0, x1, y1] = this.getAABB();
+			if (x0 < DIM.lwallx || 
+				x1 > DIM.rwallx ||
+				y0 < DIM.ceiling ||
+				y1 > DIM.h)
+				this.kill();
+		}
 
 		//don't update movement if velocity/acceleration is 0
 		//might be more efficent?
@@ -294,5 +308,7 @@ class Sprite extends PIXI.Sprite{
 
 			this.updateShape();
 		}
+
+		// this.drawHitbox();
 	}
 }

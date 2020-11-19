@@ -19,6 +19,10 @@ class Brick extends Sprite{
 			antilaser: null,
 		}
 
+		//keeps track of recently collided sprites
+		this.disableOverlapCheck = false;
+		this.overlap = new Map();
+
 		this.travel = null;
 
 		this.health = 10;
@@ -102,10 +106,30 @@ class Brick extends Sprite{
 		
 	}
 
+	static travelComplete = {
+		//die if the brick overlaps another brick
+		default(brick){
+			let grid = game.top.brickGrid.grid;
+			let [i, j] = getGridPos(brick.x, brick.y);
+			if (!boundCheck(i, j)){
+				brick.kill();
+				return;
+			}
+			for (let br of grid[i][j]){
+				//use br.gridDat.move instead of br.isMoving()
+				//because gr.gridDat.move is constant between updates
+				if (br !== brick && !br.gridDat.move){
+					brick.kill();
+					return;
+				}
+			}
+		},
+	};
+
 	//x and y are the destination coordinates
 	//mode can either be "speed" or "time"
 	//onComplete can either be a string or function
-	setTravel(x, y, mode="speed", value, onComplete){
+	setTravel(x, y, mode="speed", value=0.5, onComplete="default"){
 		if (this.patch.move || this.patch.storedMove)
 			return;
 
@@ -125,6 +149,9 @@ class Brick extends Sprite{
 			spd = dist / timer;
 		}
 
+		if (typeof(onComplete) == "string")
+			onComplete = Brick.travelComplete[onComplete];
+
 		let brick = this;
 		this.travel = {
 			x: x,
@@ -136,10 +163,10 @@ class Brick extends Sprite{
 			update(delta){
 				this.timer -= delta;
 				if (this.timer <= 0){
+					brick.travel = null;
 					brick.moveTo(this.x, this.y);
 					if (this.onComplete)
 						this.onComplete(brick);
-					brick.travel = null;
 				}
 				else{
 					brick.x += this.vx * delta;
@@ -151,8 +178,8 @@ class Brick extends Sprite{
 	}
 
 	isMoving(){
-		//check both movement patch and velocity
-		return (this.patch.move || this.vx || this.vy);
+		//check both movement patch and travel
+		return (this.patch.move || this.travel);
 	}
 
 	static getHitSide(norm){
@@ -231,6 +258,14 @@ class Brick extends Sprite{
 			if (!obj.validCollision(norm.x, norm.y))
 				return [false];
 		}
+		//prevent collision if the sprite has collided
+		//this brick in the previous frame
+		if (!this.disableOverlapCheck){
+			let prevOverlap = this.overlap.has(obj);
+			this.overlap.set(obj, 1);
+			if (prevOverlap)
+				return [false];
+		}
 		return resp;
 	}
 
@@ -263,6 +298,12 @@ class Brick extends Sprite{
 	update(delta){
 		if (this.travel)
 			this.travel.update(delta);
+		for (let [obj, val] of this.overlap.entries()){
+			if (val == 1)
+				this.overlap.set(obj, 0);
+			else
+				this.overlap.delete(obj);
+		}
 		super.update(delta);
 	}
 }
@@ -610,6 +651,8 @@ class OneWayBrick extends Brick{
 		this.armor = 10;
 		this.norm = [xn, yn];
 
+		this.disableOverlapCheck = true;
+
 		this.brickType = "oneway";
 	}
 
@@ -650,9 +693,13 @@ class ConveyorBrick extends Brick{
 		let [mag, anispd] = ConveyorBrick.speeds[speedLevel];
 		this.steerArgs = [xn, yn, mag, 0.01];
 
+		this.disableOverlapCheck = true;
+
 		this.setTexture("brick_invis");
 		let anistr = "conveyor_" + i;
 		this.addAnim("cycle", anistr, anispd, true, true);
+
+		this.brickType = "conveyor";
 	}
 
 	//only handle balls
@@ -687,6 +734,8 @@ class FunkyBrick extends Brick{
 		ani.onCompleteCustom = () => {
 			this.setTexture(this.storedTexture);
 		}
+
+		this.brickType = "funky";
 	}
 
 	//Funky Brick never dies
@@ -752,6 +801,8 @@ class ShooterBrick extends FunkyBrick{
 		ani.onCompleteCustom = () => {
 			this.setTexture(this.storedTexture);
 		}
+
+		this.brickType = "shooter";
 	}
 
 	takeDamage(damage, strength){
@@ -822,10 +873,62 @@ class DetonatorBrick extends Brick{
 	}
 }
 
+class TriggerDetonatorBrick extends DetonatorBrick{
+	constructor(x, y){
+		super(x, y, "normal");
+		this.stopAnim();
+		this.removeAnim("glow");
+		this.setTexture("brick_main_8_14");
+		this.hitSound = null;
+		this.deathSound = null;
+		this.health = 10;
+		this.armor = 1;
+		this.active = false;
+		this.addAnim("active", "brick_glow2_1", 0.125, true);
+		this.brickType = "triggerdetonator";
+	}
+
+	takeDamage(damage, strength){
+		super.takeDamage(damage, strength);
+		if (this.isDead()){
+			playSound("detonator_explode");
+			return;
+		}
+		if (this.active){
+			this.active = false;
+			this.stopAnim();
+			playSound("brick_disarmed");
+		}
+		else{
+			this.active = true;
+			this.playAnim("active");
+			let check = false;
+			for (let br of game.get("bricks")){
+				if (br != this &&
+					br.brickType == "triggerdetonator" &&
+					br.active){
+					br.kill();
+					this.kill();
+					check = true;
+					break;
+				}
+			}
+			if (check)
+				playSound("detonator_explode");
+			else
+				playSound("brick_armed");
+
+		}
+	}
+
+
+}
+
 class GlassBrick extends Brick{
 	constructor(x, y){
 		super("brick_main_7_4", x, y);
 		this.health = 10;
+		this.brickType = "glass";
 	}
 
 	onSpriteHit(obj, norm, mag){
@@ -855,6 +958,8 @@ class AlienBrick extends Brick{
 		this.actionDelay = times[this.healthLevel];
 		this.actionTimer = this.actionDelay;
 		this.moveCount = 25;
+		this.zIndex = 1;
+		this.brickType = "alien";
 	}
 
 	takeDamage(damage, strength){
@@ -976,6 +1081,7 @@ class RainbowBrick extends Brick{
 			let [x, y] = getGridPosInv(i, j);
 			let [ni, nj] = NormalBrick.randomColor();
 			let br = new NormalBrick(this.x, this.y, ni, nj);
+			br.zIndex = -1;
 			br.setTravel(x, y, "time", 250);
 			game.emplace("bricks", br);
 		}
@@ -996,6 +1102,7 @@ class GateBrick extends Brick{
 		this.ballDelay = 0;
 		//keep track of recently exited balls
 		this.recentBalls = new Map();
+		this.disableOverlapCheck = true;
 
 		//flashing animation
 		let anistr = `gate_flash_${gateId}_${e}`;
@@ -1072,22 +1179,711 @@ class GateBrick extends Brick{
 	}
 }
 
-class TriggerBrick extends Brick{
-	constructor(x, y, switchId){
+class CometBrick extends Brick{
+	static data = {
+		//dir: col
+		left: 3,
+		right: 4,
+		horizontal: 5,
+		vertical: 6
+	};
+
+	static cometData = {
+		//dir: radians
+		up: 0,
+		down: Math.PI,
+		right: Math.PI/2,
+		left: -Math.PI/2
+	};
+
+	constructor(x, y, dir){
+		let col = CometBrick.data[dir];
+		let tex = `brick_idle_0_${col}`;
+		super(tex, x, y);
+		this.cometDir = dir;
+
+		let anistr = `brick_glow_${col}`;
+		this.addAnim("glow", anistr, 0.25, true, true);
+
+		this.brickType = "comet";
+	}
+
+	onDeath(){
+		super.onDeath();
+		switch (this.cometDir){
+			case "left":
+				this.fireComet("left");
+				break;
+			case "right":
+				this.fireComet("right");
+				break;
+			case "vertical":
+				this.fireComet("up");
+				this.fireComet("down");
+				break;
+			case "horizontal":
+				this.fireComet("left");
+				this.fireComet("right");
+				break;
+		}
+	}
+
+	fireComet(dir){
+		let rad = CometBrick.cometData[dir];
+		let [vx, vy] = Vector.rotate(0, -1, rad);
+		let [dx, dy] = Vector.rotate(0, -16, rad);
+		let comet = new Projectile(
+			"comet", this.x+dx, this.y+dy, vx, vy, rad
+		);
+		comet.boundCheck = true;
+		comet.damage = 100;
+		comet.strength = 1;
+		//TODO: Add brick overlap check for piercing
+		comet.pierce = "strong";
+		comet.emitterTimer = 0;
+		comet.emitterDelay = 10;
+
+		comet.update = function(delta){
+			this.emitterTimer -= delta;
+			if (this.emitterTimer <= 0){
+				this.emitterTimer += this.emitterDelay;
+				let rad = Math.random() * 2 * Math.PI;
+				let [vx, vy] = Vector.rotate(0.2, 0, rad);
+				let p = new Particle(
+					"comet_ember", this.x, this.y, vx, vy);
+				p.boundCheck = true;
+				p.ay = 0.0025;
+				game.emplace("particles", p);
+			}
+			//call super
+			Projectile.prototype.update.call(this, delta);
+		}
+
+		game.emplace("projectiles", comet);
 	}
 }
 
+class LaserEyeBrick extends Brick{
+	constructor(x, y){
+		super("brick_main_7_14", x, y);
+		this.health = 20;
+		this.addAnim("glow", "brick_glow2_0", 0.125, true);
+		this.active = false;
+		this.fireDelay = 3000;
+		this.fireTimer = this.fireDelay;
+
+		this.brickType = "lasereye";
+	}
+
+	takeDamage(damage, strength){
+		super.takeDamage(damage, strength);
+		if (!this.active){
+			this.active = true;
+			this.playAnim("glow");
+		}
+	}
+
+	fireLaser(){
+		let paddle = game.get("paddles")[0];
+		let vec = new Vector(
+			paddle.x - this.x, paddle.y - this.y
+		);
+		vec = vec.normalized();
+		vec = vec.scale(0.3);
+		let laser = new Projectile(
+			"lasereye_laser", this.x, this.y, vec.x, vec.y);
+		laser.colFlag = {paddle: true};
+		laser.onPaddleHit = function(paddle){
+			paddle.stun = {x: 0.5, timer: 1000};
+			this.kill();
+		};
+		game.emplace("projectiles", laser);
+	}
+
+	update(delta){
+		if (this.active){
+			this.fireTimer -= delta;
+			if (this.fireTimer <= 0){
+				this.fireTimer = this.fireDelay;
+				this.fireLaser();
+			}
+		}
+		super.update(delta);
+	}
+}
+
+class BoulderBrick extends Brick{
+	constructor(x, y){
+		super("brick_main_7_16", x, y);
+		this.health = 20;
+		this.deathSound = "boulder_break";
+	}
+
+	onDeath(){
+		for (let i = 0; i < 5; i++){
+			let index = randRange(5);
+			let rad = Math.random() * 2 * Math.PI;
+			let [vx, vy] = Vector.rotate(0.1, 0, rad);
+			let b = new Projectile(
+				"boulder_" + i, this.x, this.y, vx, vy);
+			b.ay = 0.001;
+			b.createShape(true);
+			b.colFlag = {paddle: true};
+			b.onPaddleHit = function(paddle){
+				paddle.stun = {x: 0.5, timer: 1000};
+				this.colFlag.paddle = false;
+				this.vy = -this.vy * 0.4;
+			}
+			game.emplace("projectiles", b);
+		}
+	}
+}
+
+class TriggerBrick extends Brick{
+	static flipBricks(switchId){
+		for (let br of game.get("bricks")){
+			let type = br.brickType;
+			if ((type == "flip" || type == "strongflip") &&
+				br.switchId === switchId)
+				br.flip();
+		}
+	}
+
+	//permanently set all flip bricks on and strong flip bricks off
+	//once all trigger and switch bricks of that color
+	//are dead
+	static flipFailSafe(switchId){
+		let bricks = game.get("bricks");
+		//check if all switch bricks are dead
+		for (let br of bricks){
+			let type = br.brickType;
+			if (!(type == "trigger" || type == "switch"))
+				continue;
+			if (br.switchId !== switchId)
+				continue;
+			if (!br.isDead())
+				return;
+		}
+		//force all flip bricks to on state
+		for (let br of bricks){
+			let type = br.brickType;
+			if ((type == "flip" || type == "strongflip") &&
+				br.switchId === switchId)
+				br.flip(true);
+		}
+	}
+
+	constructor(x, y, switchId){
+		let tex = `brick_main_${8+switchId}_6`;
+		super(tex, x, y);
+		this.switchId = switchId;
+		this.brickType = "trigger";
+	}
+
+	destructor(){
+		super.destructor();
+		TriggerBrick.flipFailSafe(this.switchId);
+	}
+
+	onDeath(){
+		super.onDeath();
+		TriggerBrick.flipBricks(this.switchId);
+	}
+
+}
+
 class SwitchBrick extends Brick{
+	constructor(x, y, switchId){
+		let tex0 = `brick_main_${8+switchId}_4`;
+		let tex1 = `brick_main_${8+switchId}_5`;
+		super(tex0, x, y);
+		this.switchId = switchId;
+		this.flipState = false;
+		this.texOff = tex0;
+		this.texOn = tex1;
+		this.health = 1000;
+		this.armor = 2;
+		this.brickType = "switch";
+	}
+
+	destructor(){
+		super.destructor();
+		TriggerBrick.flipFailSafe(this.switchId);
+	}
+
+	flip(){
+		this.flipState = !this.flipState;
+		this.setTexture(
+			this.flipState ? this.texOn : this.texOff
+		);
+	}
+
+	onSpriteHit(sprite, norm, mag){
+		super.onSpriteHit(sprite, norm, mag);
+		if (sprite.gameType == "ball"){
+			this.flip();
+			TriggerBrick.flipBricks(this.switchId);
+		}
+	}
 
 }
 
 class FlipBrick extends Brick{
+	constructor(x, y, switchId, flipState){
+		let tex0 = `brick_main_${8+switchId}_0`;
+		let tex1 = `brick_main_${8+switchId}_1`;
+		super(flipState ? tex1 : tex0, x, y);
+		this.switchId = switchId;
+		this.flipState = flipState;
+		this.texOff = tex0;
+		this.texOn = tex1;
+		this.brickType = "flip";
+	}
 
+	flip(forceOn){
+		if (forceOn)
+			this.flipState = true;
+		else
+			this.flipState = !this.flipState;
+		this.setTexture(
+			this.flipState ? this.texOn : this.texOff
+		);
+	}
+
+	checkSpriteHit(sprite){
+		if (!this.flipState)
+			return [false];
+		return super.checkSpriteHit(sprite);
+	}
 }
 
 class StrongFlipBrick extends Brick{
+	constructor(x, y, switchId, flipState){
+		let tex0 = `brick_main_${8+switchId}_2`;
+		let tex1 = `brick_main_${8+switchId}_3`;
+		super(flipState ? tex1 : tex0, x, y);
+		this.switchId = switchId;
+		this.flipState = flipState;
+		this.texOff = tex0;
+		this.texOn = tex1;
+		this.health = 100;
+		this.armor = 1;
+
+		let anistr = `brick_shine_${15+switchId}`;
+		this.addAnim("shine", anistr, 0.25);
+
+		this.brickType = "strongflip";
+	}
+
+	takeDamage(damage, strength){
+		super.takeDamage(damage, strength);
+		this.playAnim("shine");
+	}
+
+	flip(forceOff){
+		if (forceOff)
+			this.flipState = false;
+		else
+			this.flipState = !this.flipState;
+		this.setTexture(
+			this.flipState ? this.texOn : this.texOff
+		);
+		this.stopAnim();
+	}
+
+	checkSpriteHit(sprite){
+		if (!this.flipState)
+			return [false];
+		return super.checkSpriteHit(sprite);
+	}
+}
+
+class OnixBrick extends Brick{
+	static data = {
+		up_left:    [10, 20, [0,0,  32,0,  0,16]],
+		up_right:   [10, 19, [0,0,  32,0,  32,16]],
+		down_left:  [9, 20, [0,0,  32,16,  0,16]],
+		down_right: [9, 19, [32,0,  32,16,  0,16]],
+		whole:      [9, 18, [0,0,  32,0,  32,16,  0,16]],
+	}
+
+	constructor(x, y, dir){
+		let [i, j, points] = OnixBrick.data[dir];
+		let tex = `brick_main_${i}_${j}`;
+		super(tex, x, y);
+		this.setShape(new PolygonShape(points));
+		this.health = 100;
+		this.armor = 1;
+	}
+}
+
+class ShoveBrick extends Brick{
+	//recursively push bricks
+	//make sure di and dj are not both 0
+	static shove(i, j, di, dj){
+		let grid = game.top.brickGrid.grid;
+		let prevMove = true;
+		while (prevMove && boundCheck(i, j)){
+			prevMove = false;
+			for (let br of grid[i][j]){
+				if (!br.gridDat.move && br.armor <= 0){
+					let [x, y] = getGridPosInv(i+di, j+dj);
+					br.zIndex = -1;
+					br.setTravel(x, y, "speed", 0.2);
+					prevMove = true;
+					break;
+				}
+			}
+			i += di;
+			j += dj;
+		}
+	}
+
+	constructor(x, y, isRight){
+		let tex = `brick_main_9_${isRight ? 10 : 11}`;
+		super(tex, x, y);
+		this.isRight = isRight;
+		this.armor = 1;
+	}
+
+	takeDamage(damage, strength){
+		super.takeDamage(damage, strength);
+
+		if (this.isMoving())
+			return;
+
+		//to make this brick shoveable
+		this.armor = 0;
+		let [i, j] = getGridPos(this.x, this.y);
+		let dj = this.isRight ? 1 : -1;
+		ShoveBrick.shove(i, j, 0, dj);
+		this.armor = 1;
+	}
+
 
 }
+
+class FactoryBrick extends Brick{
+	constructor(x, y){
+		super("brick_shine_0_14", x, y);
+		this.health = 70;
+		this.cooldown = 0;
+		for (let i = 0; i < 3; i++){
+			let anistr =  `factory_shine_${i}`;
+			this.addAnim("shine"+i, anistr, 0.25);
+		}
+		this.updateAppearance();
+	}
+
+	updateAppearance(){
+		let off = 0;
+		if (this.health <= 10)
+			off = 2;
+		else if (this.health <= 20)
+			off = 1;
+
+		this.hitAni = `shine${off}`;
+		this.setTexture(`brick_shine_0_${14+off}`);
+	}
+
+	onSpriteHit(obj, norm, mag){
+		super.onSpriteHit(obj, norm, mag);
+		if (obj.gameType == "ball"){
+			let side = Brick.getHitSide(norm);
+			this.generateBrick(side);
+			this.stopAnim();
+			this.updateAppearance();
+			this.playAnim(this.hitAni);
+		}
+	}
+
+	//brick comes out from the opposite side
+	generateBrick(side){
+		if (this.cooldown > 0 || this.isMoving())
+			return;
+		this.cooldown = 500;
+
+		let [ni, nj] = NormalBrick.randomColor();
+		let br = new NormalBrick(this.x, this.y, ni, nj);
+		let dat = {
+			//dir: [di, dj, dx, dy]
+			up:    [ 1,  0,   0,  16],
+			down:  [-1,  0,   0, -16],
+			left:  [ 0,  1,  32,   0],
+			right: [ 0, -1, -32,   0],
+		};
+		let [di, dj, dx, dy] = dat[side];
+		br.zIndex = -1;
+		br.setTravel(this.x + dx, this.y + dy, "speed", 0.2);
+		game.emplace("bricks", br);
+		let [i, j] = getGridPos(this.x, this.y);
+		//shove the rest of the bricks
+		ShoveBrick.shove(i+di, j+dj, di, dj);
+	}
+
+	update(delta){
+		if (this.cooldown > 0)
+			this.cooldown -= delta;
+		super.update(delta);
+	}
+}
+
+class ShoveDetonatorBrick extends Brick{
+	constructor(x, y){
+		super("brick_main_8_10", x, y);
+		this.addAnim("glow", "brick_glow_7", 0.25, true, true);
+	}
+
+	/* Shove Algorithm
+		1. create a list of empty "plan b" spaces that
+		   does not include spaces near the shove detonator
+		2. shove each adjacent brick outward
+			2a. if destination is blocked, assign a custom
+			    onComplete function that will move the brick
+			    to one of the "plan b" spaces
+	*/
+	onDeath(){
+		super.onDeath();
+		let brickGrid = game.top.brickGrid;
+		let [i0, j0] = getGridPos(this.x, this.y);
+		//hash function
+		let h = (i, j) => i + "_" + j;
+		//get empty spaces
+		let empty = {};
+		for (let i = 0; i < 32; i++){
+			for (let j = 0; j < 13; j++){
+				if (brickGrid.isEmpty(i, j))
+					empty[h(i, j)] = [i, j];
+			}
+		}
+		
+		//remove spaces in a 5x5 square around the detonator
+		for (let i = i0-2; i <= i0+2; i++){
+			for (let j = j0-2; j <= j0+2; j++){
+				if (boundCheck(i, j))
+					delete empty[h(i, j)];
+			}
+		}
+
+		//helper function
+		//get closest space to coordinates and remove from empty
+		let getClosest = function(i0, j0){
+			let closest = null;
+			let minDist = Infinity;
+			for (let value of Object.values(empty)){
+				let [i, j] = value;
+				let dist = (i-i0) ** 2 + (j-j0) ** 2;
+				if (dist < minDist){
+					minDist = dist;
+					closest = value;
+				}
+			}
+			if (closest){
+				let [i, j] = closest;
+				delete empty[h(i, j)];
+				let pos = getGridPosInv(i, j);
+				console.log("closest " + closest);
+				return pos;
+			}
+			return [null, null];
+		};
+		//shove all adjacent bricks
+		for (let di = -1; di <= 1; di++){
+			for (let dj = -1; dj <= 1; dj++){
+				let i1 = i0 + di;
+				let j1 = j0 + dj;
+				if (di == 0 && dj == 0)
+					continue;
+				if (!boundCheck(i1, j1))
+					continue;
+				for (let br of brickGrid.grid[i1][j1]){
+					if (br.gridDat.move)
+						continue;
+					if (br.armor > 0)
+						continue;
+					let i2 = i1 + di;
+					let j2 = j1 + dj;
+					//check if space is occupied
+					let onComplete = null;
+					if (brickGrid.isEmpty(i2, j2))
+						brickGrid.reserve(i2, j2);
+					else{
+						let [x2, y2] = getClosest(i2+di, j2+dj);
+						if (x2 === null){
+							onComplete = function(brick){
+								brick.kill();
+							};
+						}
+						else{
+							onComplete = function(brick){
+								brick.setTravel(x2, y2, "speed", 0.3);
+								//reserve?
+							};
+						}
+						
+					}
+					let [x, y] = getGridPosInv(i2, j2);
+					br.zIndex = 1;
+					br.setTravel(x, y, "speed", 0.3, onComplete);
+					break;
+				}
+			}
+		}
+	}
+}
+
+class SequenceBrick extends Brick{
+	constructor(x, y, sequenceId){
+		let tex = `brick_main_11_${15+sequenceId}`;
+		super(tex, x, y);
+		this.health = 10;
+		this.armor = 1;
+		this.sequenceId = sequenceId;
+		this.brickType = "sequence";
+	}
+
+	takeDamage(damage, strength){
+		this.armor = 0;
+		for (let br of game.get("bricks")){
+			if (br.brickType == "sequence"){
+				if (br.sequenceId < this.sequenceId){
+					this.armor = 1;
+					break;
+				}
+			}
+		}
+		super.takeDamage(damage, strength);
+	}
+}
+
+class SlotMachineBrick extends Brick{
+	//the slot machine's index doesn't have to be constant
+	//but must vary between brick
+	static globalIndex = 0;
+
+	constructor(x, y, isYellow){
+		super("brick_invis", x, y);
+
+		this.health = 1000;
+		this.armor = 2;
+		this.powIds = [0, 1, 2];
+		this.powIndex = SMB.globalIndex;
+		SMB.globalIndex = (SMB.globalIndex+1) % 3;
+		this.turnTime = 500;
+		this.checkTime = 500;
+
+		//"turning", "checking", "idle";
+		this.state = "idle";
+
+		let powerups = new PIXI.Container();
+		this.top = new Sprite("powerup_default_0");
+		this.bottom = new Sprite("powerup_default_0");
+		this.top.scale.set(1);
+		this.bottom.scale.set(1);
+		powerups.addChild(this.top, this.bottom);
+		this.setTurn();
+
+		let mask = new PIXI.Graphics()
+			.beginFill(0xFFFFFF)
+			.drawRect(this.x-16, this.y-8, 32, 16);
+		powerups.mask = mask;
+		this.addChild(powerups);
+
+		this.frame0 = new Sprite("brick_slot_0_0");
+		this.frame1 = new Sprite("brick_slot_1_0");
+		this.frame0.scale.set(1);
+		this.frame1.scale.set(1);
+		this.frame0.visible = true;
+		this.frame1.visible = false;
+		this.addChild(this.frame0);
+		this.addChild(this.frame1);
+		this.aniTime = 150;
+		this.aniTimer = 0; 
+
+		this.brickType = "slotmachine";
+	}
+
+	//sets up the powerup sprites for the next turn
+	setTurn(){
+		let curr = this.powIndex;
+		let next = (curr+1) % 3;
+		let topId = this.powIds[curr];
+		let bottomId = this.powIds[next];
+
+		this.top.setTexture("powerup_default_" + topId);
+		this.bottom.setTexture("powerup_default_" + bottomId);
+		this.top.y = 0;
+		this.bottom.y = 8;
+	}
+
+
+	takeDamage(damage, strength){
+		super.takeDamage(damage, strength);
+		if (this.state != "turning"){
+			this.state = "turning";
+			this.turnTimer = this.turnTime;
+			this.powIndex = (this.powIndex+1) % 3;
+			this.aniTimer = 0;
+		}
+	}
+
+	update(delta){
+		if (this.state == "turning"){
+			let ratio = this.turnTimer / this.turnTime;
+			this.top.y = -8 * (1-ratio);
+			this.bottom.y = this.top.y + 8;
+			this.turnTimer -= delta;
+			if (this.turnTimer <= 0){
+				this.state = "checking";
+				this.checkTimer = this.checkTime;
+				this.setTurn();
+				this.frame0.visible = true;
+				this.frame1.visible = false;
+			}
+
+			this.aniTimer -= delta;
+			if (this.aniTimer <= 0){
+				this.aniTimer = this.aniTime;
+				this.frame0.visible = !this.frame0.visible;
+				this.frame1.visible = !this.frame1.visible;
+			}
+
+		}
+		else if (this.state == "checking"){
+			this.checkTimer -= delta;
+			if (this.checkTimer <= 0){
+				this.state = "idle";
+				let sameBricks = [this];
+				let allSame = true;
+				for (let br of game.get("bricks")){
+					if (br === this)
+						continue;
+					if (br.brickType != "slotmachine")
+						continue;
+					if (br.isYellow !== this.isYellow)
+						continue;
+					sameBricks.push(br);
+					if (br.state == "turning" ||
+						br.powIndex != this.powIndex){
+						allSame = false;
+						break;
+					}
+				}
+				if (allSame){
+					for (let br of sameBricks)
+						br.kill();
+					let pow = new Powerup(
+						this.x, this.y, this.powIds[this.powIndex]);
+					game.emplace("powerups", pow);
+				}
+			}
+		}
+		//idle state does nothing
+		super.update(delta);
+	}
+}
+var SMB = SlotMachineBrick; //shorter alias
+
 
 var brickClasses = {
 	Brick,
@@ -1103,8 +1899,22 @@ var brickClasses = {
 	FunkyBrick,
 	ShooterBrick,
 	DetonatorBrick,
+	TriggerDetonatorBrick,
 	GlassBrick,
 	AlienBrick,
 	RainbowBrick,
 	GateBrick,
+	CometBrick,
+	LaserEyeBrick,
+	BoulderBrick,
+	TriggerBrick,
+	SwitchBrick,
+	FlipBrick,
+	StrongFlipBrick,
+	ShoveBrick,
+	FactoryBrick,
+	ShoveDetonatorBrick,
+	SequenceBrick,
+	OnixBrick,
+	SlotMachineBrick
 }

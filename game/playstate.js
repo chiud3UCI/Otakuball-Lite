@@ -53,6 +53,10 @@ class PlayState{
 		}
 
 		this.bricks.sortableChildren = true;
+		//apply mask to bricks only?
+		this.bricks.mask = new PIXI.Graphics()
+			.beginFill(0xFFFFFF)
+			.drawRect(DIM.lwallx, DIM.ceiling, DIM.boardw, DIM.boardh);
 
 		//callbacks are special because they're not sprites
 		this.callbacks = [];
@@ -236,6 +240,11 @@ class PlayState{
 				return arr0.concat(arr1).concat(arr2).concat(arrMov);
 			},
 
+
+			get(i, j){
+				return this.grid[i][j];
+			},
+
 			//checks if grid cell is empty
 			//if includeMoving if false, then it will
 			//ignore moving bricks
@@ -278,6 +287,7 @@ class PlayState{
 		powerPanel.x = DIM.rwallx + 30;
 		powerPanel.y = DIM.ceiling + 10;
 		this.add("hud", powerPanel);
+		this.powerPanel = powerPanel;
 
 		let buttonOrder = [
 			["Ball Addition", [
@@ -316,6 +326,7 @@ class PlayState{
 		let x0 = 0;
 		let y0 = 0;
 		let yoff = 0;
+		this.powerButtons = [];
 		for (let [name, arr] of buttonOrder){
 			let text = new PIXI.Text(name, {
 				fontSize: 16,
@@ -331,6 +342,7 @@ class PlayState{
 				let y = y0 + yoff + i * dy;
 				let butt = new PowerupButton(this, x, y, scale, id);
 				powerPanel.addChild(butt);
+				this.powerButtons.push(butt);
 			}
 			yoff += 5 + (Math.floor((arr.length-1)/wrap) + 1) * dy;
 		}
@@ -566,9 +578,11 @@ class PlayState{
 		for (let obj of arr){
 			let bucket = brickGrid.getBucket(obj);
 			for (let br of bucket){
-				let resp = br.checkSpriteHit(obj)
-				if (resp[0])
-					br.onSpriteHit(obj, resp[1], resp[2]);
+				if (obj.canHit(br)){
+					let resp = br.checkSpriteHit(obj)
+					if (resp[0])
+						br.onSpriteHit(obj, resp[1], resp[2]);
+				}
 			}
 		}
 	}
@@ -581,9 +595,11 @@ class PlayState{
 
 		for (let obj1 of arr1){
 			for (let obj2 of arr2){
-				let resp = obj2.checkSpriteHit(obj1);
-				if (resp[0])
-					obj2.onSpriteHit(obj1, resp[1], resp[2]);
+				if (obj1.canHit(obj2)){
+					let resp = obj2.checkSpriteHit(obj1);
+					if (resp[0])
+						obj2.onSpriteHit(obj1, resp[1], resp[2]);
+				}
 			}
 		}
 	}
@@ -601,6 +617,7 @@ class PlayState{
 		//collision stuff
 		this.collide("balls", "paddles");
 		this.collide("menacers", "paddles");
+		this.collide("projectiles", "paddles");
 
 		this.collideBrick("balls");
 		this.collideBrick("menacers");

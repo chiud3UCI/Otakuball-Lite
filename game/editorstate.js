@@ -81,6 +81,7 @@ class EditorState{
 		this.initTools();
 		this.initToolButtons();
 		this.initRightWidget();
+		this.initPowerupButtons();
 
 		//initial selection
 		this.selectedTool = null;
@@ -310,14 +311,30 @@ class EditorState{
 		}
 
 		placeButtons(0, 0, 6, 1.5, "normal");
-		placeButtons(0, 300, 6, 1.5, "other");
-		placeButtons(0, 400, 3, 1.4, "conveyor");
+		placeButtons(0, 260, 6, 1.5, "other");
+		placeButtons(0, 380, 3, 1.5, "conveyor");
+		placeButtons(0, 430, 6, 1.5, "flip");
 
 		//Brick Button Highlight (yellow border)
 		this.brickButtonHighlight = new PIXI.Graphics();
 		panel.addChild(this.brickButtonHighlight);
 
 		return panel;
+	}
+
+	//these powerup buttons are used for selecting powerups
+	//for the slot machine bricks and powerup brick
+	initPowerupButtons(){
+		let proto = PlayState.prototype;
+		proto.initPowerupButtons.call(this);
+		//repurpose the buttons
+		for (let butt of this.powerButtons){
+			butt.highlight = EditorButton.prototype.highlight;
+			butt.pointerDown = function(e){
+				console.log("select " + this.id);
+			}
+		}
+		this.powerPanel.visible = false;
 	}
 
 	initPatchButtons(){

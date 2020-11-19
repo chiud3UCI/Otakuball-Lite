@@ -8,6 +8,8 @@ class Particle extends Sprite{
 	}
 
 	isDead(){
+		if (this.dead)
+			return true;
 		if (this.timer !== null && this.timer <= 0)
 			return true;
 		if (this.dieOnFade && this.alpha <= 0)

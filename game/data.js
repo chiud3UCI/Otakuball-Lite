@@ -63,7 +63,29 @@ var brickData = {
 			[12, 14, "GateBrick", [1, true]],
 			[12, 15, "GateBrick", [2, true]],
 			[12, 16, "GateBrick", [3, true]],
-
+			[7, 12, "CometBrick", ["left"]],
+			[7, 13, "CometBrick", ["right"]],
+			[9, 8, "CometBrick", ["horizontal"]],
+			[9, 9, "CometBrick", ["vertical"]],
+			[11, 15, "SequenceBrick", [0]],
+			[11, 16, "SequenceBrick", [1]],
+			[11, 17, "SequenceBrick", [2]],
+			[11, 18, "SequenceBrick", [3]],
+			[11, 19, "SequenceBrick", [4]],
+			[7, 14, "LaserEyeBrick", []],
+			[7, 16, "BoulderBrick", []],
+			[8, 7, "FactoryBrick", []],
+			[9, 11, "ShoveBrick", [false]],
+			[9, 10, "ShoveBrick", [true]],
+			[8, 10, "ShoveDetonatorBrick", []],
+			[9, 18, "OnixBrick", ["whole"]],
+			[10, 20, "OnixBrick", ["up_left"]],
+			[10, 19, "OnixBrick", ["up_right"]],
+			[9, 20, "OnixBrick", ["down_left"]],
+			[9, 19, "OnixBrick", ["down_right"]],
+			[8, 14, "TriggerDetonatorBrick", []],
+			[9, 16, "SlotMachineBrick", [false]],
+			[9, 17, "SlotMachineBrick", [true]],
 		]
 
 		let conveyor = [];
@@ -76,11 +98,22 @@ var brickData = {
 			}
 		}
 
+		//can't call it "switch" because it is a keyword
+		let flip = [];
+		for (let i = 0; i < 5; i++){
+			flip.push([8+i, 0, "FlipBrick", [i, false]]);
+			flip.push([8+i, 1, "FlipBrick", [i, true]]);
+			flip.push([8+i, 2, "StrongFlipBrick", [i, false]]);
+			flip.push([8+i, 3, "StrongFlipBrick", [i, true]]);
+			flip.push([8+i, 4, "SwitchBrick", [i]]);
+			flip.push([8+i, 6, "TriggerBrick", [i]]);
+		}
 
 		let rawGroup = [
 			["normal", normal],
 			["other", other],
 			["conveyor", conveyor],
+			["flip", flip],
 		]
 
 		let index = 0;

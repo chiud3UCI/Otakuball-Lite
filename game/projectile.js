@@ -3,22 +3,22 @@ class Projectile extends Sprite{
 		super(texture, x, y, vx, vy, angle, sx, sy);
 		//default shape is a rectangle
 		this.createShape();
-		this.colFlag = {
-			brick: true,
-			paddle: false,
-			enemy: false,
-		};
 		//some powerups can clear hostile projectiles
 		this.hostile = false;
 		this.health = 1;
 		this.damage = 10;
 		this.strength = 0;
-		//pierce can be false, true, or "weak"
+		//determines which sprites it can collide with
+		this.colFlag = {
+			brick: true,
+			enemy: true,
+			paddle: false
+		}
+		//pierce can be false, true, or "strong"
 		this.pierce = false;
-		//die if it goes out of bounds
-		this.boundCheck = true;
 		//lifespan in milliseconds
 		this.timer = null;
+		this.boundCheck = true;
 
 		this.gameType = "projectile";
 	}
@@ -40,23 +40,22 @@ class Projectile extends Sprite{
 	onDeath(){}
 
 	canHit(obj){
-		return true;
+		return this.colFlag[obj.gameType];
 	}
 
 	onSpriteHit(obj, norm, mag){
+		if (this.pierce == "strong")
+			return;
+		else if (this.pierce && obj.isDead())
+			return;
 		this.kill();
 	}
 
-	update(delta){
-		if (this.boundCheck){
-			let [x0, y0, x1, y1] = this.getAABB();
-			if (x0 < DIM.lwallx || 
-				x1 > DIM.rwallx ||
-				y0 < DIM.ceiling ||
-				y1 > DIM.h)
-				this.kill();
-		}
+	onPaddleHit(paddle){
+		
+	}
 
+	update(delta){
 		if (this.timer !== null){
 			this.timer -= delta;
 			if (this.timer <= 0)

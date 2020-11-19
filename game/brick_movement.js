@@ -21,6 +21,11 @@ function manageBrickMovement(delta){
 		cols.push([]);
 
 	for (let br of bricks){
+		//ignore out of bound bricks
+		let [i, j] = getGridPos(br.x, br.y);
+		if (!boundCheck(i, j))
+			continue;
+
 		let mv = br.patch.move;
 		//br.gridDat is set in brickGrid.refresh()
 		let gridDat = br.gridDat;
@@ -52,7 +57,6 @@ function manageBrickMovement(delta){
 		//remember that gridDat.move is also true if
 		//the brick is moving on its own (no movement patch)
 		if (!gridDat.move){
-			let [i, j] = getGridPos(br.x, br.y);
 			rows[i].push(dat);
 			cols[j].push(dat);
 		}

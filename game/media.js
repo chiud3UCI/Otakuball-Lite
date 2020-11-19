@@ -20,6 +20,9 @@ var minSoundInterval = 0.05;
 PIXI.sound.volumeAll = 0.15;
 
 function playSound(name, loop=false){
+	if (!name)
+		return;
+	
 	let queue = soundQueue[name];
 
 	//don't play new sound if previous sound
@@ -80,6 +83,10 @@ function makeSprite(texstr, scale=1, x=0, y=0){
 	return sprite;
 }
 
+function setTexture(sprite, texstr){
+	sprite.texture = media.textures[texstr];
+}
+
 //list of all textures to be loaded
 //make sure each name is unique across all folders
 let recursive_texture_names = [
@@ -93,6 +100,7 @@ let recursive_texture_names = [
 		"split",
 		"patches",
 		"brick_gate",
+		"brick_slot",
 	]],
 
 	["paddles/", [
@@ -121,6 +129,7 @@ let recursive_texture_names = [
 		"explosion_regular",
 		"explosion_freeze",
 		"explosion_mega",
+		"comet_ember",
 	]],
 
 	["gui/", [
@@ -132,6 +141,9 @@ let recursive_texture_names = [
 
 	["projectiles/", [
 		"lasers",
+		"comet",
+		"lasereye_laser",
+		"boulder_debris"
 	]]
 ];
 
@@ -149,6 +161,10 @@ let recursive_sound_names = [
 		"alien_death",
 		"gate_enter_1",
 		"gate_enter_2",
+		"boulder_break",
+		"brick_armed",
+		"brick_disarmed",
+		
 	]],
 	["ball/", [
 	]],
@@ -249,8 +265,9 @@ media.processTextures = function(){
 	partition("split", "brick_split");
 	partition("brick_regen", "brick_regen");
 	partition("brick_gate", "brick_gate");
+	partition("brick_slot", "brick_slot");
 	//also create an invisible brick texture
-	this.textures["brick_invis"] = this.textures["brick_main_12_13"];
+	this.textures["brick_invis"] = this.textures["brick_main_5_20"];
 
 	//process main_balls
 	partition("main_balls", "ball_main", 7, 7, 1, 1);
@@ -332,6 +349,20 @@ media.processTextures = function(){
 		this.textures["laser_" + i] = tex;
 	}
 
+	//boulder debirs/rocks
+	rects = [
+		[0, 0, 5, 5],
+		[6, 0, 7, 7],
+		[14, 0, 9, 9],
+		[24, 0, 12, 12],
+		[37, 0, 14, 14],
+	]
+
+	for (let [i, rect] of rects.entries()){
+		let tex = this.makeTexture("boulder_debris", ...rect);
+		this.textures["boulder_" + i] = tex;
+	}
+
 	//enemies
 	partition("dropper", "dropper", 23, 24, 1, 0);
 	partition("enemies", "enemy_main", 16, 16);
@@ -367,6 +398,7 @@ media.createAnimations = function(){
 			}
 		}
 		this.animations[name] = arr;
+		return arr;
 	}
 
 	//regular brick shine
@@ -375,6 +407,17 @@ media.createAnimations = function(){
 		let row = Math.floor(i/14);
 		let name = "brick_shine_" + i;
 		create(name, "brick_shine", row*7, col, 7, 1);
+	}
+
+	//factory brick shine
+	for (let i = 0; i < 3; i++){
+		let rows = [0, 1, 2, 1];
+		let arr = [];
+		for (let j in rows){
+			let name = `brick_shine_${j}_${14+i}`;
+			arr.push(this.textures[name]);
+		}
+		this.animations[`factory_shine_${i}`] = arr;
 	}
 
 	//brick glowing
@@ -388,6 +431,12 @@ media.createAnimations = function(){
 			arr.push(arr[i]);
 	}
 	//brick glowing 2 (shorter cycle)
+	for (let i = 0; i < 4; i++){
+		let name = "brick_glow2_" + i;
+		let arr = create(name, "brick_idle", 4, 8+i, 4, 1);
+		for (let i = 2; i >= 1; i--)
+			arr.push(arr[i]);
+	}
 
 	//alien loop
 	for (let i = 0; i < 4; i++){

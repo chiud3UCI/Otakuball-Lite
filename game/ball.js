@@ -154,6 +154,7 @@ class Ball extends Sprite{
 	}
 
 	//Paddle will call this directly instead of onSpriteHit
+	//due to ball-paddle collision behavior being radically different
 	onPaddleHit(obj){
 
 	}

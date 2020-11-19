@@ -19,7 +19,12 @@ class Paddle extends Sprite{
 		this.addChild(this.left, this.mid, this.right);
 
 		this.resize(80);
+		this.x = DIM.w/2;
 		this.y = Paddle.baseLine;
+
+		this.speedLimit = {x: Infinity, y: 0};
+		//stun will temporarily reduce speed limit
+		this.stun = null;
 
 		this.stuckBalls = [];
 
@@ -87,18 +92,28 @@ class Paddle extends Sprite{
 	}
 
 	onSpriteHit(obj, norm, mag){
-		if (obj.gameType == "powerup"){
-			obj.activate();
-			return;
+		switch (obj.gameType){
+			case "powerup":
+				obj.activate();
+				break;
+			case "ball":
+			case "menacer":
+				this.onBallHit(obj);
+				break;
+			case "projectile":
+				this.onProjectileHit(obj);
+				break
 		}
-		//TODO: differentiate between ball and menacer
-		this.onBallHit(obj);
 	}
 
 	onBallHit(ball){
 		this.reboundBall(ball);
 		playSound("paddle_hit");
 		ball.onPaddleHit(this);
+	}
+
+	onProjectileHit(proj){
+		proj.onPaddleHit(this);
 	}
 
 	//redirect the ball based on where exactly
@@ -117,9 +132,26 @@ class Paddle extends Sprite{
 	update(delta){
 		let mx = mouse.x;
 		let my = mouse.y;
+
+		if (this.stun){
+			this.stun.timer -= delta;
+			if (this.stun.timer <= 0)
+				this.stun = null;
+		}
+
+		//apply speed limit
+		//TODO: add vertical movement
+		let {x: spd_x, y: spd_y} = this.speedLimit;
+		if (this.stun){
+			spd_x = this.stun.x ?? spd_x;
+			spd_y = this.stun.y ?? spd_y;
+		}
+		let dx = mx - this.x;
+		let sign_x = (dx >= 0) ? 1 : -1;
+		dx = Math.min(Math.abs(dx), spd_x * delta) * sign_x;
 		
 		//clamp paddle position
-		let px = mx;
+		let px = this.x + dx;
 		let pw = this.paddleWidth;
 		px = Math.max(DIM.lwallx + pw/2, px);
 		px = Math.min(DIM.rwallx - pw/2, px);

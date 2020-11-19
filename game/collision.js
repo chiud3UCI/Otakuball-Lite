@@ -208,7 +208,8 @@ class CircleShape{
 
 	getAABB(){
 		let c = this.center;
-		let r = this.radius / 2;
+		// let r = this.radius / 2; //don't divide by 2 idiot
+		let r = this.radius;
 
 		return [c.x-r, c.y-r, c.x+r, c.y+r];
 	}

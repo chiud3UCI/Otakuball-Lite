@@ -41,11 +41,9 @@ var brickData = {
 			[6, 9, "SpeedBrick", [true, false]],
 			[6, 11, "CopperBrick", []],
 			[6, 12, "JumperBrick", []],
-			[12, 7, "OneWayBrick", ["up"]],
-			[12, 8, "OneWayBrick", ["down"]],
-			[12, 9, "OneWayBrick", ["left"]],
-			[12, 10, "OneWayBrick", ["right"]],
 			[7, 3, "DetonatorBrick", ["normal"]],
+			[7, 17, "DetonatorBrick", ["neo"]],
+			[7, 18, "DetonatorBrick", ["freeze"]],
 			[7, 0, "FunkyBrick", [0]],
 			[7, 1, "FunkyBrick", [1]],
 			[7, 2, "FunkyBrick", [2]],
@@ -55,14 +53,6 @@ var brickData = {
 			[7, 4, "GlassBrick", []],
 			[7, 5, "AlienBrick", []],
 			[7, 7, "RainbowBrick", []],
-			[7, 8, "GateBrick", [0, false]],
-			[7, 9, "GateBrick", [1, false]],
-			[7, 10, "GateBrick", [2, false]],
-			[7, 11, "GateBrick", [3, false]],
-			[12, 13, "GateBrick", [0, true]],
-			[12, 14, "GateBrick", [1, true]],
-			[12, 15, "GateBrick", [2, true]],
-			[12, 16, "GateBrick", [3, true]],
 			[7, 12, "CometBrick", ["left"]],
 			[7, 13, "CometBrick", ["right"]],
 			[9, 8, "CometBrick", ["horizontal"]],
@@ -74,6 +64,7 @@ var brickData = {
 			[11, 19, "SequenceBrick", [4]],
 			[7, 14, "LaserEyeBrick", []],
 			[7, 16, "BoulderBrick", []],
+			[8, 11, "TikiBrick", []],
 			[8, 7, "FactoryBrick", []],
 			[9, 11, "ShoveBrick", [false]],
 			[9, 10, "ShoveBrick", [true]],
@@ -86,17 +77,40 @@ var brickData = {
 			[8, 14, "TriggerDetonatorBrick", []],
 			[9, 16, "SlotMachineBrick", [false]],
 			[9, 17, "SlotMachineBrick", [true]],
+			[10, 7, "LauncherBrick", [false, false]],
+			[11, 7, "LauncherBrick", [true, false]],
+			[10, 15, "LauncherBrick", [false, true]],
+			[10, 16, "LauncherBrick", [true, true]],
+			[9, 12, "TwinLauncherBrick", [false]],
+			[9, 13, "TwinLauncherBrick", [true]],
+			[9, 7, "ParachuteBrick", []],
+			[12, 17, "SplitBrick", [false]],
+
 		]
 
-		let conveyor = [];
+		let nonbrick = [];
 		let dirs = ["up", "down", "left", "right"];
-		for (let i = 0; i < 4; i++){
-			for (let j = 0; j < 3; j++){
+		for (let j = 0; j < 3; j++){
+			for (let i = 0; i < 4; i++){
 				let arr = [i, 21+j, "ConveyorBrick"];
 				arr.push([dirs[i], j]);
-				conveyor.push(arr);
+				nonbrick.push(arr);
 			}
 		}
+		nonbrick = nonbrick.concat([
+			[12, 7, "OneWayBrick", ["up"]],
+			[12, 8, "OneWayBrick", ["down"]],
+			[12, 9, "OneWayBrick", ["left"]],
+			[12, 10, "OneWayBrick", ["right"]],
+			[7, 8, "GateBrick", [0, false]],
+			[7, 9, "GateBrick", [1, false]],
+			[7, 10, "GateBrick", [2, false]],
+			[7, 11, "GateBrick", [3, false]],
+			[12, 13, "GateBrick", [0, true]],
+			[12, 14, "GateBrick", [1, true]],
+			[12, 15, "GateBrick", [2, true]],
+			[12, 16, "GateBrick", [3, true]],
+		]);
 
 		//can't call it "switch" because it is a keyword
 		let flip = [];
@@ -112,7 +126,7 @@ var brickData = {
 		let rawGroup = [
 			["normal", normal],
 			["other", other],
-			["conveyor", conveyor],
+			["nonbrick", nonbrick],
 			["flip", flip],
 		]
 

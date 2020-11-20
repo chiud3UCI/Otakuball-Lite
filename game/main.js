@@ -36,7 +36,7 @@ function ALERT_ONCE(message){
 //is created
 function init(){
 	PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
-	// PIXI.settings.ROUND_PIXELS = true;
+	PIXI.settings.ROUND_PIXELS = true;
 	
 	//check for webgl support
 	let type = "WebGL";

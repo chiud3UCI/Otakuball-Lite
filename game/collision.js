@@ -63,6 +63,10 @@ class Vector{
 		return (this.x * this.x) + (this.y * this.y);
 	}
 
+	getAngle(){
+		return Math.atan2(this.y, this.x);
+	}
+
 	//don't call it normal because that means perpendicular
 	normalized(){
 		let len = this.len();

@@ -52,7 +52,7 @@ class Projectile extends Sprite{
 	}
 
 	onPaddleHit(paddle){
-		
+		this.kill();
 	}
 
 	update(delta){
@@ -66,12 +66,25 @@ class Projectile extends Sprite{
 	}
 }
 
+function freezeBrick(brick){
+	if (!brick.isDead())
+		return;
+	let type = brick.brickType;
+	if (type == "ice" || type == "detonator")
+		return;
+
+	let ice = new IceBrick(brick.x, brick.y, brick.texture);
+	game.emplace("bricks", ice);
+
+}
+
 //explosions are invisible hitboxes that last for 1 frame
 class Explosion extends Projectile{
-	constructor(x, y, w, h){
+	constructor(x, y, w, h, freeze=false){
 		super(null, x, y, 0, 0, 0, w, h);
 		this.damage = 100;
 		this.strength = 1;
+		this.freeze = freeze;
 	}
 
 	isDead(){
@@ -85,16 +98,15 @@ class Explosion extends Projectile{
 		let brick = obj;
 		if (brick.isDead()){
 			let deathSound = brick.deathSound;
-			if (deathSound != "detonator_explode")
+			if (deathSound.indexOf("detonator") != -1)
 				stopSound(deathSound);
+			freezeBrick(brick);
 		}
 		else{
 			let hitSound = brick.hitSound;
-			if (hitSound != "detonator_explode")
+			if (hitSound.indexOf("detonator") != -1)
 				stopSound(hitSound);
 		}
-		
-
 	}
 }
 

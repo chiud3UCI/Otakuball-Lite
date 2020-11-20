@@ -110,8 +110,6 @@ class Ball extends Sprite{
 			this.vy = vy;
 			// console.log(rot);
 		}
-
-		
 	}
 
 	handleCollision(xn, yn){
@@ -156,6 +154,7 @@ class Ball extends Sprite{
 	//Paddle will call this directly instead of onSpriteHit
 	//due to ball-paddle collision behavior being radically different
 	onPaddleHit(obj){
+		this.stuckBounceTimer = 0;
 
 	}
 

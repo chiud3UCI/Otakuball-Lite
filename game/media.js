@@ -155,6 +155,7 @@ let recursive_sound_names = [
 		"brick_hit",
 		"brick_armor",
 		"detonator_explode",
+		"detonator_ice",
 		"invisible_reveal",
 		"antilaser_hit",
 		"alien_hit",
@@ -164,6 +165,7 @@ let recursive_sound_names = [
 		"boulder_break",
 		"brick_armed",
 		"brick_disarmed",
+		"brick_divide",
 		
 	]],
 	["ball/", [
@@ -477,6 +479,22 @@ media.createAnimations = function(){
 			this.animations[name] = arr;
 		}
 	}
+
+	//split brick
+	let ani = create("split_glow_red", "brick_split", 0, 1, 5, 1);
+	for (let i = 3; i >= 1; i--)
+		ani.push(ani[i]);
+	ani = create("split_glow_blue", "brick_split", 8, 2, 6, 1);
+	for (let i = 4; i >= 1; i--)
+		ani.push(ani[i]);
+	create("split_red", "brick_split", 5, 1, 3, 1);
+	create("split_blue_left", "brick_split", 5, 0, 9, 1);
+	let ani2 = this.animations["split_blue_left"].slice();
+	for (let i = 0; i < 3; i++)
+		ani2[i] = `brick_split_${5+i}_2`;
+	this.animations["split_blue_right"] = ani2;
+
+
 
 	//menacer coating
 	for (let i = 0; i < 3; i++){

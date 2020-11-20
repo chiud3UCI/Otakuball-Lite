@@ -460,6 +460,9 @@ class PlayState{
 
 
 	loadLevel(level){
+		if (level.slotPowerups)
+			this.slotPowerups = level.slotPowerups;
+		
 		for (let [i, j, id, patch] of level.bricks){
 			let {brickType, args} = brickData.lookup[id];
 			let brickClass = brickClasses[brickType];
@@ -470,6 +473,8 @@ class PlayState{
 				br.initPatches(patch);
 			this.add("bricks", br);
 		}
+		//TODO: Add enemy spawner
+
 	}
 
 	//special debug method that summons a ball and

@@ -832,30 +832,48 @@ class ShooterBrick extends FunkyBrick{
 }
 
 class DetonatorBrick extends Brick{
+	static data = {
+		normal: [0, "reg"],
+		neo: [1, "neo"],
+		freeze: [2, "freeze"],
+	};
 	//detonator types: normal, neo, freeze
 	constructor(x, y, detType="normal"){
+		//base texture wont' mater because
+		//this brick will always be animating
 		super("brick_main_7_3", x, y);
+
+		let [i, smokeStr] = DetonatorBrick.data[detType];
 		
-		this.addAnim("glow", "brick_glow_0", 0.25, true);
+		this.addAnim("glow", `brick_glow_${i}`, 0.25, true);
 		this.playAnim("glow");
 
 		this.deathSound = "detonator_explode";
+		if (detType == "freeze")
+			this.deathSound = "detonator_ice";
 
 		this.detType = detType;
+		this.smokeStr = smokeStr;
 		this.brickType = "detonator";
 	}
 
 	onDeath(){
+		let detType = this.detType;
 		//invisible explosion projectile
+		let scale = (detType == "neo") ? 5 : 3;
 		game.top.emplaceCallback(50, () => {
 			game.emplace("projectiles", new Explosion(
-				this.x, this.y, 16*3-1, 8*3-1
+				this.x, 
+				this.y, 
+				32*scale-1, 
+				16*scale-1,
+				(detType == "freeze")
 			));
 		});
 
 		//explosion smoke particle
 		let i = Math.floor(Math.random() * 4);
-		let tex = "det_smoke_reg_" + i;
+		let tex = `det_smoke_${this.smokeStr}_${i}`;
 		let smoke = new Particle(tex, this.x, this.y);
 		smoke.setGrowth(0.01, -0.00002);
 		smoke.setFade(0.005);
@@ -863,9 +881,12 @@ class DetonatorBrick extends Brick{
 
 		//explosion blast particle
 		let blast = new Particle(null, this.x, this.y);
+		if (detType == "neo")
+			blast.scale.set(3);
 		let anistr = [];
+		let j = (detType == "freeze") ? 1 : 0;
 		for (let i = 0; i < 7; i++)
-			anistr.push(`det_blast_${i}_0`);
+			anistr.push(`det_blast_${i}_${j}`);
 		blast.addAnim("blast", anistr, 0.5);
 		blast.playAnim("blast");
 		blast.dieOnAniFinish = true;
@@ -917,11 +938,8 @@ class TriggerDetonatorBrick extends DetonatorBrick{
 				playSound("detonator_explode");
 			else
 				playSound("brick_armed");
-
 		}
 	}
-
-
 }
 
 class GlassBrick extends Brick{
@@ -935,6 +953,16 @@ class GlassBrick extends Brick{
 		if (obj.gameType == "ball")
 			obj.pierceOverride = true;
 		super.onSpriteHit(obj, norm, mag);
+	}
+}
+
+class IceBrick extends GlassBrick{
+	constructor(x, y, texture){
+		super(x, y);
+		this.setTexture(texture);
+		this.addChild(
+			makeSprite("brick_main_7_4", 1, -8, -4));
+		this.brickType = "ice";
 	}
 }
 
@@ -1335,6 +1363,54 @@ class BoulderBrick extends Brick{
 				this.vy = -this.vy * 0.4;
 			}
 			game.emplace("projectiles", b);
+		}
+	}
+}
+
+class TikiBrick extends Brick{
+	constructor(x, y){
+		super("brick_main_8_11", x, y);
+		this.health = 100;
+		this.armor = 1;
+		this.hitCount = 0;
+		this.brickType = "tiki";
+	}
+
+	fireLaser(){
+		let paddle = game.get("paddles")[0];
+		let vec = new Vector(
+			paddle.x - this.x, paddle.y - this.y
+		);
+		vec = vec.normalized();
+		let vel = vec.scale(0.5);
+		let off = vec.scale(12);
+		//remember that PIXI.Texture.WHITE is a
+		//16x16 white square
+		let laser = new Projectile(
+			PIXI.Texture.WHITE,
+			this.x + off.x, 
+			this.y + off.y, 
+			vel.x, 
+			vel.y, 
+			vec.getAngle(),
+			24/16, 
+			4/16
+		);
+		laser.tint = 0xFFFF00;
+		laser.colFlag = {paddle: true};
+		laser.onPaddleHit = function(paddle){
+			console.log("Implement Paddle Shrinkage");
+			this.kill();
+		};
+		game.emplace("projectiles", laser);
+	}
+
+	takeDamage(damage, strength){
+		super.takeDamage(damage, strength);
+		this.hitCount++;
+		if (this.hitCount == 3){
+			this.hitCount = 0;
+			this.fireLaser();
 		}
 	}
 }
@@ -1766,7 +1842,9 @@ class SlotMachineBrick extends Brick{
 
 		this.health = 1000;
 		this.armor = 2;
-		this.powIds = [0, 1, 2];
+		this.isYellow = isYellow;
+		let slotPowerups = game.top.slotPowerups;
+		this.powIds = slotPowerups[isYellow ? 1 : 0];
 		this.powIndex = SMB.globalIndex;
 		SMB.globalIndex = (SMB.globalIndex+1) % 3;
 		this.turnTime = 500;
@@ -1789,8 +1867,9 @@ class SlotMachineBrick extends Brick{
 		powerups.mask = mask;
 		this.addChild(powerups);
 
-		this.frame0 = new Sprite("brick_slot_0_0");
-		this.frame1 = new Sprite("brick_slot_1_0");
+		let j = isYellow ? 1 : 0;
+		this.frame0 = new Sprite("brick_slot_0_"+j);
+		this.frame1 = new Sprite("brick_slot_1_"+j);
 		this.frame0.scale.set(1);
 		this.frame1.scale.set(1);
 		this.frame0.visible = true;
@@ -1884,6 +1963,197 @@ class SlotMachineBrick extends Brick{
 }
 var SMB = SlotMachineBrick; //shorter alias
 
+class LauncherBrick extends Brick{
+	//cc means counter-clockwise
+	constructor(x, y, left, cc){
+		super("brick_invis", x, y);
+		this.launchIndex = (left) ? 8 : 0;
+		this.launchDelta = (cc) ? -1 : 1;
+		this.updateAppearance();
+		this.spinDelay = 200;
+		this.spinTimer = this.spinDelay;
+	}
+
+	updateAppearance(){
+		let index = this.launchIndex;
+		let i = 10 + Math.floor(index / 8);
+		let j = 7 + (index % 8);
+		this.setTexture(`brick_main_${i}_${j}`);
+	}
+
+	onDeath(){
+		super.onDeath();
+		let rad = this.launchIndex * Math.PI / 8;
+		let [vx, vy] = Vector.rotate(0.5, 0, rad);
+		let p = new Projectile(
+			this.texture, this.x, this.y, vx, vy
+		);
+		p.damage = 100;
+		p.strength = 1;
+		p.pierce = true;
+		game.emplace("projectiles", p);
+	}
+
+	update(delta){
+		this.spinTimer -= delta;
+		if (this.spinTimer <= 0){
+			this.spinTimer = this.spinDelay;
+			this.launchIndex += this.launchDelta + 16;
+			this.launchIndex %= 16;
+			this.updateAppearance();
+		}
+		super.update(delta);
+	}
+}
+
+class TwinLauncherBrick extends Brick{
+	constructor(x, y, isYellow){
+		let i = isYellow ? 1 : 0;
+		super(`brick_main_9_${12+i}`, x, y);
+		this.activeTexture = `brick_main_9_${14+i}`;
+		this.health = 100;
+		this.armor = 1;
+		this.active = false;
+		this.isYellow = isYellow;
+		this.addAnim("active", `brick_glow2_${2+i}`, 0.125, true);
+		this.brickType = "twinlauncher";
+	}
+
+	launchTo(brick){
+		if (this.isDead())
+			return;
+		let vec = new Vector(brick.x - this.x, brick.y - this.y);
+		vec = vec.normalized();
+		vec = vec.scale(0.5);
+		if (this.isYellow === brick.isYellow)
+			vec = vec.scale(-1);
+		let p = new Projectile(
+			this.activeTexture, this.x, this.y, vec.x, vec.y
+		);
+		p.damage = 100;
+		p.strength = 1;
+		p.pierce = true;
+		p.isTwinLauncher = true;
+		let superUpdate = p.update;
+		p.update = function(delta){
+			for (let p of game.get("projectiles")){
+				if (p == this)
+					continue;
+				if (!p.isTwinLauncher)
+					continue;
+				if (this.checkOverlap(p)){
+					this.kill();
+					p.kill();
+				}
+			}
+			superUpdate.call(this, delta);
+		}
+		game.emplace("projectiles", p);
+	}
+
+	takeDamage(damage, strength){
+		super.takeDamage(damage, strength);
+		if (this.active){
+			this.active = false;
+			this.stopAnim();
+			playSound("brick_disarmed");
+		}
+		else{
+			this.active = true;
+			this.playAnim("active");
+			playSound("brick_armed");
+			for (let br of game.get("bricks")){
+				if (br == this)
+					continue;
+				if (br.brickType != "twinlauncher")
+					continue;
+				if (br.active){
+					this.launchTo(br);
+					br.launchTo(this);
+					this.kill();
+					br.kill();
+				}
+			}
+		}
+	}
+}
+
+class ParachuteBrick extends Brick{
+	constructor(x, y){
+		super("brick_main_9_7", x, y);
+		this.brickType = "parachute";
+	}
+
+	onSpriteHit(obj, norm, mag){
+		super.onSpriteHit(obj, norm, mag);
+		if (obj.gameType == "ball"){
+			console.log("Implement Parachute Later");
+		}
+	}
+}
+
+class SplitBrick extends Brick{
+	constructor(x, y, isBlue){
+		let i = isBlue ? 18 : 17;
+		super(`brick_main_12_${i}`, x, y);
+		this.isBlue = isBlue;
+
+		if (isBlue){
+			//the red brick has to manually call these
+			//animations
+			let ani1, ani2;
+			ani1 = this.addAnim("spawn_left", "split_blue_left", 0.25);
+			ani2 = this.addAnim("spawn_right", "split_blue_right", 0.25);
+			this.addAnim("glow", "split_glow_blue", 0.25, true);
+			for (let ani of [ani1, ani2]){
+				ani.onCompleteCustom = () => {
+					this.playAnim("glow");
+					this.intangible = false;
+				};
+			}
+		}
+		else{
+			this.addAnim("glow", `split_glow_red`, 0.25, true);
+			this.playAnim("glow");
+			this.deathSound = "brick_divide";
+		}
+
+		this.brickType = "split";
+	}
+
+	onDeath(){
+		super.onDeath();
+		if (this.isBlue)
+			return;
+
+		let redSplit = new Particle("brick_invis", this.x, this.y);
+		redSplit.addAnim("split", "split_red", 0.25, false, true);
+		redSplit.dieOnAniFinish = true;
+		game.emplace("particles", redSplit);
+
+		let brickGrid = game.top.brickGrid;
+		let [i, j0] = getGridPos(this.x, this.y);
+		for (let j = j0-1; j <= j0+1; j+=2){
+			if (!boundCheck(i, j) || !brickGrid.isEmpty(i, j))
+				continue;
+			let [x, y] = getGridPosInv(i, j);
+			let blue = new SplitBrick(x, y, true);
+			if (j < j0)
+				blue.playAnim("spawn_left");
+			else
+				blue.playAnim("spawn_right");
+			blue.intangible = true;
+			game.emplace("bricks", blue);
+		}
+	}
+
+	checkSpriteHit(obj){
+		if (this.intangible)
+			return [false];
+		return super.checkSpriteHit(obj);
+	}
+}
+
 
 var brickClasses = {
 	Brick,
@@ -1907,6 +2177,7 @@ var brickClasses = {
 	CometBrick,
 	LaserEyeBrick,
 	BoulderBrick,
+	TikiBrick,
 	TriggerBrick,
 	SwitchBrick,
 	FlipBrick,
@@ -1916,5 +2187,9 @@ var brickClasses = {
 	ShoveDetonatorBrick,
 	SequenceBrick,
 	OnixBrick,
-	SlotMachineBrick
+	SlotMachineBrick,
+	LauncherBrick,
+	TwinLauncherBrick,
+	ParachuteBrick,
+	SplitBrick,
 }

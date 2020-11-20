@@ -83,6 +83,11 @@ class EditorState{
 		this.initRightWidget();
 		this.initPowerupButtons();
 
+		this.slotPowerups = [
+			[0, 1, 2], //blue
+			[0, 1, 2]  //yellow
+		];
+
 		//initial selection
 		this.selectedTool = null;
 		this.selectedBrick = null;
@@ -292,28 +297,33 @@ class EditorState{
 		panel.y = 5;
 
 		this.brickButtons = [];
+		this.slotButtons = []; //slot machine brick buttons
 
 		//"this" changes when entering a function
 		let state = this;
-		let placeButtons = function(x0, y0, wrap, scale, name){
+		let placeButtons = function(name, x0, y0, wrap, scale, flip=false){
 			let group = brickData.group[name];
 			let dx = 16 * scale;
 			let dy = 8 * scale;
 			for (let [n, dat] of group.entries()){
 				let i = Math.floor(n/wrap);
 				let j = n % wrap;
+				if (flip)
+					[i, j] = [j, i];
 				let x = x0 + j * dx;
 				let y = y0 + i * dy;
 				let butt = new BrickButton(state, x, y, scale, dat.id);
 				panel.addChild(butt);
 				state.brickButtons.push(butt);
+				if (dat.brickType == "SlotMachineBrick")
+					state.slotButtons.push(butt);
 			}
 		}
 
-		placeButtons(0, 0, 6, 1.5, "normal");
-		placeButtons(0, 260, 6, 1.5, "other");
-		placeButtons(0, 380, 3, 1.5, "conveyor");
-		placeButtons(0, 430, 6, 1.5, "flip");
+		placeButtons("normal", 0, 0, 6, 1.5);
+		placeButtons("other", 0, 12*22, 6, 1.5);
+		placeButtons("flip", 0, 12*32, 6, 1.5);
+		placeButtons("nonbrick", 0, 12*38, 4, 1.5, true);
 
 		//Brick Button Highlight (yellow border)
 		this.brickButtonHighlight = new PIXI.Graphics();
@@ -327,14 +337,41 @@ class EditorState{
 	initPowerupButtons(){
 		let proto = PlayState.prototype;
 		proto.initPowerupButtons.call(this);
+
+		let state = this;
+		let powerPanel = this.powerPanel;
+		let widget = this.widget;
+		powerPanel.visible = false;
+
 		//repurpose the buttons
 		for (let butt of this.powerButtons){
 			butt.highlight = EditorButton.prototype.highlight;
 			butt.pointerDown = function(e){
-				console.log("select " + this.id);
+				let newPows = state.newSlotPowerups;
+				let pows = state.slotPowerups;
+				newPows.push(this.id);
+				if (newPows.length == 3){
+					powerPanel.visible = false;
+					widget.visible = true;
+					pows[state.newSlotColor] = newPows;
+				}
 			}
 		}
-		this.powerPanel.visible = false;
+		//modify the slot machine brick buttons
+		for (let butt of this.slotButtons){
+			let oldFunc = butt.pointerDown;
+			butt.pointerDown = function(e){
+				if (state.selectedBrick == this.id){
+					state.newSlotPowerups = [];
+					state.newSlotColor = 
+						(this.dat.args[0]) ? 1 : 0;
+					powerPanel.visible = true;
+					widget.visible = false;
+				}
+				oldFunc.call(this, e);
+			};
+		}
+
 	}
 
 	initPatchButtons(){
@@ -482,6 +519,7 @@ class EditorState{
 
 		//level.bricks should always exist
 		level.bricks = [];
+		let slotCheck = false; //check for slot machine bricks
 		for (let node of this.allNodes){
 			let id = node.brickId;
 			if (id !== null){
@@ -490,6 +528,8 @@ class EditorState{
 				if (patch)
 					arr.push(patch);
 				level.bricks.push(arr);
+				if (node.dat.brickType == "SlotMachineBrick")
+					slotCheck = true;
 			}
 		}
 
@@ -513,8 +553,10 @@ class EditorState{
 			level.enemies = enemies;
 		}
 
-		//level.slotBrickConfig should appear iff
-		//there are Slot Bricks in the level
+		//Slot Machine Powerups should appear iff
+		//this level contains Slot Machine Bricks
+		if (slotCheck)
+			level.slotPowerups = this.slotPowerups;
 
 		return level;
 	}
@@ -539,7 +581,9 @@ class EditorState{
 			for (let [i, val] of values.entries())
 				butts[i].setState(val); //implicit cast to boolean
 		}
-
+		//slot machine powerups
+		if (level.slotPowerups)
+			this.slotPowerups = level.slotPowerups;
 	}
 
 	//writes the level json to the textbox
@@ -630,12 +674,14 @@ class GridNode{
 	setBrick(id){
 		if (id === undefined || id === null){
 			this.brickId = null;
+			this.dat = null;
 			this.sprite.visible = false;
 			this.clearPatch();
 			return;
 		}
 		this.brickId = id;
-		this.sprite.setTexture(brickData.lookup[id].tex);
+		this.dat = brickData.lookup[id];
+		this.sprite.setTexture(this.dat.tex);
 		this.sprite.visible = true;
 	}
 
@@ -691,6 +737,7 @@ class BrickButton extends EditorButton{
 		let dat = brickData.lookup[id];
 		super(parentState, dat.tex, x, y, scale);
 		this.id = id;
+		this.dat = dat;
 	}
 
 	pointerDown(e){

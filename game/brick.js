@@ -322,6 +322,33 @@ class NullBrick extends Brick{
 	}
 }
 
+class ForbiddenBrick extends Brick{
+	constructor(x, y){
+		super("brick_invis", x, y);
+		this.health = 1000;
+		this.armor = 10;
+	}
+
+	checkSpriteHit(obj){
+		return [false];
+	}
+}
+
+class GhostBrick extends Brick{
+	constructor(x, y){
+		super("brick_invis", x, y);
+		this.health = 1000;
+		this.armor = 2;
+
+		this.addAnim("shine", "ghost_shine", 0.25);
+	}
+
+	takeDamage(damage, strength){
+		super.takeDamage(damage, strength);
+		this.playAnim("shine");
+	}
+}
+
 class NormalBrick extends Brick{
 	//return arguments for a random colored brick
 	static randomColor(){
@@ -817,7 +844,7 @@ class ShooterBrick extends FunkyBrick{
 				laser.damage = 100;
 				laser.strength = 1;
 			}
-			laser.moveTo(this.x-2, this.y - laser.height - 2);
+			laser.moveTo(this.x-2, this.y - 8 - laser.height/2 - 2);
 			game.emplace("projectiles", laser);
 			//prevents brick from shooting multiple times
 			//in a single frame
@@ -1373,6 +1400,9 @@ class TikiBrick extends Brick{
 		this.health = 100;
 		this.armor = 1;
 		this.hitCount = 0;
+
+		this.addAnim("shine", "tiki_shine", 0.25);
+
 		this.brickType = "tiki";
 	}
 
@@ -1407,6 +1437,7 @@ class TikiBrick extends Brick{
 
 	takeDamage(damage, strength){
 		super.takeDamage(damage, strength);
+		this.playAnim("shine");
 		this.hitCount++;
 		if (this.hitCount == 3){
 			this.hitCount = 0;
@@ -1964,11 +1995,11 @@ class SlotMachineBrick extends Brick{
 var SMB = SlotMachineBrick; //shorter alias
 
 class LauncherBrick extends Brick{
-	//cc means counter-clockwise
-	constructor(x, y, left, cc){
+	//ccw means counter-clockwise
+	constructor(x, y, left, ccw){
 		super("brick_invis", x, y);
 		this.launchIndex = (left) ? 8 : 0;
-		this.launchDelta = (cc) ? -1 : 1;
+		this.launchDelta = (ccw) ? -1 : 1;
 		this.updateAppearance();
 		this.spinDelay = 200;
 		this.spinTimer = this.spinDelay;
@@ -2157,6 +2188,8 @@ class SplitBrick extends Brick{
 
 var brickClasses = {
 	Brick,
+	ForbiddenBrick,
+	GhostBrick,
 	NormalBrick,
 	MetalBrick,
 	GoldBrick,

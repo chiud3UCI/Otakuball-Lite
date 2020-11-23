@@ -422,6 +422,10 @@ media.createAnimations = function(){
 		this.animations[`factory_shine_${i}`] = arr;
 	}
 
+	//tiki and ghost shine
+	create("tiki_shine", "brick_shine", 7, 14, 5, 1);
+	create("ghost_shine", "brick_shine", 7, 15, 5, 1);
+
 	//brick glowing
 	for (let i = 0; i < 8; i++){
 		let name = "brick_glow_" + i;

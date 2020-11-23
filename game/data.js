@@ -12,6 +12,11 @@ var brickData = {
 		//All textures for the brick buttons are assumed
 		//to come from the same texture "brick_main"
 
+		/************************************************
+		* IMPORTANT: Brick IDs have been finalized.     *
+		* 	DO NOT modify the order of existing bricks. *
+		*************************************************/
+		
 		let normal = [];
 
 		//format: [i, j, class name, [args]]
@@ -24,6 +29,53 @@ var brickData = {
 		}
 		for (let i = 0; i < 3; i++)
 			normal.push([i, 20, "NormalBrick", [i, 20]]);
+
+		let nonbrick = [];
+		let dirs = ["up", "down", "left", "right"];
+		for (let j = 0; j < 3; j++){
+			for (let i = 0; i < 4; i++){
+				let arr = [i, 21+j, "ConveyorBrick"];
+				arr.push([dirs[i], j]);
+				nonbrick.push(arr);
+			}
+		}
+
+		/************************************************
+		* IMPORTANT: Brick IDs have been finalized.     *
+		* 	DO NOT modify the order of existing bricks. *
+		*************************************************/
+
+		nonbrick = nonbrick.concat([
+			[12, 7, "OneWayBrick", ["up"]],
+			[12, 8, "OneWayBrick", ["down"]],
+			[12, 9, "OneWayBrick", ["left"]],
+			[12, 10, "OneWayBrick", ["right"]],
+			[7, 8, "GateBrick", [0, false]],
+			[7, 9, "GateBrick", [1, false]],
+			[7, 10, "GateBrick", [2, false]],
+			[7, 11, "GateBrick", [3, false]],
+			[12, 13, "GateBrick", [0, true]],
+			[12, 14, "GateBrick", [1, true]],
+			[12, 15, "GateBrick", [2, true]],
+			[12, 16, "GateBrick", [3, true]],
+		]);
+
+
+		//can't call it "switch" because it is a keyword
+		let flip = [];
+		for (let i = 0; i < 5; i++){
+			flip.push([8+i, 0, "FlipBrick", [i, false]]);
+			flip.push([8+i, 1, "FlipBrick", [i, true]]);
+			flip.push([8+i, 2, "StrongFlipBrick", [i, false]]);
+			flip.push([8+i, 3, "StrongFlipBrick", [i, true]]);
+			flip.push([8+i, 4, "SwitchBrick", [i]]);
+			flip.push([8+i, 6, "TriggerBrick", [i]]);
+		}
+
+		/************************************************
+		* IMPORTANT: Brick IDs have been finalized.     *
+		* 	DO NOT modify the order of existing bricks. *
+		*************************************************/
 
 		let other = [
 			[6, 1, "MetalBrick", [1]],
@@ -50,7 +102,6 @@ var brickData = {
 			[8, 16, "ShooterBrick", [0]],
 			[8, 17, "ShooterBrick", [1]],
 			[8, 18, "ShooterBrick", [2]],
-			[7, 4, "GlassBrick", []],
 			[7, 5, "AlienBrick", []],
 			[7, 7, "RainbowBrick", []],
 			[7, 12, "CometBrick", ["left"]],
@@ -74,7 +125,7 @@ var brickData = {
 			[10, 19, "OnixBrick", ["up_right"]],
 			[9, 20, "OnixBrick", ["down_left"]],
 			[9, 19, "OnixBrick", ["down_right"]],
-			[8, 14, "TriggerDetonatorBrick", []],
+			[9, 7, "ParachuteBrick", []],
 			[9, 16, "SlotMachineBrick", [false]],
 			[9, 17, "SlotMachineBrick", [true]],
 			[10, 7, "LauncherBrick", [false, false]],
@@ -83,51 +134,18 @@ var brickData = {
 			[10, 16, "LauncherBrick", [true, true]],
 			[9, 12, "TwinLauncherBrick", [false]],
 			[9, 13, "TwinLauncherBrick", [true]],
-			[9, 7, "ParachuteBrick", []],
+			[8, 14, "TriggerDetonatorBrick", []],
 			[12, 17, "SplitBrick", [false]],
-
+			[7, 4, "GlassBrick", []],
+			[12, 19, "GhostBrick", []],
+			[12, 12, "ForbiddenBrick", []],
 		]
-
-		let nonbrick = [];
-		let dirs = ["up", "down", "left", "right"];
-		for (let j = 0; j < 3; j++){
-			for (let i = 0; i < 4; i++){
-				let arr = [i, 21+j, "ConveyorBrick"];
-				arr.push([dirs[i], j]);
-				nonbrick.push(arr);
-			}
-		}
-		nonbrick = nonbrick.concat([
-			[12, 7, "OneWayBrick", ["up"]],
-			[12, 8, "OneWayBrick", ["down"]],
-			[12, 9, "OneWayBrick", ["left"]],
-			[12, 10, "OneWayBrick", ["right"]],
-			[7, 8, "GateBrick", [0, false]],
-			[7, 9, "GateBrick", [1, false]],
-			[7, 10, "GateBrick", [2, false]],
-			[7, 11, "GateBrick", [3, false]],
-			[12, 13, "GateBrick", [0, true]],
-			[12, 14, "GateBrick", [1, true]],
-			[12, 15, "GateBrick", [2, true]],
-			[12, 16, "GateBrick", [3, true]],
-		]);
-
-		//can't call it "switch" because it is a keyword
-		let flip = [];
-		for (let i = 0; i < 5; i++){
-			flip.push([8+i, 0, "FlipBrick", [i, false]]);
-			flip.push([8+i, 1, "FlipBrick", [i, true]]);
-			flip.push([8+i, 2, "StrongFlipBrick", [i, false]]);
-			flip.push([8+i, 3, "StrongFlipBrick", [i, true]]);
-			flip.push([8+i, 4, "SwitchBrick", [i]]);
-			flip.push([8+i, 6, "TriggerBrick", [i]]);
-		}
 
 		let rawGroup = [
 			["normal", normal],
-			["other", other],
 			["nonbrick", nonbrick],
 			["flip", flip],
+			["other", other],
 		]
 
 		let index = 0;

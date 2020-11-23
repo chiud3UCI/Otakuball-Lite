@@ -6,9 +6,7 @@
 -Create Level Select
 -Create Campaign
 -Implement more powerups!
--Implement remaining 
-
--Implement the rest of the powerups
+-Implement Backgrounds
 
 Plan for converting the lua levels to javascript
 1. Export the lua brickdata as a json object

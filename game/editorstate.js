@@ -112,6 +112,15 @@ class EditorState{
 		this.add("hud", text2);
 		this.add("hud", text3);
 
+		let tip1 = printText(
+			"Left-Click to place.",
+			"windows", 0x000000, 1, 10, 105);
+		let tip2 = printText(
+			"Right-Click to erase.",
+			"windows", 0x000000, 1, 10, 120);
+		this.add("hud", tip1);
+		this.add("hud", tip2);
+
 		//Play Button
 		let butt = new Button(10, 45, 150, 50);
 		butt.add(makeSprite("editorbutton_2_0", 3, 5, -2));
@@ -322,7 +331,7 @@ class EditorState{
 
 		placeButtons("normal", 0, 0, 6, 1.5);
 		placeButtons("other", 0, 12*22, 6, 1.5);
-		placeButtons("flip", 0, 12*32, 6, 1.5);
+		placeButtons("flip", 0, 12*33, 6, 1.5);
 		placeButtons("nonbrick", 0, 12*38, 4, 1.5, true);
 
 		//Brick Button Highlight (yellow border)
@@ -433,7 +442,7 @@ class EditorState{
 
 		let panel = new PIXI.Container();
 		panel.x = 10;
-		panel.y = DIM.ceiling + 40;
+		panel.y = DIM.ceiling + 60;
 		this.add("hud", panel);
 
 		this.toolButtons = [];

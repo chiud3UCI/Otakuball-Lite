@@ -133,8 +133,18 @@ class EditorState{
 		}
 		this.add("hud", butt);
 
+		//Load Button
+		butt = new Button(10, 290, 80, 35);
+		butt.add(printText(
+			"Load", "arcade", 0x000000, 1, 7, 8
+		));
+		butt.onClick = function(){
+			game.push(new LevelSelectState());
+		}
+		this.add("hud", butt);
+
 		//Import/Export buttons
-		butt = new Button(10, 350, 100, 35);
+		butt = new Button(10, 400, 100, 35);
 		butt.add(printText(
 			"Import", "arcade", 0x000000, 1, 7, 8
 		));
@@ -143,7 +153,7 @@ class EditorState{
 		}
 		this.add("hud", butt);
 
-		butt = new Button(10, 395, 100, 35);
+		butt = new Button(10, 445, 100, 35);
 		butt.add(printText(
 			"Export", "arcade", 0x000000, 1, 7, 8
 		));

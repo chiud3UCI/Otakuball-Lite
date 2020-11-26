@@ -17,6 +17,7 @@ DIM.boardw = DIM.rwallx - DIM.lwallx;
 DIM.boardh = DIM.h - DIM.ceiling;
 
 var app;
+var renderer;
 var appMouse;
 var mouse;
 var keyboard;
@@ -57,6 +58,8 @@ function init(){
 		transparent: false,
 		resolution: 1
 	});
+
+	renderer = app.renderer;
 
 	appMouse = app.renderer.plugins.interaction.mouse;
 
@@ -124,16 +127,26 @@ function init(){
 
 }
 
+var default_levels = null;
+
 function setup(){
 	console.log("LOAD COMPLETE");
 
 	media.processTextures();
 	media.createAnimations();
+	default_levels = PIXI.Loader.shared.resources.default_levels.data;
 
 	game = {
 		states: [],
 		top: null,
 		stage: new PIXI.Container(),
+
+		//this supports negative indexing
+		getState(i){
+			if (i < 0)
+				i += this.states.length;
+			return this.states[i];
+		},
 
 		push(state){
 			this.top = state;

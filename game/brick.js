@@ -1183,11 +1183,18 @@ class GateBrick extends Brick{
 		//for 3 seconds
 		// this.recentBalls.set(ball, 3000);
 
-		let exits = [];
+		let regular = [];
+		let dark = [];
 		for (let br of game.get("bricks")){
-			if (br != this && br.gateId == this.gateId)
-				exits.push(br);
+			if (br != this && br.gateId == this.gateId){
+				if (br.exitOnly)
+					dark.push(br);
+				else
+					regular.push(br);
+			}
 		}
+
+		let exits = (dark.length > 0) ? dark : regular;
 
 		if (exits.length == 0)
 			return;
@@ -1216,7 +1223,7 @@ class GateBrick extends Brick{
 	update(delta){
 		let recent = this.recentBalls;
 		for (let [ball, time] of recent.entries()){
-			time -= 0;
+			time -= delta;
 			if (time <= 0)
 				recent.delete(ball);
 			else

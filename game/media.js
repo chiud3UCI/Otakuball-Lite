@@ -187,6 +187,10 @@ let font_names = [
 media.load = function(callback){
 	let loader = PIXI.Loader.shared;
 
+	//load ALL the levels
+	loader.add("default_levels", "levels/default_levels.json");
+	//can be accessed at loader.resources.default_levels.data;
+
 	for (let pair of recursive_texture_names){
 		let [path, names] = pair;
 		path = "media/" + path;

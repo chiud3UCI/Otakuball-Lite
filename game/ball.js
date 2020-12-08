@@ -34,8 +34,10 @@ class Ball extends Sprite{
 		this.strength = 0;
 
 		this.createShape(true);
-		this.radius = this.shape.radius;
 		this.steer = null;
+
+		//will override the ball's velocity for 1 frame
+		this.velOverride = null;
 
 		//can also be a custom function
 		this.pierce = false;
@@ -45,16 +47,33 @@ class Ball extends Sprite{
 		this.stuckBounceTimer = 0;
 		this.storedAngle = 0;
 
+		this.disableBounce = false;
+
+		//each component should be a shallow object
+		this.components = {};
+
 		this.gameType = "ball";
+	}
+
+	destructor(){
+		super.destructor();
+		for (let [key, comp] of Object.entries(this.components))
+			comp.destructor?.(this);
 	}
 
 	clone(){
 		let ball = new Ball(this.x, this.y, this.vx, this.vy);
 		ball.setTexture(this.texture);
+		ball.createShape(true);
 		ball.damage = this.damage;
 		ball.strength = this.strength;
-		ball.radius = this.radius;
 		ball.pierce = this.pierce;
+
+		//shallow copy each component
+		//TODO: Rewrite each component with an init()
+		//and copy component methods
+		for (let [key, comp] of Object.entries(this.components))
+			ball.components[key] = {...comp};
 
 		return ball;
 	}
@@ -62,6 +81,10 @@ class Ball extends Sprite{
 	//check to see if ball should freely move and collide with
 	//the other game objects
 	isActive(){
+		if (this.justReleased){
+			this.justReleased = false;
+			return false;
+		}
 		return !(
 			this.stuckToPaddle ||
 			this.parachuting ||
@@ -72,12 +95,16 @@ class Ball extends Sprite{
 	//revert ball back to its old self
 	normal(){
 		this.setTexture("ball_main_0_0");
-		this.tint = 0xFFFFFF;
+		this.createShape(true);
 
 		this.damage = 10;
 		this.strength = 0;
 
 		this.pierce = false;
+
+		for (let [key, comp] of Object.entries(this.components))
+			comp.destructor?.(this);
+		this.components = {};
 	}
 
 	//due to the ball bouncing off of corners,
@@ -115,6 +142,8 @@ class Ball extends Sprite{
 	handleCollision(xn, yn){
 		if (!this.validCollision(xn, yn))
 			return;
+		for (let [key, comp] of Object.entries(this.components))
+			comp.handleCollision?.(this, xn, yn);
 		let dot = (this.vx*xn) + (this.vy*yn);
 		this.vx -= (2*dot*xn);
 		this.vy -= (2*dot*yn);
@@ -149,26 +178,39 @@ class Ball extends Sprite{
 		let norm2 = norm.scale(mag);
 		this.translate(norm2.x, norm2.y);
 		this.handleCollision(norm.x, norm.y);
+
+		for (let [key, comp] of Object.entries(this.components))
+			comp.onSpriteHit?.(this, obj, norm, mag);
 	}
 
 	//Paddle will call this directly instead of onSpriteHit
 	//due to ball-paddle collision behavior being radically different
-	onPaddleHit(obj){
+	onPaddleHit(paddle){
 		this.stuckBounceTimer = 0;
 
+		for (let [key, comp] of Object.entries(this.components))
+			comp.onPaddleHit?.(this, paddle);
 	}
 
 	//steer will only affect the ball for 1 frame
 	//before getting deleted
 	//epsilon causes the ball to slightly undershot the
-	//targeted vector (used for Conveyor brick)
-	setSteer(tx, ty, mag, epsilon=0){
+	//targeted vector so that it will keep its momentum after bounce
+	setSteer(tx, ty, mag, epsilon=0.01){
 		this.steer = [tx, ty, mag, epsilon];
 	}
 
 	update(delta){
+		//preUpdate will update the components regardless if
+		//the ball is stuck to the paddle
+		for (let [key, comp] of Object.entries(this.components))
+			comp.preUpdate?.(this, delta);
+
 		if (!this.isActive())
 			return;
+
+		for (let [key, comp] of Object.entries(this.components))
+			comp.update?.(this, delta);
 
 		if (this.steer){
 			let [tx, ty, mag, epsilon] = this.steer;
@@ -185,21 +227,38 @@ class Ball extends Sprite{
 			this.steer = null;
 		}
 
-		if (this.y - this.radius > DIM.h && !cheats.disable_pit)
-			this.dead = true;
+		let storedVel;
+		if (this.velOverride){
+			storedVel = {vx: this.vx, vy: this.vy};
+			let {vx, vy} = this.velOverride;
+			this.vx = vx ?? this.vx;
+			this.vy = vy ?? this.vy;
+		}
 
-		let [x0, y0, x1, y1] = this.shape.getAABB();
-		if (x0 < DIM.lwallx)
-			this.handleCollision(1, 0);
-		else if (x1 > DIM.rwallx)
-			this.handleCollision(-1, 0);
-		else if (y0 < DIM.ceiling)
-			this.handleCollision(0, 1);
-		else if (cheats.disable_pit && y1 > DIM.h)
-			this.handleCollision(0, -1);
+		if (!this.disableBounce){
+			if (this.y - this.shape.radius > DIM.h && !cheats.disable_pit)
+				this.dead = true;
 
-		this.stuckBounceTimer += delta;
+			let [x0, y0, x1, y1] = this.shape.getAABB();
+			if (x0 < DIM.lwallx)
+				this.handleCollision(1, 0);
+			else if (x1 > DIM.rwallx)
+				this.handleCollision(-1, 0);
+			else if (y0 < DIM.ceiling)
+				this.handleCollision(0, 1);
+			else if (cheats.disable_pit && y1 > DIM.h)
+				this.handleCollision(0, -1);
+
+			this.stuckBounceTimer += delta;
+		}
 
 		super.update(delta);
+
+		if (this.velOverride){
+			let {vx, vy} = storedVel;
+			this.vx = vx;
+			this.vy = vy;
+			this.velOverride = null;
+		}
 	}
 }

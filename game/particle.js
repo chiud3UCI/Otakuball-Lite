@@ -4,6 +4,7 @@ class Particle extends Sprite{
 
 		this.timer = null;
 		this.dieOnFade = false;
+		this.diieOnShrink = false;
 		this.dieOnAniFinish = false;
 	}
 
@@ -16,10 +17,12 @@ class Particle extends Sprite{
 			return true;
 		if (this.dieOnAniFinish && !this.isAnimating)
 			return true;
+		if (this.dieOnShrink && this.scale.x <= 0)
+			return true;
 		return false;
 	}
 
-	setGrowth(rate, accel=0, delay=0){
+	setGrowth(rate, accel=0, delay=0, die=true){
 		this.growth = {
 			base: {
 				sx: this.scale.x,
@@ -30,6 +33,7 @@ class Particle extends Sprite{
 			accel,
 			delay,
 		};
+		this.dieOnShrink = die;
 	}
 
 	updateGrowth(delta){

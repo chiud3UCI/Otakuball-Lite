@@ -98,8 +98,7 @@ class Explosion extends Projectile{
 		let brick = obj;
 		if (brick.isDead()){
 			let deathSound = brick.deathSound;
-			if (deathSound.indexOf("detonator") != -1)
-				stopSound(deathSound);
+			stopSound(brick.deathSound);
 			if (this.freeze)
 				freezeBrick(brick);
 		}

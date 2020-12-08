@@ -51,6 +51,10 @@ class Vector{
 			this.y = y;
 	}
 
+	unpack(){
+		return [this.x, this.y];
+	}
+
 	copy(){
 		return new Vector(this.x, this.y);
 	}

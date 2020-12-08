@@ -24,11 +24,11 @@ class PlayState{
 		let gameLayerNames = [
 			"borders",
 			"bricks",
-			"enemies",
-			"particles",
-			"powerups",
 			"paddles",
 			"projectiles",
+			"particles",
+			"powerups",
+			"enemies",
 			"menacers",
 			"balls",
 		]
@@ -139,7 +139,11 @@ class PlayState{
 		this.initCheckboxes();
 
 		this.stateName = "playstate";
+	}
 
+	destructor(){
+		PIXI.sound.stopAll();
+		clearSoundQueue();
 	}
 
 	initBrickGrid(){

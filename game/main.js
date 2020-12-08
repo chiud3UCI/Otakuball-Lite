@@ -133,6 +133,7 @@ function setup(){
 	console.log("LOAD COMPLETE");
 
 	media.processTextures();
+	media.processSounds();
 	media.createAnimations();
 	default_levels = PIXI.Loader.shared.resources.default_levels.data;
 
@@ -195,7 +196,8 @@ function setup(){
 		}
 	}
 
-	game.push(new EditorState());
+	game.push(new MainMenuState());
+	// game.push(new EditorState());
 	// game.push(new TestState());
 
 	app.stage.addChild(game.stage);

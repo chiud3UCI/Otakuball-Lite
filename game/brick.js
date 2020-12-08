@@ -17,6 +17,7 @@ class Brick extends Sprite{
 			storedMove: null,
 			invisible: false,
 			antilaser: null,
+			snapper: null
 		}
 
 		//keeps track of recently collided sprites
@@ -103,7 +104,30 @@ class Brick extends Sprite{
 			this.patch.storedMove = move;
 		else
 			this.patch.move = move;
-		
+	}
+
+	onDeath(){
+		super.onDeath();
+		if (this.patch.snapper){
+			stopSound(this.hitSound);
+			stopSound(this.deathSound);
+			DetonatorBrick.explode(this);
+		}
+	}
+
+	attachSnapper(){
+		if (this.patch.snapper)
+			return;
+		this.patch.snapper = true;
+		let ani = [];
+		for (let i = 0; i < 5; i++)
+			ani.push(`snapper_${i}`);
+		for (let i = 3; i >= 1; i--)
+			ani.push(ani[i]);
+		let snapper = new Sprite("snapper_0");
+		snapper.scale.set(1);
+		snapper.addAnim("glow", ani, 0.25, true, true);
+		this.addChild(snapper);
 	}
 
 	static travelComplete = {
@@ -234,6 +258,9 @@ class Brick extends Sprite{
 				return false;
 		}
 
+		if (patch.snapper)
+			return true;
+
 		let dir = Brick.getHitSide(norm);
 		let shield = patch.shield[dir];
 		if (shield && obj.strength < 1){
@@ -278,6 +305,8 @@ class Brick extends Sprite{
 	}
 	
 	takeDamage(damage, strength){
+		if (this.patch.snapper)
+			this.kill();
 		if (strength >= this.armor){
 			this.health -= damage;
 		}
@@ -367,6 +396,7 @@ class NormalBrick extends Brick{
 	}
 
 	onDeath(){
+		super.onDeath();
 		let spawner = game.top.powerupSpawner;
 		if (spawner.canSpawn()){
 			let id = spawner.getId();
@@ -860,9 +890,9 @@ class ShooterBrick extends FunkyBrick{
 
 class DetonatorBrick extends Brick{
 	static data = {
-		normal: [0, "reg"],
-		neo: [1, "neo"],
-		freeze: [2, "freeze"],
+		normal: 0,
+		neo: 1,
+		freeze: 2,
 	};
 	//detonator types: normal, neo, freeze
 	constructor(x, y, detType="normal"){
@@ -870,28 +900,25 @@ class DetonatorBrick extends Brick{
 		//this brick will always be animating
 		super("brick_main_7_3", x, y);
 
-		let [i, smokeStr] = DetonatorBrick.data[detType];
+		let i = DetonatorBrick.data[detType];
 		
 		this.addAnim("glow", `brick_glow_${i}`, 0.25, true);
 		this.playAnim("glow");
 
-		this.deathSound = "detonator_explode";
-		if (detType == "freeze")
-			this.deathSound = "detonator_ice";
+		this.deathSound = null;
 
 		this.detType = detType;
-		this.smokeStr = smokeStr;
 		this.brickType = "detonator";
 	}
 
-	onDeath(){
-		let detType = this.detType;
+	//other powerups might call this
+	static explode(brick, detType="normal"){
 		//invisible explosion projectile
 		let scale = (detType == "neo") ? 5 : 3;
 		game.top.emplaceCallback(50, () => {
 			game.emplace("projectiles", new Explosion(
-				this.x, 
-				this.y, 
+				brick.x, 
+				brick.y, 
 				32*scale-1, 
 				16*scale-1,
 				(detType == "freeze")
@@ -900,14 +927,14 @@ class DetonatorBrick extends Brick{
 
 		//explosion smoke particle
 		let i = Math.floor(Math.random() * 4);
-		let tex = `det_smoke_${this.smokeStr}_${i}`;
-		let smoke = new Particle(tex, this.x, this.y);
+		let tex = `det_smoke_${detType}_${i}`;
+		let smoke = new Particle(tex, brick.x, brick.y);
 		smoke.setGrowth(0.01, -0.00002);
 		smoke.setFade(0.005);
 		game.emplace("particles", smoke);
 
 		//explosion blast particle
-		let blast = new Particle(null, this.x, this.y);
+		let blast = new Particle(null, brick.x, brick.y);
 		if (detType == "neo")
 			blast.scale.set(3);
 		let anistr = [];
@@ -918,6 +945,17 @@ class DetonatorBrick extends Brick{
 		blast.playAnim("blast");
 		blast.dieOnAniFinish = true;
 		game.emplace("particles", blast);
+
+		//play sound
+		if (detType == "freeze")
+			playSound("detonator_freeze");
+		else
+			playSound("detonator_explode");
+	}
+
+	onDeath(){
+		super.onDeath();
+		DetonatorBrick.explode(this, this.detType);
 	}
 }
 
@@ -1382,6 +1420,7 @@ class BoulderBrick extends Brick{
 	}
 
 	onDeath(){
+		super.onDeath();
 		for (let i = 0; i < 5; i++){
 			let index = randRange(5);
 			let rad = Math.random() * 2 * Math.PI;
@@ -1421,17 +1460,15 @@ class TikiBrick extends Brick{
 		vec = vec.normalized();
 		let vel = vec.scale(0.5);
 		let off = vec.scale(12);
-		//remember that PIXI.Texture.WHITE is a
-		//16x16 white square
 		let laser = new Projectile(
-			PIXI.Texture.WHITE,
+			"white_pixel",
 			this.x + off.x, 
 			this.y + off.y, 
 			vel.x, 
 			vel.y, 
 			vec.getAngle(),
-			24/16, 
-			4/16
+			24,
+			4
 		);
 		laser.tint = 0xFFFF00;
 		laser.colFlag = {paddle: true};

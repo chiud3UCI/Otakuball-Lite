@@ -28,9 +28,15 @@ class Paddle extends Sprite{
 
 		this.stuckBalls = [];
 
-		this.component = null;
+		this.components = {};
 
 		this.gameType = "paddle";
+	}
+
+	destructor(){
+		super.destructor();
+		for (let [key, comp] of Object.entries(this.components))
+			comp.destructor?.(this);
 	}
 
 	//set the texture for the 3 sections
@@ -62,6 +68,19 @@ class Paddle extends Sprite{
 		this.paddleWidth = width;
 	}
 
+	normal(){
+		this.resize(80);
+		this.clearPowerups();
+	}
+
+	//does not revert size
+	clearPowerups(){
+		this.setTexture("paddle_0_0");
+		for (let [key, comp] of Object.entries(this.components))
+			comp.destructor?.(this);
+		this.components = {};
+	}
+
 	attachBall(ball, random){
 		let offset;
 		let w = this.paddleWidth;
@@ -70,19 +89,23 @@ class Paddle extends Sprite{
 		else
 			offset = Math.max(-w/2, Math.min(w/2, ball.x - this.x));
 		this.stuckBalls.push([ball, offset]);
-		ball.moveTo(this.x + offset, this.y - 8 - ball.radius);
+		ball.moveTo(this.x + offset, this.y - 8 - ball.shape.radius);
 		ball.stuckToPaddle = true;
 		this.reboundBall(ball);
 	}
 
 	releaseBalls(){
-		if (!this.stuckBalls)
-			return;
+		if (this.stuckBalls.length == 0)
+			return false;
 
-		for (let [ball, offset] of this.stuckBalls)
+		for (let [ball, offset] of this.stuckBalls){
 			ball.stuckToPaddle = false;
+			ball.justReleased = true;
+		}
 
 		this.stuckBalls = [];
+		playSound("paddle_hit");
+		return true;
 	}
 
 	checkSpriteHit(obj){
@@ -129,6 +152,29 @@ class Paddle extends Sprite{
 		ball.vy = vy;
 	}
 
+	//If there are multiple components, only call onClick
+	//for the highest priority component
+	componentClick(){
+		let arr = Object.entries(this.components);
+		if (arr.length == 0)
+			return;
+		arr.sort((pair1, pair2) => {
+			let c1 = pair1[1];
+			let c2 = pair2[1];
+			let p1 = c1.clickPriority ?? 0;
+			let p2 = c2.clickPriority ?? 0;
+			return (p1 - p2);
+		});
+		//skip over the components without onClick
+		for (let pair of arr){
+			let comp = pair[1];
+			if (comp.onClick){
+				comp.onClick(this, mouse.m1);
+				return;
+			}
+		}
+	}
+
 	update(delta){
 		let mx = mouse.x;
 		let my = mouse.y;
@@ -161,7 +207,7 @@ class Paddle extends Sprite{
 		//update stuck balls
 		for (let [ball, offset] of this.stuckBalls){
 			let x = this.x + offset;
-			let y = this.y - 8 - ball.radius;
+			let y = this.y - 8 - ball.shape.radius;
 			ball.moveTo(x, y);
 		}
 
@@ -172,11 +218,14 @@ class Paddle extends Sprite{
 			my < DIM.h
 		);
 		if (mouse.m1 && mouseInBoard){
-			this.releaseBalls();
-			this?.component?.onClick();
+			//don't activate component click
+			//if there are balls to be released
+			if (!this.releaseBalls())
+				this.componentClick();
 		}
 
-		this?.component?.update?.(delta);
+		for (let [key, comp] of Object.entries(this.components))
+			comp.update?.(this, delta);
 
 		//calling super.update() is unecessary
 	}

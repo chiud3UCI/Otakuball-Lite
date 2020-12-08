@@ -12,7 +12,7 @@ class EditorState{
 		this.stage = stage;
 
 		for (let name of layerNames){
-			let cont = new PIXI.Container;
+			let cont = new PIXI.Container();
 			stage.addChild(cont);
 			this[name] = cont;
 		}
@@ -159,6 +159,15 @@ class EditorState{
 		));
 		butt.onClick = function(){
 			state.exportLevel();
+		}
+		this.add("hud", butt);
+
+		//Main Menu Button
+		butt = new Button(10, 550, 140, 40);
+		butt.add(printText(
+			"Main Menu", "arcade", 0x000000, 1, 7, 9));
+		butt.onClick = function(){
+			game.pop();
 		}
 		this.add("hud", butt);
 

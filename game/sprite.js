@@ -119,6 +119,10 @@ class Sprite extends PIXI.Sprite{
 		this.moveTo(x, y);
 	}
 
+	getPos(){
+		return [this.x, this.y];
+	}
+
 	getSpeed(){
 		return Vector.dist(this.vx, this.vy);
 	}

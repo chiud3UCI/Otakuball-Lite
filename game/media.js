@@ -13,22 +13,25 @@ var media = {
 // var sound = PIXI.sound;
 var soundQueue = {};
 
-//limit the number of times the same sound being
-//played at a time
+//limit the number of times the sound can be played at a time
+//also prevent the same sound from playing multiple times
+//	in a short time window
 var maxSoundInstances = 3;
-var minSoundInterval = 0.05;
+var minSoundInterval = 0.1; //in seconds
 PIXI.sound.volumeAll = 0.15;
 
 function playSound(name, loop=false){
 	if (!name)
 		return;
 	
+	let sound = PIXI.sound._sounds[name];
 	let queue = soundQueue[name];
 
 	//don't play new sound if previous sound
 	//was recently played
 	if (queue.length > 0){
 		let instance = queue[queue.length-1];
+		let elapsed_time = instance.progress * sound.duration;
 		if (instance.progress <= minSoundInterval)
 			return;
 	}
@@ -45,16 +48,23 @@ function playSound(name, loop=false){
 			queue.shift(); //pops first element
 		}
 	}
-	let instance = PIXI.sound.play(name, options);
+	let instance = sound.play(options);
 	queue.push(instance);
 }
 
 function stopSound(name){
+	if (!name)
+		return;
 	let queue = soundQueue[name];
 	while (queue.length > 0){
 		let instance = queue.pop();
 		instance.stop();
 	}
+}
+
+function clearSoundQueue(){
+	for (let name of Object.keys(soundQueue))
+		soundQueue[name] = [];
 }
 
 
@@ -101,6 +111,8 @@ let recursive_texture_names = [
 		"patches",
 		"brick_gate",
 		"brick_slot",
+		"brick_title",
+		"snapper",
 	]],
 
 	["paddles/", [
@@ -115,7 +127,10 @@ let recursive_texture_names = [
 	["etc/", [
 		"border",
 		"gate",
-		"powerups"
+		"powerups",
+		"bg",
+		"bg2",
+		"title_bg",
 	]],
 
 	["enemy/", [
@@ -137,19 +152,26 @@ let recursive_texture_names = [
 		"scores",
 		"editorbuttons",
 		"editorenemy",
+		"menubuttons",
+		"title_subtext"
 	]],
 
 	["projectiles/", [
 		"lasers",
 		"comet",
 		"lasereye_laser",
-		"boulder_debris"
+		"boulder_debris",
+		"blossom"
 	]]
 ];
 
 let recursive_sound_names = [
 	["paddle/", [
 		"paddle_hit",
+		"laser_fire",
+		"laserplus_fire",
+		"shotgun_fire",
+		"missile_fire",
 	]],
 	["brick/", [
 		"brick_hit",
@@ -169,9 +191,29 @@ let recursive_sound_names = [
 		
 	]],
 	["ball/", [
+		"snapper_placed",
+		"blossom_fire",
+		"bomber_explode",
+		"bomber_fuse",
+		"combo",
 	]],
 	["powerup/", [
 		"acid_collected",
+		"extend_collected",
+		"fast_collected",
+		"fireball_collected",
+		"generic_collected",
+		"large_ball_collected",
+		"mega_collected",
+		"bomber_collected",
+		"combo_collected",
+		"xbomb_collected",
+		"xbomb_launch",
+		"xbomb_explode",
+		"laser_collected",
+		"shotgun_collected",
+		"missile_collected",
+		"domino_collected",
 	]],
 	["enemy/", [
 		"enemy_death",
@@ -233,6 +275,14 @@ media.makeTexture = function(texname, rx, ry, rw, rh){
 }
 
 media.processTextures = function(){
+
+	//make white_pixel and clear_pixel
+	this.textures.white_pixel = new PIXI.Texture(
+		PIXI.Texture.WHITE,
+		new PIXI.Rectangle(0, 0, 1, 1)
+	);
+	this.textures.clear_pixel = PIXI.Texture.EMPTY;
+
 	//divide a large sprite sheet into multiple
 	//uniform-sized textures
 	let default_w = 16;
@@ -272,11 +322,17 @@ media.processTextures = function(){
 	partition("brick_regen", "brick_regen");
 	partition("brick_gate", "brick_gate");
 	partition("brick_slot", "brick_slot");
+	partition("snapper", "snapper");
 	//also create an invisible brick texture
 	this.textures["brick_invis"] = this.textures["brick_main_5_20"];
 
+	//title bricks are half the size of regular bricks
+	partition("brick_title", "brick_title", 8, 4);
+
 	//process main_balls
 	partition("main_balls", "ball_main", 7, 7, 1, 1);
+	this.textures["ball_large"] = 
+		this.makeTexture("main_balls", 1, 40, 14, 14);
 
 	//split paddle into 3 sections
 	//to allow for paddle elargement
@@ -332,7 +388,7 @@ media.processTextures = function(){
 
 	//particles
 	partition("detonator_explosion", "det_blast", 48, 24);
-	partition("explosion_regular", "det_smoke_reg", 24, 24);
+	partition("explosion_regular", "det_smoke_normal", 24, 24);
 	partition("explosion_freeze", "det_smoke_freeze", 24, 24);
 	partition("explosion_mega", "det_smoke_neo", 32, 32);
 
@@ -378,6 +434,18 @@ media.processTextures = function(){
 	partition("scores", "score", 15, 6, 2, 2);
 	partition("editorbuttons", "editorbutton", 16, 16);
 	partition("editorenemy", "editorenemy", 12, 12);
+	partition("menubuttons", "menu_button", 20, 20);
+
+	//title subtext
+	rects = [
+		[0, 2, 270, 11],
+		[0, 14, 146, 23],
+		[0, 39, 287, 13]
+	]
+	for (let [i, rect] of rects.entries()){
+		let tex = this.makeTexture("title_subtext", ...rect);
+		this.textures["title_subtext_"+i] = tex;
+	}
 
 	//gate stuff
 	rects = [
@@ -388,6 +456,18 @@ media.processTextures = function(){
 	for (let [name, rect] of rects){
 		this.textures[name] = this.makeTexture("gate", ...rect);
 	}
+
+}
+
+media.processSounds = function(){
+	//adjust the volume of some sounds
+	//because some of them are making my ears bleed
+	let setVol = function(name, val){
+		let sound = PIXI.sound._sounds[name];
+		sound.volume = val;
+	};
+
+	setVol("bomber_explode", 0.5);
 
 }
 

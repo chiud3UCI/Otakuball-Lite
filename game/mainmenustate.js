@@ -13,10 +13,175 @@ var title_layout = [
 
 class MainMenuState{
 	constructor(){
+		let layerNames = [
+			"background",
+			"bricks",
+			"balls",
+			"hud"
+		];
+
+		let stage = new PIXI.Container();
+		this.stage = stage;
+
+		for (let name of layerNames){
+			let cont = new PIXI.Container();
+			stage.addChild(cont);
+			this[name] = cont;
+		}
+
+		this.add("background", makeSprite("title_bg", 2));
+		for (let i = 0; i < 2; i++){
+			let gate = makeSprite("gate_slice");
+			gate.scale.set(800, 2);
+			gate.angle = 90;
+			let x = (i == 0) ? 16 : DIM.w;
+			gate.position.set(x, 0);
+			this.add("background", gate);
+		}
+
+		//create title bricks
+		let x0 = 100;
+		let y0 = 100;
+		for (let [i, line] of title_layout.entries()){
+			let arr = line.split(" ");
+			for (let [j, str] of arr.entries()){
+				if (str == "___")
+					continue;
+				let x = x0 + j * 16;
+				let y = y0 + i * 8;
+				let br = new TitleBrick(x, y, str);
+				this.add("bricks", br);
+			}
+		}
+
+		//create balls
+		for (let i = 0; i < 5; i++){
+			let rad = Math.random() * Math.PI / 2;
+			rad -= Math.PI / 4;
+			let [vx, vy] = Vector.rotate(0, -0.5, rad);
+			let ball = new Ball(DIM.w/2, DIM.h, vx, vy);
+			ball.disableBounce = true;
+			this.add("balls", ball);
+		}
+
+		//add title subtext
+		this.add("hud", makeSprite(
+			"title_subtext_0", 1, (DIM.w-270)/2, 75));
+		this.add("hud", makeSprite(
+			"title_subtext_1", 1, 550, 165));
+		this.add("hud", makeSprite(
+			"title_subtext_2", 1, 20, DIM.h-15));
+
+		//menu buttons
+		let positions = [];
+		for (let i = 0; i < 6; i++){
+			let x = 150 + ((i < 3) ? 0 : 300);
+			let y = 300 + (i % 3) * 70;
+			positions.push([x, y]);
+		}
+		let posIndex = 0;
+		let makeButton = (tex, name, callback) => {
+			let [x, y] = positions[posIndex++];
+			let butt = new Button(x, y, 50, 50);
+			butt.add(makeSprite(tex, 2, 4, 4));
+			butt.onClick = callback;
+			this.add("hud", butt);
+			let text = printText(
+				name, "arcade", 0x000000, 1, x+60, y+15);
+			this.add("hud", text);
+		}
+
+		makeButton("menu_button_0", "Play Campaign", function(){
+			console.log("Campaign not implemented yet");
+		});
+		makeButton("menu_button_1", "Play Playlist", function(){
+			console.log("Playlist Select not implemented yet");
+		});
+		makeButton("menu_button_2", "Play Level", function(){
+			console.log("Level Select not implemented yet");
+		});
+		makeButton("menu_button_3", "Options", function(){
+			console.log("Options not implemented yet");
+		});
+		makeButton("menu_button_4", "Playlist Editor", function(){
+			console.log("Playlist Editor not implemented yet");
+		});
+		makeButton("menu_button_5", "Level Editor", function(){
+			game.push(new EditorState());
+		});
 
 	}
 
-	update(delta){
+	add(name, obj){
+		this[name].addChild(obj);
+	}
 
+	update(delta){
+		for (let br of this.bricks.children){
+			for (let ball of this.balls.children){
+				let resp = br.checkSpriteHit(ball);
+				if (resp[0])
+					br.onSpriteHit(ball, resp[1], resp[2]);
+			}
+		}
+
+		for (let br of this.bricks.children)
+			br.update(delta);
+		for (let ball of this.balls.children)
+			ball.update(delta);
+
+		//custom ball-wall bounce
+		for (let ball of this.balls.children){
+			let [x0, y0, x1, y1] = ball.shape.getAABB();
+			if (x0 < 16)
+				ball.handleCollision(1, 0);
+			else if (x1 > DIM.w-16)
+				ball.handleCollision(-1, 0);
+			else if (y0 < 0)
+				ball.handleCollision(0, 1);
+			else if (y1 > DIM.h)
+				ball.handleCollision(0, -1);
+		}
+	}
+}
+
+//title bricks are half the size of a regular brick
+class TitleBrick extends Brick{
+	static data = {
+		//str: [i, j, points]
+		reg: [0, 0, [0,0, 16,0, 16,8, 0,8]],
+		trb: [1, 0, [0,0, 16,0, 16,8, 8,8]],
+		trs: [2, 0, [8,0, 16,0, 16,8]],
+		tlb: [1, 1, [0,0, 16,0, 8,8, 0,8]],
+		tls: [2, 1, [0,0, 8,0, 0,8]],
+		brs: [1, 2, [16,0, 16,8, 8,8]],
+		brb: [2, 2, [8,0, 16,0, 16,8, 0,8]],
+		bls: [1, 3, [0,0, 8,8, 0,8]],
+		blb: [2, 3, [0,0, 8,0, 16,8, 0,8]],
+	};
+
+	constructor(x, y, str){
+		let arr = TitleBrick.data[str];
+		let [i0, j0, points] = arr;
+		let tex = `brick_title_${i0}_${j0}`;
+		super(tex, x, y);
+		this.setShape(new PolygonShape(points));
+		this.health = 1000;
+		this.armor = 10;
+		this.hitSound = null;
+		this.deathSound = null;
+
+		//animations can be made by shifting j four spaces
+		let ani = [];
+		for (let j = 0; j < 4; j++)
+			ani.push(`brick_title_${i0}_${j0+j*4}`);
+		for (let i = 2; i >= 1; i--)
+			ani.push(ani[i]);
+		this.addAnim("shine", ani, 0.25);
+	}
+
+	takeDamage(damage, strength){
+		super.takeDamage(damage, strength);
+		this.playAnim("shine");
 	}
 }

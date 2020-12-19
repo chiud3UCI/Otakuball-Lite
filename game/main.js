@@ -296,3 +296,14 @@ function randRange(a, b){
 function deltaEqual(a, b, epsilon=0.001){
 	return (Math.abs(a-b) < epsilon);
 }
+
+function updateAndRemove(container, delta){
+	let dead = [];
+	for (let obj of container.children){
+		obj.update(delta);
+		if (obj.isDead())
+			dead.push(obj);
+	}
+	for (let obj of dead)
+		container.removeChild(obj);
+}

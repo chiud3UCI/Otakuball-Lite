@@ -80,7 +80,7 @@ class MainMenuState{
 			positions.push([x, y]);
 		}
 		let posIndex = 0;
-		let makeButton = (tex, name, callback) => {
+		let makeButton = (tex, name, callback, notReady=false) => {
 			let [x, y] = positions[posIndex++];
 			let butt = new Button(x, y, 50, 50);
 			butt.add(makeSprite(tex, 2, 4, 4));
@@ -89,23 +89,30 @@ class MainMenuState{
 			let text = printText(
 				name, "arcade", 0x000000, 1, x+60, y+15);
 			this.add("hud", text);
+
+			if (notReady){
+				text.y -= 10;
+				let text2 = printText("(Under Construction)", 
+					"windows", 0xFF0000, 1, x+60, y+30);
+				this.add("hud", text2);
+			}
 		}
 
 		makeButton("menu_button_0", "Play Campaign", function(){
 			console.log("Campaign not implemented yet");
-		});
+		}, true);
 		makeButton("menu_button_1", "Play Playlist", function(){
 			console.log("Playlist Select not implemented yet");
-		});
+		}, true);
 		makeButton("menu_button_2", "Play Level", function(){
 			console.log("Level Select not implemented yet");
 		});
 		makeButton("menu_button_3", "Options", function(){
 			console.log("Options not implemented yet");
-		});
+		}, true);
 		makeButton("menu_button_4", "Playlist Editor", function(){
 			console.log("Playlist Editor not implemented yet");
-		});
+		}, true);
 		makeButton("menu_button_5", "Level Editor", function(){
 			game.push(new EditorState());
 		});
@@ -129,6 +136,7 @@ class MainMenuState{
 			br.update(delta);
 		for (let ball of this.balls.children)
 			ball.update(delta);
+
 
 		//custom ball-wall bounce
 		for (let ball of this.balls.children){

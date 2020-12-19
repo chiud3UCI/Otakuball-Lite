@@ -52,13 +52,15 @@ function playSound(name, loop=false){
 	queue.push(instance);
 }
 
-function stopSound(name){
+function stopSound(name, single=false){
 	if (!name)
 		return;
 	let queue = soundQueue[name];
 	while (queue.length > 0){
 		let instance = queue.pop();
 		instance.stop();
+		if (single)
+			break;
 	}
 }
 
@@ -131,6 +133,7 @@ let recursive_texture_names = [
 		"bg",
 		"bg2",
 		"title_bg",
+		"no_bg"
 	]],
 
 	["enemy/", [
@@ -161,17 +164,21 @@ let recursive_texture_names = [
 		"comet",
 		"lasereye_laser",
 		"boulder_debris",
-		"blossom"
+		"blossom",
+		"javelin",
 	]]
 ];
 
 let recursive_sound_names = [
 	["paddle/", [
 		"paddle_hit",
+		"paddle_catch",
 		"laser_fire",
 		"laserplus_fire",
 		"shotgun_fire",
 		"missile_fire",
+		"javelin_charge",
+		"javelin_fire",
 	]],
 	["brick/", [
 		"brick_hit",
@@ -349,6 +356,10 @@ media.processTextures = function(){
 			this.textures[midStr] = midTex;
 		}
 	}
+
+	//background tiles
+	partition("bg", "bg", 32, 32);
+	partition("bg2", "bg2", 32, 32);
 
 	//tool textures
 	tex = this.textures.tools;

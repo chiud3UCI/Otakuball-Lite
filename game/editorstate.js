@@ -17,10 +17,10 @@ class EditorState{
 			this[name] = cont;
 		}
 
-		//create background
+		//init background
 		let bg = new PIXI.Graphics();
-		bg.beginFill(0x000080);
-		bg.drawRect(DIM.lwallx, DIM.ceiling, DIM.boardw, DIM.boardh);
+		this.bg = bg;
+		this.setBackground(); //dark blue, no tile
 		this.add("background", bg);
 
 		//create walls
@@ -121,20 +121,32 @@ class EditorState{
 		this.add("hud", tip1);
 		this.add("hud", tip2);
 
+		//Buttons
+		let butt;
+		let state = this;
+
 		//Play Button
-		let butt = new Button(10, 45, 150, 50);
+		butt = new Button(10, 45, 150, 50);
 		butt.add(makeSprite("editorbutton_2_0", 3, 5, -2));
 		butt.add(printText(
 			"Play","arcade", 0x000000, 1.5, 55, 10
 		));
-		let state = this;
+		state = this;
 		butt.onClick = function(){
 			state.startGame();
 		}
 		this.add("hud", butt);
 
+		//Background Select Button
+		butt = new Button(10, 240, 44, 44);
+		butt.add(makeSprite("editorbutton_0_0", 2, 5, 5));
+		butt.onClick = function(){
+			game.push(new BackgroundSelectState(state));
+		};
+		this.add("hud", butt);
+
 		//Load Button
-		butt = new Button(10, 290, 80, 35);
+		butt = new Button(10, 290, 100, 35);
 		butt.add(printText(
 			"Load", "arcade", 0x000000, 1, 7, 8
 		));
@@ -172,6 +184,26 @@ class EditorState{
 		this.add("hud", butt);
 
 		this.stateName = "editorstate";
+	}
+
+	setBackground(color=0x000080, tile=null){
+		let bg = this.bg;
+		bg.color = color;
+		bg.tile = tile;
+		//set color
+		bg.clear()
+			.beginFill(color)
+			.drawRect(DIM.lwallx, DIM.ceiling, DIM.boardw, DIM.boardh);
+		//set tiled sprite if it exists
+		bg.removeChildren();
+		if (tile){
+			let tex = media.textures[tile];
+			let sprite = new PIXI.TilingSprite(
+				tex, DIM.boardw/2, DIM.boardh/2);
+			sprite.scale.set(2);
+			sprite.position.set(DIM.lwallx, DIM.ceiling);
+			bg.addChild(sprite);
+		}
 	}
 
 	initTools(){
@@ -561,6 +593,12 @@ class EditorState{
 			}
 		}
 
+		//background should be converted to an array
+		let bg = this.bg;
+		level.bg = [bg.color];
+		if (bg.tile)
+			level.bg.push(bg.tile);
+
 		//level.enemies can be omitted if all enemies
 		//are disabled
 		let enemyCheck = false;
@@ -602,6 +640,10 @@ class EditorState{
 					node.setPatch(pair);
 			}
 		}
+
+		//set background
+		this.setBackground(...level.bg);
+
 		//set enemy spawning
 		if (level.enemies){
 			let butts = this.enemyButtons;

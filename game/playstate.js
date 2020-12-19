@@ -72,10 +72,10 @@ class PlayState{
 		})];
 		
 		//create background
-		let bg = new PIXI.Graphics();
-		bg.beginFill(0x000080);
-		bg.drawRect(DIM.lwallx, DIM.ceiling, DIM.boardw, DIM.boardh);
-		this.add("background", bg);
+		// let bg = new PIXI.Graphics();
+		// bg.beginFill(0x000080);
+		// bg.drawRect(DIM.lwallx, DIM.ceiling, DIM.boardw, DIM.boardh);
+		// this.add("background", bg);
 
 		//create walls
 		let walls = new PIXI.Graphics();
@@ -447,7 +447,7 @@ class PlayState{
 	}
 
 	//spawns the enemy through a random vacant gate
-	//will fail if all gates are full
+	//will fail if all gates are occupied by enemies
 	spawnEnemy(enemy){
 		let gates = this.gates;
 		let choices = [];
@@ -466,6 +466,20 @@ class PlayState{
 	loadLevel(level){
 		if (level.slotPowerups)
 			this.slotPowerups = level.slotPowerups;
+
+		let [color, tile] = level.bg;
+		let bg = new PIXI.Graphics()
+			.beginFill(color)
+			.drawRect(DIM.lwallx, DIM.ceiling, DIM.boardw, DIM.boardh);
+		if (tile){
+			let tex = media.textures[tile];
+			let sprite = new PIXI.TilingSprite(
+				tex, DIM.boardw/2, DIM.boardh/2);
+			sprite.scale.set(2);
+			sprite.position.set(DIM.lwallx, DIM.ceiling);
+			bg.addChild(sprite);
+		}
+		this.add("background", bg);
 		
 		for (let [i, j, id, patch] of level.bricks){
 			let {brickType, args} = brickData.lookup[id];

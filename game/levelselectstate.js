@@ -62,9 +62,16 @@ class LevelSelectState{
 
 		let cont = new PIXI.Container();
 
+		let [color, tile] = level.bg;
+
 		let bg = new PIXI.Graphics()
-			.beginFill(0x000088)
+			.beginFill(color)
 			.drawRect(0, 0, bw, bh);
+		if (tile){
+			let sprite = new PIXI.TilingSprite(
+				media.textures[tile], DIM.boardw/2, DIM.boardh/2);
+			bg.addChild(sprite);
+		}
 		cont.addChild(bg);
 
 		for (let [i, j, id, patch] of level.bricks){

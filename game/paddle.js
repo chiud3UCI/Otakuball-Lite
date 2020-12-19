@@ -16,7 +16,10 @@ class Paddle extends Sprite{
 			texture: "paddle_0_0_left",
 			x: 5, y: 0, sx: -1, sy: 1,
 		});
-		this.addChild(this.left, this.mid, this.right);
+		let paddleRects = new PIXI.Container();
+		paddleRects.addChild(this.left, this.mid, this.right);
+		this.paddleRects = paddleRects;
+		this.addChild(paddleRects);
 
 		this.resize(80);
 		this.x = DIM.w/2;
@@ -49,6 +52,39 @@ class Paddle extends Sprite{
 		this.mid.texture  = mid;
 	}
 
+	//paddle needs to call setGlow on each section
+	// setGlow(val){
+	// 	for (let sprite of this.paddleRects.children)
+	// 		sprite.setGlow(val);
+	// }
+
+	// updateGlow(){
+	// 	for (let sprite of this.paddleRects.children)
+	// 		sprite.updateGlow();
+	// }
+
+	setComponent(name, component){
+		let components = this.components;
+		this.components[name]?.destructor?.();
+
+		this.components[name] = component;
+	}
+
+	removeComponent(name){
+		let components = this.components;
+		let comp = components[name];
+		if (!comp)
+			return;
+		comp.destructor?.();
+		delete components[name];
+	}
+
+	clearComponents(){
+		for (let comp of Object.values(this.components))
+			comp.destructor?.();
+		this.components = {};
+	}
+
 	//resize both the shape as well as the sprite sections
 	//min width is 40;
 	resize(width){
@@ -76,9 +112,7 @@ class Paddle extends Sprite{
 	//does not revert size
 	clearPowerups(){
 		this.setTexture("paddle_0_0");
-		for (let [key, comp] of Object.entries(this.components))
-			comp.destructor?.(this);
-		this.components = {};
+		this.clearComponents();
 	}
 
 	attachBall(ball, random){
@@ -96,6 +130,9 @@ class Paddle extends Sprite{
 
 	releaseBalls(){
 		if (this.stuckBalls.length == 0)
+			return false;
+		//Only GLue does this
+		if (this.components.catch?.name == "glue")
 			return false;
 
 		for (let [ball, offset] of this.stuckBalls){
@@ -120,8 +157,10 @@ class Paddle extends Sprite{
 				obj.activate();
 				break;
 			case "ball":
-			case "menacer":
 				this.onBallHit(obj);
+				break;
+			case "menacer":
+				this.onMenacerHit(obj);
 				break;
 			case "projectile":
 				this.onProjectileHit(obj);
@@ -131,8 +170,17 @@ class Paddle extends Sprite{
 
 	onBallHit(ball){
 		this.reboundBall(ball);
-		playSound("paddle_hit");
 		ball.onPaddleHit(this);
+		playSound("paddle_hit");
+
+		for (let [key, comp] of Object.entries(this.components))
+			comp.onBallHit?.(ball);
+	}
+
+	onMenacerHit(menacer){
+		this.reboundBall(menacer);
+		playSound("paddle_hit");
+		menacer.onPaddleHit(this);
 	}
 
 	onProjectileHit(proj){
@@ -169,7 +217,7 @@ class Paddle extends Sprite{
 		for (let pair of arr){
 			let comp = pair[1];
 			if (comp.onClick){
-				comp.onClick(this, mouse.m1);
+				comp.onClick(mouse.m1);
 				return;
 			}
 		}
@@ -225,42 +273,8 @@ class Paddle extends Sprite{
 		}
 
 		for (let [key, comp] of Object.entries(this.components))
-			comp.update?.(this, delta);
+			comp.update?.(delta);
 
 		//calling super.update() is unecessary
-	}
-}
-
-class PaddleWeapon{
-	constructor(paddle, name, maxBullets){
-		this.paddle = paddle;
-		this.name = name;
-		this.maxBullets = maxBullets;
-		this.bulletCount = 0;
-	}
-
-	onProjectileDeath(proj){
-		this.bulletCount--;
-	}
-
-	//places projectile right above the paddle at the
-	//specified x-offset
-	//also add it to the projectile layer
-	fireProjectile(proj, dx){
-		let paddle = this.paddle;
-		let x = paddle.x + dx;
-		let y = paddle.y - paddle.height/2 - proj.height/2;
-		proj.moveTo(x, y);
-		proj.parentWeapon = this;
-		game.emplace("projectiles", proj);
-		this.bulletCount++;
-	}
-
-	onClick(){
-		//call fireProjectile in here
-	}
-
-	update(delta){
-		//implement this in subclass if needed
 	}
 }

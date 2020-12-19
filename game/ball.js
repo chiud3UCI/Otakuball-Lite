@@ -58,7 +58,7 @@ class Ball extends Sprite{
 	destructor(){
 		super.destructor();
 		for (let [key, comp] of Object.entries(this.components))
-			comp.destructor?.(this);
+			comp.destructor?.();
 	}
 
 	clone(){
@@ -69,11 +69,13 @@ class Ball extends Sprite{
 		ball.strength = this.strength;
 		ball.pierce = this.pierce;
 
-		//shallow copy each component
-		//TODO: Rewrite each component with an init()
-		//and copy component methods
-		for (let [key, comp] of Object.entries(this.components))
-			ball.components[key] = {...comp};
+		//create a new instance of the component via its class constructor
+		//TODO: Add onCopy() for certain components (Combo, Domino)
+		for (let [key, comp] of Object.entries(this.components)){
+			let args = comp.getArgs?.() ?? [];
+			ball.components[key] = new comp.constructor(ball, ...args);
+			comp.onCopy?.(ball);
+		}
 
 		return ball;
 	}
@@ -95,6 +97,7 @@ class Ball extends Sprite{
 	//revert ball back to its old self
 	normal(){
 		this.setTexture("ball_main_0_0");
+		this.tint = 0xFFFFFF;
 		this.createShape(true);
 
 		this.damage = 10;
@@ -103,7 +106,7 @@ class Ball extends Sprite{
 		this.pierce = false;
 
 		for (let [key, comp] of Object.entries(this.components))
-			comp.destructor?.(this);
+			comp.destructor?.();
 		this.components = {};
 	}
 
@@ -143,7 +146,7 @@ class Ball extends Sprite{
 		if (!this.validCollision(xn, yn))
 			return;
 		for (let [key, comp] of Object.entries(this.components))
-			comp.handleCollision?.(this, xn, yn);
+			comp.handleCollision?.(xn, yn);
 		let dot = (this.vx*xn) + (this.vy*yn);
 		this.vx -= (2*dot*xn);
 		this.vy -= (2*dot*yn);
@@ -180,7 +183,7 @@ class Ball extends Sprite{
 		this.handleCollision(norm.x, norm.y);
 
 		for (let [key, comp] of Object.entries(this.components))
-			comp.onSpriteHit?.(this, obj, norm, mag);
+			comp.onSpriteHit?.(obj, norm, mag);
 	}
 
 	//Paddle will call this directly instead of onSpriteHit
@@ -189,7 +192,7 @@ class Ball extends Sprite{
 		this.stuckBounceTimer = 0;
 
 		for (let [key, comp] of Object.entries(this.components))
-			comp.onPaddleHit?.(this, paddle);
+			comp.onPaddleHit?.(paddle);
 	}
 
 	//steer will only affect the ball for 1 frame
@@ -204,13 +207,13 @@ class Ball extends Sprite{
 		//preUpdate will update the components regardless if
 		//the ball is stuck to the paddle
 		for (let [key, comp] of Object.entries(this.components))
-			comp.preUpdate?.(this, delta);
+			comp.preUpdate?.(delta);
 
 		if (!this.isActive())
 			return;
 
 		for (let [key, comp] of Object.entries(this.components))
-			comp.update?.(this, delta);
+			comp.update?.(delta);
 
 		if (this.steer){
 			let [tx, ty, mag, epsilon] = this.steer;

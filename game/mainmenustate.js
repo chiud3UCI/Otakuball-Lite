@@ -105,7 +105,7 @@ class MainMenuState{
 			console.log("Playlist Select not implemented yet");
 		}, true);
 		makeButton("menu_button_2", "Play Level", function(){
-			console.log("Level Select not implemented yet");
+			game.push(new LevelSelectState("play"));
 		});
 		makeButton("menu_button_3", "Options", function(){
 			console.log("Options not implemented yet");

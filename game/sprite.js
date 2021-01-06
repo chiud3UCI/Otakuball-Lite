@@ -43,6 +43,7 @@ class Sprite extends PIXI.Sprite{
 		this.ay = 0;
 
 		this.dead = false;
+		this.score = null;
 
 		this.gameType = "sprite";
 	}
@@ -52,7 +53,8 @@ class Sprite extends PIXI.Sprite{
 	}
 
 	onDeath(){
-		
+		if (this.score)
+			game.incrementScore(this.score);
 	}
 
 	setTexture(texture){

@@ -8,6 +8,7 @@ var media = {
 		__proto__: PIXI.utils.TextureCache,
 	},
 	animations: {},
+	shaders: {},
 };
 
 // var sound = PIXI.sound;
@@ -156,7 +157,8 @@ let recursive_texture_names = [
 		"editorbuttons",
 		"editorenemy",
 		"menubuttons",
-		"title_subtext"
+		"title_subtext",
+		"paddlelife",
 	]],
 
 	["projectiles/", [
@@ -179,6 +181,8 @@ let recursive_sound_names = [
 		"missile_fire",
 		"javelin_charge",
 		"javelin_fire",
+		"paddle_death_1",
+		"paddle_death_2",
 	]],
 	["brick/", [
 		"brick_hit",
@@ -233,6 +237,7 @@ let font_names = [
 	["pokemon", 16]
 ]
 
+
 media.load = function(callback){
 	let loader = PIXI.Loader.shared;
 
@@ -271,6 +276,33 @@ media.load = function(callback){
 		loader.add(name, path);
 		fontData[name] = sz;
 	}
+
+	//create shaders
+	let shaderText = `
+		varying vec2 vTextureCoord;
+		uniform sampler2D uSampler;
+
+		uniform vec3 color;
+		uniform float mag;
+
+		void main(void){
+			vec4 pixel = texture2D(uSampler, vTextureCoord);
+			float r = pixel.r + (color.r - pixel.r) * mag; 
+			float g = pixel.g + (color.g - pixel.g) * mag; 
+			float b = pixel.b + (color.b - pixel.b) * mag;
+
+			//idk why but you need to multiply rgb by the alpha
+			//or else the transparent pixels will become visible
+			//Lookup "premultiplied alpha"
+			vec3 c = vec3(r, g, b) * pixel.a;
+
+		    gl_FragColor = vec4(c.r, c.g, c.b, pixel.a);
+		}
+	`;
+	this.shaders.glow = new PIXI.Filter(null, shaderText, {
+		color: [1.0, 1.0, 1.0],
+		mag: 1.0,
+	});
 	//will call callback once all assets are loaded
 	loader.load(callback);
 }
@@ -301,8 +333,8 @@ media.processTextures = function(){
 		if (h === undefined)
 			h = default_h;
 		let tex = this.textures[texname];
-		let rows = Math.floor(tex.height / (h+pady));
-		let cols = Math.floor(tex.width / (w+padx));
+		let rows = Math.floor((tex.height+pady) / (h+pady));
+		let cols = Math.floor((tex.width+padx) / (w+padx));
 		for (let i = 0; i < rows; i++){
 			for (let j = 0; j < cols; j++){
 				let rect = new PIXI.Rectangle((w+padx)*j, (h+pady)*i, w, h);
@@ -457,6 +489,12 @@ media.processTextures = function(){
 		let tex = this.makeTexture("title_subtext", ...rect);
 		this.textures["title_subtext_"+i] = tex;
 	}
+
+	//border stuff
+	this.textures["border_left"] = this.makeTexture(
+		"border", 0, 0, 8, 264);
+	this.textures["border_up"] = this.makeTexture(
+		"border", 0, 0, 224, 8);
 
 	//gate stuff
 	rects = [

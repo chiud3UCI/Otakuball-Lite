@@ -9,7 +9,15 @@ var cheats = {
 //because I want to make sure everything in this instance
 //is cleared when the player exits the playstate
 class PlayState{
-	constructor(level){
+	//mode is ["test", "play", "playlist", "campaign"]
+	//arg is based on mode and is either a Level, list of Levels,
+	//   or a campaign object
+	constructor(mode, arg){
+		this.mode = mode;
+		let level;
+		if (mode == "test" || mode == "play")
+			level = arg;
+
 		//initialize object lists based on draw order
 		//you can initialize as many arbitrary layers as needed
 		let layerNames = [
@@ -63,13 +71,17 @@ class PlayState{
 		this.newCallbacks = [];
 
 		//add a shadow effect to the game layer
-		this.game.filters = [new PIXI.filters.DropShadowFilter({
+		let dropShadow = new PIXI.filters.DropShadowFilter({
 			blur: 0,
 			quality: 0,
 			alpha: 0.5,
 			distance: 8 * Math.SQRT2,
 			rotation: 45,
-		})];
+		});
+		//replace blur filter with a filter that does nothing
+		//in order to stop it from blurring the shadow
+		dropShadow._blurFilter = new PIXI.Filter();
+		this.game.filters = [dropShadow];
 		
 		//create background
 		// let bg = new PIXI.Graphics();
@@ -88,13 +100,14 @@ class PlayState{
 
 		this.add("walls", walls);
 
-		//create borders
+		//create border and gates
 		let border = new Sprite(
 			"border",
 			DIM.w/2,
 			DIM.ceiling + DIM.boardh/2 - 8
 		);
 		this.add("borders", border);
+		this.border = border;
 		this.initGates();
 
 		//create paddle
@@ -109,6 +122,12 @@ class PlayState{
 		let ball = new Ball(0, 0, 0.4, 0);
 		this.add("balls", ball);
 		paddle.attachBall(ball, true);
+
+		this.state = null;
+		if (mode == "test")
+			this.setState("playing");
+		else
+			this.setState("intro");
 
 		//create powerup spawner
 		this.powerupSpawner = new PowerupSpawner(
@@ -127,23 +146,50 @@ class PlayState{
 		butt.add(printText(
 			"Stop","arcade",0x000000, 1.5, 55, 10
 		));
-		let state = this;
 		butt.onClick = function(){
 			game.pop();
 		}
 		this.add("hud", butt);
 
+		//score display
+		let scoreDisplay = new PIXI.Container();
+		scoreDisplay.position.set(DIM.lwallx, 10);
+		let digits = new PIXI.Container();
+		digits.position.set(0, 30);
+		//draw each digit individually to make it monospaced
+		for (let i = 0; i < 8; i++){
+			digits.addChild(printText(
+				"0", "arcade", 0x000000, 1.5, i*24, 0
+			));
+		}
+		scoreDisplay.addChild(digits);
+		scoreDisplay.digits = digits;
+		scoreDisplay.addChild(printText(
+			"Score", "arcade", 0x000000, 1.5, 0, 0
+		));
+		this.add("hud", scoreDisplay);
+		this.scoreDisplay = scoreDisplay;
+		this.setScore(0);
+
+		//lives display
+		//lives will decrement at the start of the death state
+		//livesDisplay will update after the death state
+		this.lives = 3;
+		let livesDisplay = new PIXI.Container();
+		livesDisplay.position.set(DIM.lwallx, DIM.h - 16);
+		this.add("hud", livesDisplay);
+		this.livesDisplay = livesDisplay;
+		this.updateLivesDisplay();
+
 		//testing mode
-		this.initPowerupButtons();
-		this.initEnemyButtons();
-		this.initCheckboxes();
+		if (mode == "test"){
+			this.initPowerupButtons();
+			this.initEnemyButtons();
+			this.initCheckboxes();
+			this.livesDisplay.visible = false;
+		}
 
 		this.stateName = "playstate";
-	}
-
-	destructor(){
-		PIXI.sound.stopAll();
-		clearSoundQueue();
 	}
 
 	initBrickGrid(){
@@ -353,12 +399,20 @@ class PlayState{
 
 		//create tooltip
 		//TOODO: turn tooltip into a class
-		let tooltip = new PIXI.Text("Tooltip", {
-			fontSize: 24,
-			fill: 0x000000
-		});
-		tooltip.x = DIM.lwallx + 150;
-		tooltip.y = 20;
+		// let tooltip = new PIXI.Text("Tooltip", {
+		// 	fontSize: 24,
+		// 	fill: 0x000000
+		// });
+		let tooltip = printText(
+			"",
+			"arcade",
+			0x000000,
+			1,
+			DIM.w/2,
+			10
+		);
+		// tooltip.x = DIM.lwallx + 150;
+		// tooltip.y = 20;
 		tooltip.powId = null;
 		this.add("hud", tooltip);
 		this.tooltip = tooltip;
@@ -412,7 +466,61 @@ class PlayState{
 		this.add("hud", cb);
 	}
 
+	destructor(){
+		PIXI.sound.stopAll();
+		clearSoundQueue();
+	}
+
+	//score has 8 digits
+	setScore(score){
+		score = Math.max(0, Math.min(99999999, score));
+		this.score = score;
+
+		let digits = this.scoreDisplay.digits.children;
+		let str = String(score);
+		let n = str.length;
+		for (let i = 0; i < n; i++){
+			let digit = digits[8-n+i];
+			digit.text = str[i];
+			digit.tint = 0x000000;
+		}
+		for (let i = 0; i < 8-n; i++){
+			let digit = digits[i];
+			digit.text = "0";
+			digit.tint = 0x666666;
+		}
+	}
+
+	addScore(score){
+		this.setScore(this.score + score);
+	}
 	
+	incrementScore(score){
+		this.addScore(score);
+	}
+
+	updateLivesDisplay(){
+		let lives = this.lives;
+		let display = this.livesDisplay;
+		display.removeChildren();
+		let count = lives;
+		if (count >= 6)
+			count = 1;
+		for (let i = 0; i < count; i++){
+			let life = makeSprite("paddlelife", 2, i*36, 0);
+			display.addChild(life);
+		}
+		if (lives >= 6){
+			let text = printText(
+				String(lives),
+				"arcade",
+				0xFFFFFF,
+				1, 34, -2
+			);
+			display.addChild(text);
+		}
+	}
+
 	//adds objects at the bottom of the update loop
 	//so it doesn't cause any problems with iteration
 	emplace(name, obj){
@@ -467,16 +575,23 @@ class PlayState{
 		if (level.slotPowerups)
 			this.slotPowerups = level.slotPowerups;
 
+		let x = DIM.lwallx;
+		let y = DIM.ceiling;
+		let w = DIM.boardw;
+		let h = DIM.boardh;
+
+		//make background extend past the background
+		//to fill in the intro sequence
 		let [color, tile] = level.bg;
 		let bg = new PIXI.Graphics()
 			.beginFill(color)
-			.drawRect(DIM.lwallx, DIM.ceiling, DIM.boardw, DIM.boardh);
+			.drawRect(x-16, y-16, w+32, h+32);
 		if (tile){
 			let tex = media.textures[tile];
 			let sprite = new PIXI.TilingSprite(
-				tex, DIM.boardw/2, DIM.boardh/2);
+				tex, w/2 + 64, h/2 + 64);
 			sprite.scale.set(2);
-			sprite.position.set(DIM.lwallx, DIM.ceiling);
+			sprite.position.set(x-64, y-64);
 			bg.addChild(sprite);
 		}
 		this.add("background", bg);
@@ -627,12 +742,28 @@ class PlayState{
 		}
 	}
 
+	setState(name){
+		if (this.state && this.state.destructor)
+			this.state.destructor();
+
+		this.state = new PlayState.states[name](this);
+	}
+
+	updateState(delta){
+		if (!this.state)
+			return true;
+		return this.state.update(delta);
+	}
+
 	//collision -> update objects -> add new objects
 	update(delta){
 		if (keyboard.isPressed(keycode.ESCAPE)){
 			game.pop();
 			return;
 		}
+
+		if (!this.updateState(delta))
+			return;
 		
 		//update Brick Grid
 		this.brickGrid.refresh();
@@ -704,15 +835,371 @@ class PlayState{
 		//count balls
 		let numBalls = this.balls.children.length;
 		if (numBalls == 0){
+			let paddle = this.paddles.children[0];
+			paddle.normal();
+
 			let ball = new Ball(0, 0, 0.4, 0);
 			this.add("balls", ball);
-			let paddle = this.paddles.children[0];
 			paddle.attachBall(ball, true);
+			if (this.mode != "test")
+				this.setState("death");
 		}
 
-		this.ballFling();
+		if (this.mode == "test")
+			this.ballFling();
 	}
 }
+
+PlayState.states = {
+	playing: class{
+		constructor(ps){
+			this.ps = ps;
+		}
+		//handled in PlayState.update()
+		update(delta){
+			return true;
+		}
+	},
+
+	intro: class{
+		//ps is playstate
+		constructor(ps){
+			this.ps = ps;
+
+			this.sweeperActivated = false;
+
+			ps.paddles.visible = false;
+			ps.balls.visible = false;
+
+			let cx = DIM.width/2;
+			let cy = DIM.ceiling + DIM.boardh/2 - 8;
+			let left = new Sprite(
+				"border_left", DIM.rwallx + 8, cy);
+			let right = new Sprite(
+				"border_left", DIM.lwallx - 8, cy);
+			let up = new Sprite(
+				"border_up", cx, DIM.height - 8);
+			let spd = 0.4;
+			left.vx = -spd;
+			right.vx = spd;
+			up.vy = -spd * (DIM.boardh+8)/(DIM.boardw+24);
+			ps.borders.addChild(left, right, up);
+			this.introBorders = [left, right, up];
+
+			let sweeper = new PIXI.Graphics()
+				.beginFill(0x888888)
+				.drawRect(0, 0, DIM.boardw, 32);
+			sweeper.position.set(DIM.lwallx, DIM.height);
+			sweeper.vy = -.8;
+			ps.walls.addChild(sweeper);
+			this.sweeper = sweeper;
+
+			let mask = new PIXI.Graphics()
+				.beginFill(0xFFFFFF)
+				.drawRect(DIM.lwallx, DIM.ceiling, DIM.boardw, 0);
+			ps.bricks.mask = mask;
+
+			ps.border.visible = false;
+			for (let gate of ps.gates)
+				gate.visible = false;
+		}
+		destructor(){
+			let ps = this.ps;
+			ps.paddles.visible = true;
+			ps.balls.visible = true;
+			ps.border.visible = true;
+			for (let gate of ps.gates)
+				gate.visible = true;
+			ps.borders.removeChild(...this.introBorders);
+			ps.walls.removeChild(this.sweeper);
+			ps.bricks.mask = null;
+		}
+		update(delta){
+			let ps = this.ps;
+
+			if (mouse.m1 == 1){
+				ps.setState("playing");
+				mouse.m1 = 0;
+				return true;
+			}
+			if (!this.sweeperActivated){
+				let intro = this.introBorders;
+				for (let border of intro)
+					border.update(delta);
+				let left = intro[0];
+				if (left.x < DIM.lwallx - 8){
+					this.sweeperActivated = true;
+					for (let border of intro)
+						border.visible = false;
+					ps.border.visible = true;
+					for (let gate of ps.gates)
+						gate.visible = true;
+				}
+			}
+			else{
+				let sweeper = this.sweeper;
+				sweeper.y += sweeper.vy * delta;
+				if (sweeper.y <= DIM.ceiling){
+					sweeper.y = DIM.ceiling;
+					sweeper.vy *= -1;
+				}
+
+				if (sweeper.vy > 0){
+					ps.bricks.mask.clear()
+						.beginFill(0xFFFFFF)
+						.drawRect(
+							DIM.lwallx, 
+							DIM.ceiling, 
+							DIM.boardw,
+							sweeper.y - DIM.ceiling
+						);
+					if (sweeper.y > DIM.height)
+						ps.setState("respawn");
+				}
+			}
+			return false;
+		}
+	},
+
+	respawn: class{
+		constructor(ps){
+			this.ps = ps;
+
+			this.ballRespawn = false;
+			ps.balls.visible = false;
+			let paddle = ps.paddles.children[0];
+			paddle.y = DIM.height + 8;
+			let wave = {
+				A: paddle.y - Paddle.baseLine, //Amplitude
+				C: Paddle.baseLine, //Constant
+				F: 2 * Math.PI, //frequency (1/period)
+				t: 0, //time elapsed (in seconds not ms)
+			};
+			//time limit for stopping paddle
+			wave.T = 1.25 * 2*Math.PI / wave.F;
+			this.wave = wave;
+
+			this.spawnCircles = new PIXI.Graphics();
+			this.spawnCircles.dist = Paddle.baseLine - DIM.ceiling;
+			ps.particles.addChild(this.spawnCircles);
+
+			let text = printText("ROUND 1\nREADY",
+				"arcade", 0xFFFFFF, 2, DIM.w/2, DIM.h*3/4);
+			text.align = "center";
+			text.anchor.set(0.5, 0.5);
+			ps.hud.addChild(text);
+			this.text = text;
+		}
+		destructor(){
+			let ps = this.ps;
+			let paddle = ps.paddles.children[0];
+			paddle.setPos(paddle.x, Paddle.baseLine);
+			//update stuck balls so they don't "teleport"
+			for (let [ball, offset] of paddle.stuckBalls){
+				let x = paddle.x + offset;
+				let y = paddle.y - 8 - ball.shape.radius;
+				ball.moveTo(x, y);
+			}
+			ps.balls.visible = true;
+			ps.particles.removeChild(this.spawnCircles);
+			ps.hud.removeChild(this.text);
+		}
+		update(delta){
+			let ps = this.ps;
+
+			if (mouse.m1 == 1){
+				ps.setState("playing");
+				mouse.m1 = 0;
+				return true;
+			}
+			let paddle = ps.paddles.children[0];
+			if (!this.ballRespawn){
+				let cos = Math.cos;
+				let exp = Math.exp;
+				let PI = Math.PI;
+
+				let {A, C, F, T, t} = this.wave;
+				t += delta/1000;
+				let dy = A*exp(-t)*cos(PI+(F*t));
+				paddle.y = Paddle.baseLine - dy;
+				paddle.update(delta);
+				this.wave.t = t;
+
+				if (t >= T){
+					paddle.setPos(paddle.x, Paddle.baseLine);
+					this.ballRespawn = true;
+				}
+			}
+			else{
+				let ball = ps.balls.children[0];
+				let circles = this.spawnCircles;
+				circles.position.set(ball.x, ball.y);
+				let d = circles.dist;
+				d -= delta * 0.8;
+				d = Math.max(0, d);
+				circles.dist = d;
+
+				let r = 7;
+				circles.clear()
+					.beginFill(0xFFFFFF)
+					.drawCircle(-d, 0, r)
+					.drawCircle(d, 0, r)
+					.drawCircle(0, -d, r);
+
+				if (d <= 0)
+					ps.setState("playing");
+			}
+
+			return false;
+		}
+	},
+
+	death: class{
+		constructor(ps){
+			this.ps = ps;
+			ps.lives--;
+
+			this.timer = 3000;
+
+			this.paddleExplode = false;
+
+			ps.paddles.visible = false;
+			ps.balls.visible = false;
+
+			let paddle = ps.paddles.children[0];
+			let deathPaddle = new Paddle();
+			deathPaddle.setPos(paddle.x, paddle.y);
+			ps.particles.addChild(deathPaddle);
+			this.deathPaddle = deathPaddle;
+			Object.assign(deathPaddle, {
+				origin: [paddle.x, paddle.y],
+				growAccel: -0.00075,
+				growVel: 0.25,
+				shakeTimer: 0,
+				shakeTimerMax: 500,
+				shakeMag: 3,
+				shakeDelayMax: 30,
+				shakeDelay: 0
+			});
+
+			let glow = media.shaders.glow;
+			deathPaddle.filters = [glow];
+			glow.uniforms.color = [1, 1, 1];
+			glow.uniforms.mag = 0;
+			this.glowShader = glow;
+
+			let deathCircles = new PIXI.Graphics();
+			deathCircles.position.set(paddle.x, paddle.y);
+			deathCircles.time = 0;
+			ps.particles.addChild(deathCircles);
+			this.deathCircles = deathCircles;
+
+			playSound("paddle_death_1");
+		}
+		destructor(){
+			let ps = this.ps;
+
+			ps.paddles.visible = true;
+			ps.balls.visible = true;
+			ps.particles.removeChild(this.deathPaddle);
+			ps.particles.removeChild(this.deathCircles);
+		}
+		update(delta){
+			let ps = this.ps;
+
+			let dp = this.deathPaddle;
+			let dc = this.deathCircles;
+
+			if (!this.paddleExplode){
+				let w = dp.paddleWidth;
+				if (w > 40){
+					w += delta*dp.growVel + delta*delta*dp.growAccel;
+					dp.growVel += delta*dp.growAccel;
+					w = Math.max(40, w);
+					dp.resize(w);
+				}
+				else{
+					dp.shakeTimer += delta;
+					dp.shakeDelay -= delta;
+					if (dp.shakeDelay <= 0){
+						dp.shakeDelay = dp.shakeDelayMax;
+						let [x0, y0] = dp.origin;
+						let ratio = dp.shakeTimer / dp.shakeTimerMax;
+						let mag = ratio * dp.shakeMag;
+						let rad = Math.random() * 2 * Math.PI;
+						let [dx, dy] = Vector.rotate(mag, 0, rad);
+						dp.setPos(x0+dx, y0+dy);
+					}
+
+					if (dp.shakeTimer >= dp.shakeTimerMax){
+						this.paddleExplode = true;
+						dp.visible = false;
+						playSound("paddle_death_2");
+					}
+				}
+				let u = this.glowShader.uniforms;
+				u.mag = Math.min(1, u.mag + delta/600);
+			}
+			else{
+				let dc = this.deathCircles;
+				dc.clear().beginFill(0xFFFFFF);
+				dc.time += delta;
+				let t = dc.time;
+				//fast straight circles
+				let mag1 = t*0.2 + t*t*0.001;
+				for (let i = 0; i < 8; i++){
+					let rad = 2*Math.PI * i/8;
+					let [x, y] = Vector.rotate(mag1, 0, rad);
+					dc.drawCircle(x, y, 8);
+				}
+				//slow spiral glowing circles
+				let mag2 = t*0.6;
+				for (let i = 0; i < 8; i++){
+					let rad = 2*Math.PI * i/8;
+					rad += (0.5/8) + t * 0.001;
+					let r = 8 + t*0.03;
+					let [x, y] = Vector.rotate(mag2, 0, rad);
+					dc.drawCircle(x, y, r);
+				}
+			}
+
+			this.timer -= delta;
+			if (this.timer <= 0){
+				if (ps.lives < 0)
+					ps.setState("gameover");
+				else{
+					ps.updateLivesDisplay(ps.lives);
+					ps.setState("respawn");
+				}
+			}
+
+			return false;
+		}
+	},
+
+	gameover: class{
+		constructor(ps){
+			this.ps = ps;
+
+			ps.paddles.visible = false;
+			ps.balls.visible = false;
+
+			let text = printText("GAME OVER",
+				"arcade", 0xFFFFFF, 2, DIM.w/2, DIM.h*3/4);
+			text.anchor.set(0.5, 0.5);
+			ps.hud.addChild(text);
+			this.text = text;
+		}
+		destructor(){
+			ps.paddles.visible = true;
+			ps.balls.visible = true;
+			ps.hud.removeChild(this.text);
+		}
+		update(delta){
+			return false;
+		}
+	}
+};
 
 class Gate extends Sprite{
 	constructor(x, y){

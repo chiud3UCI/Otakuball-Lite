@@ -1,5 +1,7 @@
 class LevelSelectState{
-	constructor(){
+	//modes: ["play", "save", "load"]
+	constructor(mode){
+		this.mode = mode;
 		//do we need multiple layers?
 		let stage = new PIXI.Container();
 		this.stage = stage;
@@ -11,8 +13,9 @@ class LevelSelectState{
 
 		this.selectedIndex = null;
 
+		let butt;
 		//back button
-		let butt = new Button(DIM.w - 100, DIM.h - 50, 80, 35);
+		butt = new Button(DIM.w - 100, DIM.h - 50, 80, 35);
 		butt.add(printText(
 			"Back", "arcade", 0x000000, 1, 7, 8
 		));
@@ -20,21 +23,38 @@ class LevelSelectState{
 			game.pop();
 		};
 		this.add(butt);
-		//load button
-		butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
-		butt.add(printText(
-			"Load", "arcade", 0x000000, 1, 7, 8
-		));
-		butt.onClick = () => {
-			let index = this.selectedIndex;
-			if (index === null)
-				return;
-			let level = default_levels[index][1];
-			let editorstate = game.getState(-2);
-			editorstate.loadLevel(level);
-			game.pop();
-		};
-		this.add(butt);
+		if (mode == "load"){
+			//load button
+			butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
+			butt.add(printText(
+				"Load", "arcade", 0x000000, 1, 7, 8
+			));
+			butt.onClick = () => {
+				let index = this.selectedIndex;
+				if (index === null)
+					return;
+				let level = default_levels[index][1];
+				let editorstate = game.getState(-2);
+				editorstate.loadLevel(level);
+				game.pop();
+			};
+			this.add(butt);
+		}
+		else if (mode == "play"){
+			//play button
+			butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
+			butt.add(printText(
+				"Play", "arcade", 0x000000, 1, 7, 8
+			));
+			butt.onClick = () => {
+				let index = this.selectedIndex;
+				if (index === null)
+					return;
+				let level = default_levels[index][1];
+				game.push(new PlayState("play", level));
+			};
+			this.add(butt);
+		}
 
 
 		this.initLeftWidget();
@@ -146,7 +166,10 @@ class LevelSelectState{
 	}
 
 	update(delta){
-
+		if (keyboard.isPressed(keycode.ESCAPE)){
+			game.pop();
+			return;
+		}
 	}
 }
 

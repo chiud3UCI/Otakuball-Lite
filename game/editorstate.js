@@ -101,16 +101,10 @@ class EditorState{
 
 		//draw text
 		let text = printText("Edit Mode", "windows", 0x000000, 2, 10, 10);
-		let text2 = printText("Normal Brick", "arcade");
-		let text3 = printText("Quasar", "pokemon");
-		text2.x = DIM.lwallx;
-		text2.y = 10;
-		text3.x = DIM.lwallx + 200;
-		text3.y = 10;
+		
 
 		this.add("hud", text);
-		this.add("hud", text2);
-		this.add("hud", text3);
+	
 
 		let tip1 = printText(
 			"Left-Click to place.",
@@ -120,6 +114,16 @@ class EditorState{
 			"windows", 0x000000, 1, 10, 120);
 		this.add("hud", tip1);
 		this.add("hud", tip2);
+
+		//debug example text
+		// let text2 = printText("Normal Brick", "arcade");
+		// let text3 = printText("Quasar", "pokemon");
+		// text2.x = DIM.lwallx;
+		// text2.y = 10;
+		// text3.x = DIM.lwallx + 200;
+		// text3.y = 10;
+		// this.add("hud", text2);
+		// this.add("hud", text3);
 
 		//Buttons
 		let butt;
@@ -151,7 +155,7 @@ class EditorState{
 			"Load", "arcade", 0x000000, 1, 7, 8
 		));
 		butt.onClick = function(){
-			game.push(new LevelSelectState());
+			game.push(new LevelSelectState("load"));
 		}
 		this.add("hud", butt);
 
@@ -409,9 +413,15 @@ class EditorState{
 			butt.pointerDown = function(e){
 				let newPows = state.newSlotPowerups;
 				let pows = state.slotPowerups;
+				for (let p of newPows){
+					//no duplicate powerups
+					if (p == this.id)
+						return;
+				}
 				newPows.push(this.id);
 				if (newPows.length == 3){
 					powerPanel.visible = false;
+					state.tooltip.text = "";
 					widget.visible = true;
 					pows[state.newSlotColor] = newPows;
 				}
@@ -431,7 +441,6 @@ class EditorState{
 				oldFunc.call(this, e);
 			};
 		}
-
 	}
 
 	initPatchButtons(){
@@ -679,7 +688,7 @@ class EditorState{
 
 	startGame(){
 		let level = this.createLevel();
-		game.push(new PlayState(level));
+		game.push(new PlayState("test", level));
 	}
 }
 

@@ -33,6 +33,12 @@ class Paddle extends Sprite{
 
 		this.components = {};
 
+		//shader test
+		// let glow = media.shaders.glow;
+		// glow.uniforms.color = [1, 1, 1];
+		// glow.uniforms.mag = 0.5;
+		// this.filters = [glow];
+
 		this.gameType = "paddle";
 	}
 

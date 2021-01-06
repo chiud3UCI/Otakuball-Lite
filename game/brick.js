@@ -28,6 +28,7 @@ class Brick extends Sprite{
 
 		this.health = 10;
 		this.armor = 0;
+		this.score = 20;
 
 		this.hitSound = "brick_armor";
 		this.deathSound = "brick_hit";
@@ -418,6 +419,7 @@ class MetalBrick extends Brick{
 
 		this.level = level;
 		this.health = (level + 1) * 10;
+		this.points = 100 + (level - 1) * 20;
 
 		this.brickType = "metal";
 	}
@@ -519,6 +521,7 @@ class GoldBrick extends Brick{
 		this.plated = plated;
 		this.health = 100;
 		this.armor = 1;
+		this.points = 500;
 
 		this.addAnim("shine", "brick_shine_3", 0.25);
 		this.addAnim("plated_shine", "brick_shine_10", 0.25);
@@ -533,6 +536,7 @@ class GoldBrick extends Brick{
 			if (strength >= 0){
 				this.plated = false;
 				this.setTexture("brick_main_6_0");
+				game.incrementScore(20);
 			}
 		}
 		else{
@@ -546,6 +550,7 @@ class PlatinumBrick extends Brick{
 		super("brick_main_6_10", x, y);
 		this.health = 100;
 		this.armor = 2;
+		this.points = 500;
 
 		this.addAnim("shine", "brick_shine_13", 0.25);
 
@@ -568,6 +573,7 @@ class SpeedBrick extends Brick{
 		if (gold){
 			this.health = 100;
 			this.armor = 1;
+			this.points = 500;
 			let j = fast ? 11 : 12;
 			let anistr = "brick_shine_" + j;
 			this.addAnim("shine", anistr, 0.25);
@@ -602,6 +608,7 @@ class CopperBrick extends Brick{
 
 		this.health = 100;
 		this.armor = 1;
+		this.points = 500;
 
 		this.addAnim("shine", "brick_shine_14", 0.25);
 
@@ -843,6 +850,7 @@ class ShooterBrick extends FunkyBrick{
 		this.setTexture(tex);
 		this.health = 100;
 		this.armor = 2;
+		this.points = 500;
 		this.storedHealth = this.health;
 		this.level = level;
 
@@ -948,7 +956,7 @@ class DetonatorBrick extends Brick{
 
 		//play sound
 		if (detType == "freeze")
-			playSound("detonator_freeze");
+			playSound("detonator_ice");
 		else
 			playSound("detonator_explode");
 	}

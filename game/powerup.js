@@ -15,6 +15,14 @@ var powerupNames = [
 	"Yoga", "Y-Return", "Buzzer", "Zeal", "Zen Shove"
 ];
 
+var badPowerups = [
+	7, 11, 15, 29, 30, 36, 38, 39, 43, 47, 50, 52, 74, 75, 76, 84, 90,
+	93, 94, 97, 98, 105, 106, 116, 123, 124, 126, 129, 130, 133
+];
+var badPowerupsLookup = {};
+for (let id of badPowerups)
+	badPowerupsLookup[id] = true;
+
 /*
 	Components with reference to ball
 		+ More consistent
@@ -26,7 +34,7 @@ var powerupNames = [
 		+ can use shorter ball var name?
 	Conclusion:
 		- there is no need for ball in parameter as
-		most components have stuff that's attach to a single ball
+		most components have stuff that's attached to a single ball
 		- Although some components are simple enough to be copied,
 		it is easier to treat them all like the complex ones
 */
@@ -88,6 +96,8 @@ class Powerup extends Sprite{
 		this.playAnim("spin");
 
 		this.id = id;
+		this.isBad = badPowerupsLookup[id] === true;
+		this.score = this.isBad ? 2000 : 200;
 		this.dead = false;
 
 		//add label to the left (or right) of it
@@ -118,8 +128,17 @@ class Powerup extends Sprite{
 		else
 			console.log("powerup " + this.id + " not implemented");
 
+		let index = "0_0";
+		switch(this.score){
+			case 100:  index = "0_0"; break;
+			case 200:  index = "1_0"; break;
+			case 400:  index = "2_0"; break;
+			case 1000: index = "1_1"; break;
+			case 2000: index = "2_1"; break;
+			case 4000: index = "2_0"; break;
+		}
 		let score = new Particle(
-			"score_1_1", this.x, this.y, 0, -0.1);
+			"score_"+index, this.x, this.y, 0, -0.1);
 		score.timer = 2000;
 		game.emplace("particles", score);
 	}
@@ -821,6 +840,7 @@ let PaddleWeapon = class{
 		this.name = name;
 		this.maxBullets = maxBullets;
 		this.bulletCount = 0;
+		this.clickPriority = 0;
 	}
 
 	onProjectileDeath(proj){
@@ -861,8 +881,8 @@ let Laser = class extends PaddleWeapon{
 		this.maxBullets += 2;
 	}
 
-	onClick(){
-		if (mouse.m1 != 1 || this.bulletCount > this.maxBullets)
+	onClick(mouseVal){
+		if (mouseVal != 1 || this.bulletCount > this.maxBullets)
 			return;
 		playSound("laser_fire");
 		let paddle = this.paddle;
@@ -922,10 +942,18 @@ let Javelin = class{
 		this.particleTimer = 0;
 		paddle.addChild(this.energyParticles);
 		playSound("javelin_charge");
+		this.clickPriority = -1;
+
+		let glow = media.shaders.glow;
+		paddle.filters = [glow];
+		glow.uniforms.color = [1, 1, 1];
+		glow.uniforms.mag = 0;
+		this.glowShader = glow;
 	}
 	destructor(){
 		stopSound("javelin_charge");
 		this.paddle.removeChild(this.energyParticles);
+		this.paddle.filters = null;
 	}
 	fireJavelin(){
 		//prevent firing twice due to timeout + click
@@ -965,7 +993,8 @@ let Javelin = class{
 		game.emplace("projectiles", p);
 	}
 	onClick(mouseVal){
-		this.fireJavelin();
+		if (mouseVal == 1)
+			this.fireJavelin();
 	}
 	update(delta){
 		this.timer -= delta;
@@ -980,11 +1009,7 @@ let Javelin = class{
 			return;
 		let val = this.timer / 6300;
 		this.particleTimer = 150 - (100 * (1-val));
-		/* Plan for Glow:
-			1. Create a white rectangle with PIXI.Graphics
-			2. Set the graphic's mask to the current texture (sprite)
-			3. Add the graphic + mask to the sprite and adjust alpha
-		*/
+		this.glowShader.uniforms.mag = 1-val;
 
 		let p = new PIXI.Graphics();
 		let rad = Math.random() * Math.PI * 2;

@@ -184,6 +184,10 @@ function setup(){
 			this.top.emplace(name, obj);
 		},
 
+		incrementScore(score){
+			this.top.incrementScore?.(score);
+		},
+
 		get(name){
 			return this.top.get(name);
 		},

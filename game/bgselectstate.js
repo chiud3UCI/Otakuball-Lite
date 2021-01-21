@@ -259,7 +259,7 @@ class ColorSlider extends PIXI.Container{
 
 	destructor(){
 		//the text input can't be deleted if it is in focus
-		this.input.disabled = true;
+		this.input.blur(); //unfocuses the input
 	}
 
 	//set color value from 0 to 255

@@ -18,7 +18,8 @@ class Projectile extends Sprite{
 		this.pierce = false;
 		//lifespan in milliseconds
 		this.timer = null;
-		this.boundCheck = true;
+		this.wallCheck = true;
+		this.floorCheck = true;
 
 		this.gameType = "projectile";
 	}
@@ -40,7 +41,10 @@ class Projectile extends Sprite{
 	onDeath(){}
 
 	canHit(obj){
-		return this.colFlag[obj.gameType];
+		return (
+			!this.intangible && 
+			this.colFlag[obj.gameType]
+		);
 	}
 
 	onSpriteHit(obj, norm, mag){
@@ -114,6 +118,68 @@ class BallProjectile extends Projectile{
 	constructor(texture, x, y, vx, vy){
 		super(texture, x, y, vx, vy);
 		this.createShape(true);
+		//"weak" bounce dies after doing damage
+		this.bounce = false; //false, true, "weak"
+		this.wallCheck = false;
+		this.floorCheck = true;
 		this.radius = this.shape.radius;
+	}
+
+	//false, "weak", true(strong)
+	setBounce(value){
+		this.bounce = value;
+		if (value)
+			this.wallCheck = false;
+		else
+			this.wallCheck = true;
+	}
+
+	onSpriteHit(obj, norm, mag){
+		if (this.bounce === false){
+			this.kill();
+			return;
+		}
+		if (this.bounce == "weak" && obj.damaged){
+			this.kill();
+			return;
+		}
+		let norm2 = norm.scale(mag);
+		this.translate(norm2.x, norm2.y);
+		this.handleCollision(norm.x, norm.y);
+	}
+
+	onPaddleHit(paddle){
+		if (this.bounce === false){
+			this.kill();
+			return;
+		}
+		this.vy = -Math.abs(this.vy);
+	}
+
+	handleCollision(xn, yn){
+		if (!this.validCollision(xn, yn))
+			return;
+		let dot = (this.vx*xn) + (this.vy*yn);
+		this.vx -= (2*dot*xn);
+		this.vy -= (2*dot*yn);
+	}
+
+	validCollision(xn, yn){
+		let proto = Ball.prototype;
+		return proto.validCollision.call(this, xn, yn);
+	}
+
+	update(delta){
+		if (this.bounce){
+			let [x0, y0, x1, y1] = this.shape.getAABB();
+			if (x0 < DIM.lwallx)
+				this.handleCollision(1, 0);
+			else if (x1 > DIM.rwallx)
+				this.handleCollision(-1, 0);
+			else if (y0 < DIM.ceiling)
+				this.handleCollision(0, 1);
+		}
+
+		super.update(delta);
 	}
 }

@@ -29,6 +29,7 @@ class Brick extends Sprite{
 		this.health = 10;
 		this.armor = 0;
 		this.score = 20;
+		this.suppress = false;
 
 		this.hitSound = "brick_armor";
 		this.deathSound = "brick_hit";
@@ -277,7 +278,7 @@ class Brick extends Sprite{
 	}
 
 	//extra checking for ball collisions
-	checkSpriteHit(obj){
+	checkSpriteHit(obj, overlapCheck=true){
 		let resp = super.checkSpriteHit(obj);
 		if (!resp[0])
 			return [false];
@@ -288,7 +289,7 @@ class Brick extends Sprite{
 		}
 		//prevent collision if the sprite has collided
 		//this brick in the previous frame
-		if (!this.disableOverlapCheck){
+		if (overlapCheck && !this.disableOverlapCheck){
 			let prevOverlap = this.overlap.has(obj);
 			this.overlap.set(obj, 1);
 			if (prevOverlap)
@@ -308,8 +309,10 @@ class Brick extends Sprite{
 	takeDamage(damage, strength){
 		if (this.patch.snapper)
 			this.kill();
+		this.damaged = false;
 		if (strength >= this.armor){
 			this.health -= damage;
+			this.damaged = true;
 		}
 		if (this.health <= 0)
 			playSound(this.deathSound);
@@ -398,6 +401,8 @@ class NormalBrick extends Brick{
 
 	onDeath(){
 		super.onDeath();
+		if (this.suppress)
+			return;
 		let spawner = game.top.powerupSpawner;
 		if (spawner.canSpawn()){
 			let id = spawner.getId();
@@ -807,6 +812,14 @@ class FunkyBrick extends Brick{
 		return false;
 	}
 
+	//how do we kill it for good?
+	kill(){
+		this.stopAnim();
+		this.isRegenerating = true;
+		this.regenTimer = 4000;
+		this.setTexture("brick_invis");
+	}
+
 	checkSpriteHit(sprite){
 		if (this.isRegenerating)
 			return [false];
@@ -920,13 +933,14 @@ class DetonatorBrick extends Brick{
 	}
 
 	//other powerups might call this
-	static explode(brick, detType="normal"){
+	//create explosion at location of obj
+	static explode(obj, detType="normal"){
 		//invisible explosion projectile
 		let scale = (detType == "neo") ? 5 : 3;
 		game.top.emplaceCallback(50, () => {
 			game.emplace("projectiles", new Explosion(
-				brick.x, 
-				brick.y, 
+				obj.x, 
+				obj.y, 
 				32*scale-1, 
 				16*scale-1,
 				(detType == "freeze")
@@ -936,13 +950,13 @@ class DetonatorBrick extends Brick{
 		//explosion smoke particle
 		let i = Math.floor(Math.random() * 4);
 		let tex = `det_smoke_${detType}_${i}`;
-		let smoke = new Particle(tex, brick.x, brick.y);
+		let smoke = new Particle(tex, obj.x, obj.y);
 		smoke.setGrowth(0.01, -0.00002);
 		smoke.setFade(0.005);
 		game.emplace("particles", smoke);
 
 		//explosion blast particle
-		let blast = new Particle(null, brick.x, brick.y);
+		let blast = new Particle(null, obj.x, obj.y);
 		if (detType == "neo")
 			blast.scale.set(3);
 		let anistr = [];
@@ -1343,7 +1357,6 @@ class CometBrick extends Brick{
 		let comet = new Projectile(
 			"comet", this.x+dx, this.y+dy, vx, vy, rad
 		);
-		comet.boundCheck = true;
 		comet.damage = 100;
 		comet.strength = 1;
 		//TODO: Add brick overlap check for piercing
@@ -1359,7 +1372,7 @@ class CometBrick extends Brick{
 				let [vx, vy] = Vector.rotate(0.2, 0, rad);
 				let p = new Particle(
 					"comet_ember", this.x, this.y, vx, vy);
-				p.boundCheck = true;
+				p.floorCheck = true;
 				p.ay = 0.0025;
 				game.emplace("particles", p);
 			}
@@ -1659,20 +1672,28 @@ class StrongFlipBrick extends Brick{
 
 class OnixBrick extends Brick{
 	static data = {
-		up_left:    [10, 20, [0,0,  32,0,  0,16]],
-		up_right:   [10, 19, [0,0,  32,0,  32,16]],
-		down_left:  [9, 20, [0,0,  32,16,  0,16]],
-		down_right: [9, 19, [32,0,  32,16,  0,16]],
-		whole:      [9, 18, [0,0,  32,0,  32,16,  0,16]],
+		up_left:    [4, 10, 20, [0,0,  32,0,  0,16]],
+		up_right:   [3, 10, 19, [0,0,  32,0,  32,16]],
+		down_left:  [2, 9, 20, [0,0,  32,16,  0,16]],
+		down_right: [1, 9, 19, [32,0,  32,16,  0,16]],
+		whole:      [0, 9, 18, [0,0,  32,0,  32,16,  0,16]],
 	}
 
 	constructor(x, y, dir){
-		let [i, j, points] = OnixBrick.data[dir];
+		let [n, i, j, points] = OnixBrick.data[dir];
 		let tex = `brick_main_${i}_${j}`;
 		super(tex, x, y);
 		this.setShape(new PolygonShape(points));
 		this.health = 100;
 		this.armor = 1;
+
+		let anistr = `onix_shine_${n}`;
+		this.addAnim("shine", anistr, 0.25);
+	}
+
+	takeDamage(damage, strength){
+		super.takeDamage(damage, strength);
+		this.playAnim("shine");
 	}
 }
 

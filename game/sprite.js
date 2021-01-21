@@ -31,8 +31,13 @@ class Sprite extends PIXI.Sprite{
 		this.position.set(x, y);
 		this.rotation = angle; //radians
 
-		//die if sprite goes out of bounds
-		this.boundCheck = false;
+		//die if sprite touches the wall/ceiling
+		this.wallCheck = false;
+		//die if sprite goes completely below the pit
+		this.floorCheck = false;
+
+		//intangible means it cant hit or be hit by objects
+		this.intangible = false;
 
 		this.anim = {};
 		this.isAnimating = false;
@@ -57,10 +62,11 @@ class Sprite extends PIXI.Sprite{
 			game.incrementScore(this.score);
 	}
 
-	setTexture(texture){
-		if (typeof(texture) === "string"){
+	setTexture(texture=null){
+		if (texture === null)
+			texture = PIXI.Texture.EMPTY;
+		else if (typeof(texture) === "string")
 			texture = media.textures[texture];
-		}
 		this.texture = texture;
 	}
 
@@ -72,6 +78,8 @@ class Sprite extends PIXI.Sprite{
 			let r = this.getBounds();
 			this.setShape(new CircleShape(
 				this.x, this.y, r.width/2));
+			this.shapeWidth = r*2;
+			this.shapeHeight = r*2;
 		}
 		else{
 			let [x0, y0, x1, y1] = this.getAABB(true);
@@ -90,12 +98,19 @@ class Sprite extends PIXI.Sprite{
 		this.shape = shape;
 		shape.sprite = this;
 		this.shape.moveTo(this.x, this.y);
+		this.shape.setRotation(this.rotation);
+		//calculate shape width and height
+		let [x0, y0, x1, y1] = shape.getAABB();
+		this.shapeWidth = x1-x0;
+		this.shapeHeight = y1-y0;
 	}
 
 	removeShape(){
 		if (this.shape){
-			this.shape.sprite = undefined;
-			this.shape = undefined;
+			delete this.shape.sprite;
+			delete this.shape;
+			delete this.shapeWidth;
+			delete this.shapeHeight;
 		}
 	}
 
@@ -148,6 +163,12 @@ class Sprite extends PIXI.Sprite{
 		this.vy = vy;
 	}
 
+	setRotation(rad){
+		this.rotation = rad;
+		if (this.shape)
+			this.shape.setRotation(rad);
+	}
+
 	//remember that the default animation speed is 60 fps
 	//textures can be a string, arr of textures, or arr of strings
 	addAnim(name, textures, spd=1, loop=false, playNow=false){
@@ -183,6 +204,7 @@ class Sprite extends PIXI.Sprite{
 	}
 
 	removeAnim(name){
+		this.stopAnim();
 		delete this.anim[name];
 	}
 
@@ -263,6 +285,8 @@ class Sprite extends PIXI.Sprite{
 
 	//used for projectile sprites onto recieveing sprite
 	canHit(sprite){
+		if (this.intangible)
+			return false;
 		return true;
 	}
 
@@ -289,79 +313,20 @@ class Sprite extends PIXI.Sprite{
 		this.dead = true;
 	}
 
-	//val from 0 to 1
-	//set to 0 to turn off completely
-	// setGlow(val=0){
-	// 	if (val == 0){
-	// 		if (this.glowRect){
-	// 			this.removeChild(this.glowRect);
-	// 			this.glowRect = null;
-	// 		}
-	// 	}
-	// 	else{
-	// 		// if (!this.glowRect){
-	// 		// 	let [x0, y0, x1, y1] = this.getAABB();
-	// 		// 	let w = (x1 - x0)/2;
-	// 		// 	let h = (y1 - y0)/2;
-	// 		// 	let glow = new PIXI.Graphics()
-	// 		// 		.beginFill(0xFFFFFF)
-	// 		// 		.drawRect(-w/2, -h/2, w, h);
-	// 		// 	// glow.mask = new PIXI.Sprite(this.texture);
-	// 		// 	this.glowRect = glow;
-	// 		// 	// this.addChildAt(this.glowRect, 1);
-	// 		// 	this.addChild(glow);
-	// 		// }
-	// 		if (!this.glowRect){
-	// 			let [x0, y0, x1, y1] = this.getAABB();
-	// 			let w = (x1 - x0)/2;
-	// 			let h = (y1 - y0)/2;
-	// 			let glow = new PIXI.Graphics()
-	// 				.beginFill(0xFFFFFF)
-	// 				.drawRect(0, 0, DIM.w, DIM.h);
-	// 			// glow.mask = new PIXI.Sprite(this.texture);
-	// 			// let mask = new PIXI.Graphics()
-	// 			// 	.beginFill(0xFFFFFF)
-	// 			// 	.drawRect(0, 0, 100, 100);
-
-	// 			//Maybe create the sprite first
-	// 			//then set it to the mask?
-	// 			//also draw the mask as well?
-	// 			//Also mask transparency is determined by RED value only
-	// 			let mask = new PIXI.Sprite(this.texture);
-	// 			mask.position.set(50, 50);
-	// 			this.glowRect = glow;
-	// 			glow.mask = mask;
-	// 			// this.glowRect.addChild(mask);
-	// 			// this.addChild(glow);
-	// 			game.top.add("hud", glow);
-	// 		}
-	// 	}	
-	// }
-
-	// updateGlow(){
-	// 	if (!this.glowRect)
-	// 		return;
-	// 	if (!this.glowRect.mask)
-	// 		return;
-	// 	// let mask = this.glowRect.mask;
-	// 	// mask.scale.set(1);
-	// 	// let p = this.getGlobalPosition();
-	// 	// // mask.position.set(p.x, p.y);
-	// 	// mask.position.set(100, 100);
-	// }
-
-
 	//WARNING: Some PIXI classes have the function update() in them
 	//so this method might unintentially override the old update() method.
 	//Currently, PIXI.Sprite and all parents do not have an update() method.
 	//However, PIXI.AnimatedSprite does has an update() method.
 	update(delta){
-		if (this.boundCheck){
+		if (this.wallCheck || this.floorCheck){
 			let [x0, y0, x1, y1] = this.getAABB();
-			if (x0 < DIM.lwallx || 
-				x1 > DIM.rwallx ||
-				y0 < DIM.ceiling ||
-				y0 > DIM.h)
+			if (this.wallCheck && (
+					x0 < DIM.lwallx || 
+					x1 > DIM.rwallx ||
+					y0 < DIM.ceiling
+				))
+				this.kill();
+			if (this.floorCheck && y0 > DIM.h)
 				this.kill();
 		}
 
@@ -379,5 +344,15 @@ class Sprite extends PIXI.Sprite{
 		// this.drawHitbox();
 
 		// this.updateGlow();
+	}
+}
+
+//Special are game objects that do not fit in any other catagories
+class Special extends Sprite{
+	constructor(
+		texture=null, x=0, y=0, vx=0, vy=0, angle=0, sx=2, sy=2)
+	{
+		super(texture, x, y, vx, vy, angle, sx, sy);
+		this.gameType = "special";
 	}
 }

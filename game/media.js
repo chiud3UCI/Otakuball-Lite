@@ -116,6 +116,7 @@ let recursive_texture_names = [
 		"brick_slot",
 		"brick_title",
 		"snapper",
+		"bulk"
 	]],
 
 	["paddles/", [
@@ -134,7 +135,7 @@ let recursive_texture_names = [
 		"bg",
 		"bg2",
 		"title_bg",
-		"no_bg"
+		"no_bg",
 	]],
 
 	["enemy/", [
@@ -149,6 +150,7 @@ let recursive_texture_names = [
 		"explosion_freeze",
 		"explosion_mega",
 		"comet_ember",
+		"quasar",
 	]],
 
 	["gui/", [
@@ -168,6 +170,10 @@ let recursive_texture_names = [
 		"boulder_debris",
 		"blossom",
 		"javelin",
+		"shotgun_pellet",
+		"ballcannon_ball",
+		"drill",
+		"missile",
 	]]
 ];
 
@@ -179,10 +185,14 @@ let recursive_sound_names = [
 		"laserplus_fire",
 		"shotgun_fire",
 		"missile_fire",
+		"missile_erratic_fire",
 		"javelin_charge",
 		"javelin_fire",
 		"paddle_death_1",
 		"paddle_death_2",
+		"ballcannon_fire",
+		"drill_fire",
+		"drill_explode",
 	]],
 	["brick/", [
 		"brick_hit",
@@ -211,7 +221,6 @@ let recursive_sound_names = [
 	["powerup/", [
 		"acid_collected",
 		"extend_collected",
-		"fast_collected",
 		"fireball_collected",
 		"generic_collected",
 		"large_ball_collected",
@@ -225,6 +234,14 @@ let recursive_sound_names = [
 		"shotgun_collected",
 		"missile_collected",
 		"domino_collected",
+		"energy_collected",
+		"slow_collected",
+		"fast_collected",
+		"weak_collected",
+		"bulk_collected",
+		"quasar_collected",
+		"cannon_collected",
+		"drill_collected",
 	]],
 	["enemy/", [
 		"enemy_death",
@@ -362,6 +379,7 @@ media.processTextures = function(){
 	partition("brick_gate", "brick_gate");
 	partition("brick_slot", "brick_slot");
 	partition("snapper", "snapper");
+	partition("bulk", "brick_bulk");
 	//also create an invisible brick texture
 	this.textures["brick_invis"] = this.textures["brick_main_5_20"];
 
@@ -454,7 +472,7 @@ media.processTextures = function(){
 		this.textures["laser_" + i] = tex;
 	}
 
-	//boulder debirs/rocks
+	//boulder debris/rocks
 	rects = [
 		[0, 0, 5, 5],
 		[6, 0, 7, 7],
@@ -468,10 +486,16 @@ media.processTextures = function(){
 		this.textures["boulder_" + i] = tex;
 	}
 
+	//drill missiles
+	partition("drill", "drill", 15, 41, 1, 1);
+
+	//missiles
+	partition("missile", "missile", 16, 40);
+
 	//enemies
 	partition("dropper", "dropper", 23, 24, 1, 0);
 	partition("enemies", "enemy_main", 16, 16);
-	partition("gumball", "enemy_gumball", 7, 7, 1, 1);
+	partition("gumball", "enemy_gumball", 6, 6, 1, 1);
 
 	//gui stuff
 	partition("scores", "score", 15, 6, 2, 2);
@@ -542,6 +566,13 @@ media.createAnimations = function(){
 		let row = Math.floor(i/14);
 		let name = "brick_shine_" + i;
 		create(name, "brick_shine", row*7, col, 7, 1);
+	}
+
+	//onix brick shine
+	for (let i = 0; i < 5; i++){
+		let col = 9 + i;
+		let name = "onix_shine_" + i;
+		create(name, "brick_shine", 7, col, 6, 1);
 	}
 
 	//factory brick shine
@@ -631,8 +662,6 @@ media.createAnimations = function(){
 		ani2[i] = `brick_split_${5+i}_2`;
 	this.animations["split_blue_right"] = ani2;
 
-
-
 	//menacer coating
 	for (let i = 0; i < 3; i++){
 		let name = "menacer_coat_" + i;
@@ -660,6 +689,23 @@ media.createAnimations = function(){
 	}
 
 	//enemies
+	create("enemy_dizzy", "enemy_main", 0, 0, 1, 8);
+	create("enemy_cubic", "enemy_main", 1, 0, 1, 8);
+	for (let i = 0; i < 3; i++){
+		let arr = create(
+			"gumball_blink_"+i, "enemy_gumball", i, 0, 1, 3);
+		//extend the blank face by a few frames
+		for (let j = 0; j < 3; j++)
+			arr.splice(1, 0, arr[0]);
+		create("gumball_panic_"+i, "enemy_gumball", i, 3, 1, 8);
+	}
+	for (let i = 0; i < 3; i++){
+		let arr = [];
+		for (let j of [0, 1, 2, 1])
+			arr.push(`enemy_main_${j+2}_${i}`);
+		this.animations[`walkblock_${i}`] = arr;
+	}
+
 	create("enemy_death", "enemy_main", 2, 3, 1, 4);
 	let arr = this.animations["enemy_death"];
 	let arr2 = [];
@@ -667,6 +713,14 @@ media.createAnimations = function(){
 	for (let i of frames)
 		arr2.push(arr[i]);
 	this.animations["enemy_death"] = arr2;
+	this.animations["enemy_death_small"] = arr2.slice(2);
+	//drill missile
+	create("drill_yellow", "drill", 0, 0, 1, 41);
+	create("drill_green", "drill", 1, 0, 1, 41);
+
+	//missiles
+	create("missile_normal", "missile", 0, 0, 1, 3);
+	create("missile_erratic", "missile", 1, 0, 1, 3);
 
 }
 

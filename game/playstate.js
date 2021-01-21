@@ -24,14 +24,17 @@ class PlayState{
 			"background",
 			"game",
 			"walls",
-			"hud"
+			"hud",
+			"monitors"
 		];
 
 		//these layers will be put inside the game layer
 		//in order to add shadows
 		let gameLayerNames = [
 			"borders",
+			"specials1",
 			"bricks",
+			"specials2",
 			"paddles",
 			"projectiles",
 			"particles",
@@ -136,15 +139,20 @@ class PlayState{
 		);
 
 		//Text
+		let text = "";
+		if (mode == "test")
+			text = "Test Mode";
+		else
+			text = "Otaku-Ball";
 		this.add("hud", printText(
-			"Test Mode", "windows", 0x000000, 2, 10, 10
+			text, "windows", 0x000000, 2, 10, 10
 		));
 
 		//Stop Button
 		let butt = new Button(10, 45, 150, 50);
 		butt.add(makeSprite("editorbutton_2_1", 3, 5, -2));
 		butt.add(printText(
-			"Stop","arcade",0x000000, 1.5, 55, 10
+			"Stop","arcade", 0x000000, 1.5, 55, 10
 		));
 		butt.onClick = function(){
 			game.pop();
@@ -219,6 +227,8 @@ class PlayState{
 					br.gridDat = {id: curr_id++};
 					let [i, j] = getGridPos(br.x, br.y);
 					if (boundCheck(i, j)){
+						br.gridDat.i = i;
+						br.gridDat.j = j;
 						if (!br.isMoving())
 							this.grid[i][j].push(br);
 						else{
@@ -329,7 +339,6 @@ class PlayState{
 			this.add("borders", gate);
 		}
 		this.gates = gates;
-
 	}
 
 	initPowerupButtons(){
@@ -341,7 +350,7 @@ class PlayState{
 
 		let buttonOrder = [
 			["Ball Addition", [
-				 21,  33,  68,  72,  88, 109, 111,  
+				 21,  33,  68, 70,  72,  88, 109, 111,  
 			]],
 			["Ball Modify", [
 				  0,   1,   3,   9,  10,  17,  18,  22,  25,  26,
@@ -350,24 +359,25 @@ class PlayState{
 				102,  120, 121, 123, 126, 129, 131, 133, 
 			]],
 			["Paddle Weapon", [
-				  5,   8,  23,  27,  51,  59,  60,  66,  81,  89,
-				 99, 108, 127, 134,
+				  5,   8,  10,  19,  23,  27,  41,  49, 51,  59,  
+				  60, 66,  81,  89,  95,  99, 108, 127,
 			]],
 			["Paddle Modify", [
-				  4,  13,  14,  15,  19,  28,  30,  36,  38,  40,
-				 41,  44,  46,  48,  49,  64,  75,  76,  79,  84,
-				 85,  90,  91,  92,  95,  98, 110, 118, 124, 130,
+				  4,  13,  14,  15,  28,  30,  36,  38,  40,
+				 44,  46,  48,  64,  75,  76,  79,  84,
+				 85,  90,  91,  92,  98, 110, 118, 124, 130, 134
 			]],
 			["Brick-Related", [
-				 11,  16,  20,  24,  43,  47,  62,  63,  77,  78,
-				 86, 104, 106, 112, 113, 115, 116, 119, 128, 
+				  2, 11,  16,  20,  24,  34,  43,  47,  62,  77,  78,
+				  87,  86, 104, 106, 112, 113, 115, 116, 117, 119, 
+				 125, 128, 132,
 			]],
-			["Environment", [
-				  2,   6,   7,  12,  32,  34,  52,  53,  54,  57,
-				 67,  69,  70,  71,  82,  87,  93,  94, 100, 103,
-				105, 107, 114, 117, 122, 125, 132,
+			["Other", [
+				 6,   7,  12,  32,  52,  53,  54,  57,   63,  
+				 67,  69,  71,  82,  93,  94, 100, 103,  105, 
+				 107, 114, 122
 			]],
-		]
+		];
 
 		let wrap = 5;
 		let scale = 1.5;
@@ -537,6 +547,82 @@ class PlayState{
 		return this[name].children;
 	}
 
+	//monitors' lifespans should be handled
+	//by another game object
+
+	//isPaddle is a boolean that represents paddles or balls
+	//example ("Autopilot", "paddles", "autopilot", "timer")
+	//  ==> paddle.components.autopilot.timer
+	static Monitor = class extends PIXI.Container{
+		constructor(name, contName, compName, varName, format="seconds"){
+			super();
+			Object.assign(this, {
+				name, contName, compName, varName, format
+			});
+			this.text = printText("", "windows", 0x000000, 1, 0, 0);
+			this.addChild(this.text);
+			this.dead = false;
+		}
+
+		isDead(){
+			return this.dead;
+		}
+
+		update(){
+			let values = [];
+			for (let obj of game.get(this.contName)){
+				let comp = obj.components[this.compName];
+				if (comp)
+					values.push(comp[this.varName]);
+			}
+			if (values.length == 0){
+				this.dead = true;
+				return;
+			}
+			let value = Math.max(...values);
+			if (value <= 0){
+				this.dead = true;
+				return;
+			}
+			this.setValue(value);
+		}
+
+		setValue(value){
+			if (this.format == "seconds")
+				value = (value/1000).toFixed(2);
+			this.text.text = `${this.name}: ${value}`;
+		}
+	};
+
+	createMonitor(name, contName, compName, varName, format="seconds"){
+		//prevent duplicate monitors
+		if (this.searchMonitor(name))
+			return;
+
+		let monitor = new PlayState.Monitor(...arguments);
+
+		//its recommended to create the monitors after
+		//setting the powerup components so the monitor
+		//will start with the correct value
+		monitor.update();
+
+		this.monitors.addChild(monitor);
+		this.repositionMonitors();
+	}
+
+	repositionMonitors(monitor){
+		for (let [i, m] of this.monitors.children.entries())
+			m.position.set(20, 400 + i*20);
+	}
+
+	searchMonitor(name){
+		for (let m of this.monitors.children){
+			if (m.name == name)
+				return true;
+		}
+		return false;
+	}
+
 	//callbacks have a special add method
 	//because they are not sprites
 	emplaceCallback(timer, func, name){
@@ -554,10 +640,18 @@ class PlayState{
 		cont.addChild(obj);
 	}
 
-	//spawns the enemy through a random vacant gate
-	//will fail if all gates are occupied by enemies
-	spawnEnemy(enemy){
+	//spawns an enemy through a random vacant gate
+	//will do nothing if all gates are occupied by enemies
+	//if gateIndex is provided, spawn enemy in targeted gate only
+	spawnEnemy(enemy, gateIndex=null){
 		let gates = this.gates;
+
+		if (gateIndex !== null){
+			if (gates[gateIndex].isVacant())
+				gates[gateIndex].addEnemy(enemy);
+			return;
+		}
+
 		let choices = [];
 		for (let g of gates){
 			if (g.isVacant()){
@@ -606,8 +700,13 @@ class PlayState{
 				br.initPatches(patch);
 			this.add("bricks", br);
 		}
-		//TODO: Add enemy spawner
 
+		//TODO: Add enemy spawner
+		let enemy = level.enemies;
+		if (!enemy)
+			this.spawner = null;
+		else
+			this.spawner = new EnemySpawner(this, enemy[0], enemy[1]);
 	}
 
 	//special debug method that summons a ball and
@@ -793,6 +892,9 @@ class PlayState{
 		//update brick movement patches
 		manageBrickMovement(delta);
 
+		//update enemy spawner
+		this.spawner?.update(delta);
+
 		//update, remove, and add new callbacks
 		let active = [];
 		for (let cb of this.callbacks){
@@ -830,6 +932,18 @@ class PlayState{
 					cont.addChild(obj);
 				arr.length = 0; //clear the array?
 			}
+		}
+
+		//update and remove monitors
+		let deadMonitors = [];
+		for (let m of this.monitors.children){
+			m.update();
+			if (m.isDead())
+				deadMonitors.push(m);
+		}
+		if (deadMonitors.length > 0){
+			this.monitors.removeChild(...deadMonitors);
+			this.repositionMonitors();
 		}
 
 		//count balls
@@ -1245,8 +1359,8 @@ class Gate extends Sprite{
 	addEnemy(enemy){
 		this.enemy = enemy;
 		enemy.x = this.x;
-		enemy.y = this.y - 16 - enemy.height/2;
-		this.open(enemy.width);
+		enemy.y = this.y - 16 - enemy.shapeHeight/2;
+		this.open(enemy.shapeWidth);
 	}
 
 	//make the enemy descend from the hole
@@ -1254,7 +1368,7 @@ class Gate extends Sprite{
 		let enemy = this.enemy;
 		//start closing roughly 0.5 secs after the
 		//enemy exits the gate
-		this.openTimer = enemy.height / enemy.vy + 500;
+		this.openTimer = enemy.shapeHeight / enemy.vy + 500;
 
 		game.emplace("enemies", enemy);
 		this.enemy = null;
@@ -1326,6 +1440,109 @@ class Callback{
 	}
 }
 
+class EnemySpawner{
+	//there should be at least 1 enemy enabled in enemyArgs
+	//otherwise, just set playstate.spawner to null
+	constructor(playstate, enemyArgs, timeArgs=[2000, 2000, 8000]){
+		this.playstate = playstate;
+
+		this.timer = timeArgs[0];
+		this.minDelay = timeArgs[1];
+		this.maxDelay = timeArgs[2];
+
+		const map = [
+			["dropper_0", [Dropper, 0]],
+			["dropper_1", [Dropper, 1]],
+			["dropper_2", [Dropper, 2]],
+			["dropper_3", [Dropper, 3]],
+			["dropper_4", [Dropper, 4]],
+			["dropper_5", [Dropper, 5]],
+			["dizzy", [Dizzy]],
+			["cubic", [Cubic]],
+			["gumballtrio", [GumballTrio]],
+			["walkblock", [WalkBlock]],
+		];
+
+		this.enemyInfo = [];
+		//the first enemy arg represents both red and green droppers
+		for (let [i, v] of enemyArgs.entries()){
+			if (v){
+				if (i == 0)
+					this.enemyInfo.push(map[0], map[1]);
+				else
+					this.enemyInfo.push(map[i+1]);
+			}
+		}
+	}
+
+	update(delta){
+		this.timer -= delta;
+		if (this.timer > 0)
+			return;
+
+		this.timer = randRange(this.minDelay, this.maxDelay+1);
+
+		//count the number of each type of enemy
+		let count = {
+			get(key){
+				return this[key] ?? 0;
+			},
+			inc(key){
+				if (this[key] === undefined)
+					this[key] = 0;
+				this[key]++;
+			}
+		};
+		for (let e of game.get("enemies")){
+			let key = e.enemyType;
+			if (key == "dropper"){
+				key += "_" + e.menacerId;
+				if (e.hasDropped)
+					continue;
+			}
+			count.inc(key);
+		}
+		for (let m of game.get("menacers")){
+			let key = "dropper_" + m.menacerId;
+			count.inc(key);
+		}
+		let greenBrick = false;
+		for (let br of game.get("bricks")){
+			if (br.brickType == "greenmenacer"){
+				greenBrick = true;
+				break;
+			}
+		}
+		let paddle = game.get("paddles")[0];
+		let shadow = paddle.components.shadow !== undefined;
+
+		let choices = [];
+		for (let arr of this.enemyInfo){
+			let [key, build] = arr;
+			//disable certain droppers if they have no effect
+			if (key == "dropper_0" && !greenBrick)
+				continue;
+			else if (key == "dropper_2" && shadow)
+				continue;
+			//add to pool if there are less than 3 enemies
+			//of that type
+			if (count.get(key) < 3){
+				//push red droppers twice to increase spawn chance
+				if (key == "dropper_0")
+					choices.push(build, build);
+				else
+					choices.push(build);
+			}
+		}
+
+		if (choices.length > 0){
+			let build = choices[randRange(choices.length)];
+			//TODO: e_class needs dropper argument
+			this.playstate.spawnEnemy(new build[0](build[1]));
+		}
+	}
+}
+
 //TODO: Combine PlayButton and Editorbutton into same class
 class PlayButton extends PIXI.Sprite{
 	constructor(parentState, texstr, x, y, scale){
@@ -1384,7 +1601,22 @@ class PowerupButton extends PlayButton{
 	}
 }
 
+var alt = 1;
+
 class EnemyButton extends PlayButton{
+	static data = [
+		[Dropper, 0],
+		[Dropper, 1],
+		[Dropper, 2],
+		[Dropper, 3],
+		[Dropper, 4],
+		[Dropper, 5],
+		[Dizzy],
+		[Cubic],
+		[GumballTrio],
+		[WalkBlock],
+	];
+
 	constructor(parentState, x, y, id){
 		let i = Math.floor(id/6);
 		let j = (id % 6);
@@ -1396,10 +1628,10 @@ class EnemyButton extends PlayButton{
 	pointerDown(e){
 		let state = this.parentState;
 		let id = this.enemyId;
-		if (id < 6){
-			let dropper = new Dropper(id);
-			state.spawnEnemy(dropper);
-		}
+		let build = EnemyButton.data[id];
+		state.spawnEnemy(new build[0](build[1]));
+		// state.spawnEnemy(new build[0](build[1]), alt);
+		// alt = (alt==1)?2:1;
 	}
 	
 }

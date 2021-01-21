@@ -481,7 +481,6 @@ class EditorState{
 		panel.y = 10;
 
 		this.enemyButtons = [];
-
 		for (let i = 0; i < 9; i++){		
 			let x = Math.floor(i/5) * 60;
 			let y = (i % 5) * 24;
@@ -490,6 +489,82 @@ class EditorState{
 			this.enemyButtons.push(butt);
 		}
 
+		this.defaultSpawn = [2000, 2000, 8000];
+		this.enemySpawn = this.defaultSpawn.slice();
+		let positions = [
+			[0, 320],
+			[35, 395],
+			[95, 395]
+		];
+
+		//Enemy Spawn Timer Config
+		let strings = [
+			[0, 300, "Initial Spawn Delay :"],
+			[50, 325, "seconds"],
+			[0, 360, "Subsequent Spawn Delay :", true],
+			[0, 400, "From"],
+			[78, 400, "to"],
+			[0, 420, "seconds"]
+		];
+
+		for (let [x, y, string, wrap] of strings){
+			let text = printText(
+				string, "windows", 0x000000, 1, x, y);
+			if (wrap)
+				text.maxWidth = 120;
+			panel.addChild(text);
+		}
+
+		this.enemySpawnInputs = [];
+		for (let [i, [x, y]] of positions.entries()){
+			let input = new PIXI.TextInput({
+				input: {
+					fontSize: "14px",
+					width: "36px",
+					padding: "2px",
+					color: 0x000000,
+				},
+				box: {
+					fill: 0xFFFFFF,
+					stroke: {
+						color: 0x000000,
+						width: 2
+					}
+				}
+			});
+			input.restrict = ".0123456789";
+			input.text = this.defaultSpawn[i]/1000;
+			input.on("input", (text) => {
+				let last = text[text.length-1];
+				if (last == "."){
+					let period = text.indexOf(".");
+					//revert input if user entered a second period
+					if (period >= 0 && period < text.length-1){
+						input.text = text.slice(0, -1);
+						return;
+					}
+				}
+				if (text.length == 0)
+					text = "0";
+				if (last == ".")
+					text += "0";
+				let val = Number(text);
+				this.enemySpawn[i] = Math.floor(val*1000);
+			});
+			input.focusOnce = false;
+			input.on("focus", () => {
+				mouse.m1 = 0;
+			});
+			input.position.set(x, y);
+			panel.addChild(input);
+			this.enemySpawnInputs.push(input);
+		}
+
+		panel.onOutOfFocus = () => {
+			for (let input of this.enemySpawnInputs)
+				input.blur();
+		};
+		
 		return panel;
 	}
 
@@ -623,8 +698,16 @@ class EditorState{
 		if (enemyCheck){
 			let enemies = [];
 			enemies.push(enemyArr);
-			//the second array is optional
-			//if the spawn times are default
+			//the second array can be omitted if the
+			//spawn times are default
+			let times = this.enemySpawn;
+			let isDefault = true;
+			for (let [i, t] of times.entries()){
+				if (t != this.defaultSpawn[i])
+					isDefault = false;
+			}
+			if (!isDefault)
+				enemies.push(times.slice());
 			level.enemies = enemies;
 		}
 
@@ -656,9 +739,15 @@ class EditorState{
 		//set enemy spawning
 		if (level.enemies){
 			let butts = this.enemyButtons;
-			let [values] = level.enemies;
+			let [values, times] = level.enemies;
 			for (let [i, val] of values.entries())
 				butts[i].setState(val); //implicit cast to boolean
+
+			times = times ?? this.defaultSpawn;
+			for (let i = 0; i < 3; i++){
+				this.enemySpawnInputs[i].text = times[i]/1000;
+				this.enemySpawn[i] = times[i];
+			}
 		}
 		//slot machine powerups
 		if (level.slotPowerups)
@@ -974,7 +1063,11 @@ class TabButton extends PIXI.Sprite{
 			if (i != this.tabIndex){
 				tab.setState(false);
 				tab.zIndex = i;
-				widget.panels[i].visible = false;
+				let panel = widget.panels[i];
+				if (panel.visible){
+					panel.visible = false;
+					panel.onOutOfFocus?.();
+				}
 			}
 		}
 		this.setState(true);

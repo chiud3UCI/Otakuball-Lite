@@ -206,27 +206,15 @@ class Paddle extends Sprite{
 		ball.vy = vy;
 	}
 
-	//If there are multiple components, only call onClick
-	//for the highest priority component
+	//fire the subweapon first if it exists
+	//then fire the weapon if it exists
 	componentClick(){
-		let arr = Object.entries(this.components);
-		if (arr.length == 0)
-			return;
-		arr.sort((pair1, pair2) => {
-			let c1 = pair1[1];
-			let c2 = pair2[1];
-			let p1 = c1.clickPriority ?? 0;
-			let p2 = c2.clickPriority ?? 0;
-			return (p1 - p2);
-		});
-		//skip over the components without onClick
-		for (let pair of arr){
-			let comp = pair[1];
-			if (comp.onClick){
-				comp.onClick(mouse.m1);
-				return;
-			}
-		}
+		let {weapon, subweapon} = this.components;
+
+		if (subweapon)
+			subweapon.onClick(mouse.m1);
+		else if (weapon)
+			weapon.onClick(mouse.m1);
 	}
 
 	update(delta){
@@ -237,6 +225,11 @@ class Paddle extends Sprite{
 			this.stun.timer -= delta;
 			if (this.stun.timer <= 0)
 				this.stun = null;
+		}
+
+		//autopilot component gets special treatment
+		if (this.components.autopilot){
+			mx = this.autopilot();
 		}
 
 		//apply speed limit
@@ -278,9 +271,94 @@ class Paddle extends Sprite{
 				this.componentClick();
 		}
 
-		for (let [key, comp] of Object.entries(this.components))
+		for (let comp of Object.values(this.components))
 			comp.update?.(delta);
 
 		//calling super.update() is unecessary
+	}
+
+	//Returns the x position of where the paddle needs to be
+	//in order to hit the ball towards the closest brick.
+	//Will also cause the paddle to move towards powerups
+	//if there is time to spare.
+	autopilot(ignore_powerups, smart_keyboard){
+		//find the ball that will reach the paddle's height
+		//in the least amount of time (based on speed and distance)
+		let base = this.y;
+		let ball = null;
+		let stody = Infinity; //stored dy
+		for (let b of game.get("balls")){
+			let dy = base - 8 - b.shape.radius - b.y;
+			//exclude balls that are not moving downward
+			//or are moving too horizontally
+			if (b.vy < 0.01)
+				continue;
+			if (ball == null || (dy / b.vy < stody / ball.vy)){
+				ball = b;
+				stody = dy;
+			}
+		}
+
+		if (ball == null)
+			return this.x;
+
+		//find out the x position of the ball when it reaches
+		//the paddle's y position
+		let r = ball.shape.radius;
+		let dy = stody;
+		let dt = dy / ball.vy;
+		let dx = ball.vx * dt;
+		let bl = DIM.lwallx + r; //left border
+		let br = DIM.rwallx - r; //right border
+		let db = br - bl;
+		let mirror = false;
+		//simulate bounces against the walls
+		let x = ball.x + dx;
+		while (x > br){
+			x -= db;
+			mirror = !mirror;
+		}
+		while (x < bl){
+			x += db;
+			mirror = !mirror;
+		}
+		if (mirror)
+			x = br - (x - bl);
+
+		//find the closest brick that can be damaged by the ball
+		//TODO: use raycasting to see if the brick is hiding
+		//		behind an indestructible brick;
+		let target = null;
+		let storedDist = Infinity;
+		let vec = null;
+		for (let br of game.get("bricks")){
+			if (ball.strength < br.armor)
+				continue;
+			let dx = br.x - x;
+			let dy = br.y - (this.y - 8 - r);
+			if (dy > 0)
+				continue;
+			let dist = dx*dx + dy*dy;
+			if (dist < storedDist){
+				target = br;
+				storedDist = dist;
+				vec = [dx, dy];
+			}
+		}
+
+		if (target == null)
+			return x;
+
+		//calculate the paddle offset needed for the ball to hit
+		//the targeted brick
+		[dx, dy] = vec;
+		let rad = Math.atan2(dy, dx);
+		let deg = rad * 180 / Math.PI;
+		deg += 90;
+		let mag = deg / 60;
+		mag = Math.max(-1, Math.min(1, mag));
+
+		let off = mag * this.paddleWidth/2;
+		return x - off;
 	}
 }

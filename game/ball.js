@@ -36,6 +36,8 @@ class Ball extends Sprite{
 		this.createShape(true);
 		this.steer = null;
 
+		this.minSpeed = 0.1;
+		this.maxSpeed = 1.0;
 		//will override the ball's velocity for 1 frame
 		this.velOverride = null;
 
@@ -108,6 +110,19 @@ class Ball extends Sprite{
 		for (let [key, comp] of Object.entries(this.components))
 			comp.destructor?.();
 		this.components = {};
+	}
+
+	//these 2 methods obey the speed limit
+	setSpeed2(spd){
+		spd = Math.min(this.maxSpeed, Math.max(this.minSpeed, spd));
+		this.setSpeed(spd);
+	}
+
+	setVel2(vx, vy){
+		this.setVel(vx, vy);
+		let spd = this.getSpeed();
+		spd = Math.min(this.maxSpeed, Math.max(this.minSpeed, spd));
+		this.setSpeed(spd);
 	}
 
 	//due to the ball bouncing off of corners,
@@ -203,6 +218,20 @@ class Ball extends Sprite{
 		this.steer = [tx, ty, mag, epsilon];
 	}
 
+	//it seems this functions crashes when epsilon is 0
+	updateSteer(steer, delta){
+		let [tx, ty, mag, epsilon] = steer;
+		let vx = this.vx;
+		let vy = this.vy;
+		let spd = this.getSpeed();
+		let sign = Vector.angleSign(vx, vy, tx, ty);
+		let maxTheta = Vector.angleBetween(vx, vy, tx, ty);
+		maxTheta = Math.max(0, maxTheta - epsilon);
+		let theta = mag * delta * spd;
+		theta = Math.min(maxTheta, theta);
+		this.rotateVel(sign * theta);
+	}
+
 	update(delta){
 		//preUpdate will update the components regardless if
 		//the ball is stuck to the paddle
@@ -216,17 +245,17 @@ class Ball extends Sprite{
 			comp.update?.(delta);
 
 		if (this.steer){
-			let [tx, ty, mag, epsilon] = this.steer;
-			let vx = this.vx;
-			let vy = this.vy;
-			let spd = this.getSpeed();
-			let sign = Vector.angleSign(vx, vy, tx, ty);
-			let maxTheta = Vector.angleBetween(vx, vy, tx, ty);
-			maxTheta = Math.max(0, maxTheta - epsilon);
-			let theta = mag * delta * spd;
-			theta = Math.min(maxTheta, theta);
-			this.rotateVel(sign * theta);
-
+			// let [tx, ty, mag, epsilon] = this.steer;
+			// let vx = this.vx;
+			// let vy = this.vy;
+			// let spd = this.getSpeed();
+			// let sign = Vector.angleSign(vx, vy, tx, ty);
+			// let maxTheta = Vector.angleBetween(vx, vy, tx, ty);
+			// maxTheta = Math.max(0, maxTheta - epsilon);
+			// let theta = mag * delta * spd;
+			// theta = Math.min(maxTheta, theta);
+			// this.rotateVel(sign * theta);
+			this.updateSteer(this.steer, delta);
 			this.steer = null;
 		}
 

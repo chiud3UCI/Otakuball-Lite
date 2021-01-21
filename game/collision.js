@@ -18,7 +18,7 @@ class Vector{
 
 	static normalize(x, y){
 		if (x == 0 && y == 0)
-			return 0;
+			return [0, 0];
 		let dist = Vector.dist(x, y);
 		return [x/dist, y/dist];
 	}
@@ -128,6 +128,8 @@ class Polygon{
 		let cx = (x0 + x1) / 2;
 		let cy = (y0 + y1) / 2;
 		this.center = new Vector(cx, cy);
+
+		this.rotation = 0;
 	}
 
 	//return a 1d array of points just like
@@ -173,6 +175,21 @@ class Polygon{
 		let dy = y - c.y;
 		this.translate(dx, dy);
 	}
+
+	//rotate points around center
+	setRotation(rad){
+		let dr = rad - this.rotation;
+		this.rotation = rad;
+
+		let c = this.center;
+		for (let v of this.vertices){
+			let [dx, dy] = Vector.rotate(v.x - c.x, v.y - c.y, dr);
+			Object.assign(v, {
+				x: c.x + dx,
+				y: c.y + dy
+			});
+		}
+	}
 }
 
 class PolygonShape{
@@ -191,6 +208,10 @@ class PolygonShape{
 
 	moveTo(x, y){
 		this.polygon.moveTo(x, y);
+	}
+
+	setRotation(rad){
+		this.polygon.setRotation(rad);
 	}
 
 	collide(other){
@@ -233,6 +254,9 @@ class CircleShape{
 		c.x = x;
 		c.y = y;
 	}
+
+	//rotating a circle around its center does nothing
+	setRotation(rad){}
 
 	collide(other){
 		if (other.shapeType == "circle"){

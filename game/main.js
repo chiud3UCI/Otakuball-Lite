@@ -261,6 +261,10 @@ function alterMouseEvents(){
 }
 
 function getGridPos(x, y){
+	if (x instanceof Object){
+		y = x.y;
+		x = x.x;
+	}
 	let i = Math.floor((y - DIM.ceiling) / 16);
 	let j = Math.floor((x - DIM.lwallx) / 32);
 	return [i, j];
@@ -289,6 +293,7 @@ function clampGridPos(i, j){
 	return [i2, j2];
 }
 
+//returns an integer from [a to b-1] inclusive
 function randRange(a, b){
 	if (b === undefined){
 		b = a;
@@ -310,4 +315,17 @@ function updateAndRemove(container, delta){
 	}
 	for (let obj of dead)
 		container.removeChild(obj);
+}
+
+function circleRectOverlap(ccx, ccy, cr, rcx, rcy, rw, rh){
+	let circleDistX = Math.abs(ccx - rcx);
+	let circleDistY = Math.abs(ccy - rcy);
+	if (circleDistX > rw/2 + cr) return false;
+	if (circleDistY > rh/2 + cr) return false;
+	if (circleDistX <= rw/2) return true;
+	if (circleDistY <= rh/2) return true;
+	let cornerDist = 
+		(circleDistX - rw/2) ** 2 + 
+		(circleDistY - rh/2) ** 2;
+	return (cornerDist < cr ** 2);
 }

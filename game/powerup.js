@@ -15,6 +15,10 @@ var powerupNames = [
 	"Yoga", "Y-Return", "Buzzer", "Zeal", "Zen Shove"
 ];
 
+// for (let [i, name] of powerupNames.entries()){
+// 	powerupNames[i] = i + " " + name;
+// }
+
 var badPowerups = [
 	7, 11, 15, 29, 30, 36, 38, 39, 43, 47, 50, 52, 74, 75, 76, 84, 90,
 	93, 94, 97, 98, 105, 106, 116, 123, 124, 126, 129, 130, 133
@@ -217,6 +221,30 @@ f[111] = function(){
 /***************
  * Ball Modify *
  ***************/
+
+//Speed-related subcategory
+
+//Fast
+f[29] = function(){
+	playSound("fast_collected");
+	for (let ball of game.get("balls"))
+		ball.setSpeed2(ball.getSpeed() + 0.15);
+}
+
+//Slow
+f[101] = function(){
+	playSound("slow_collected");
+	for (let ball of game.get("balls"))
+		ball.setSpeed2(ball.getSpeed() - 0.15);
+}
+
+//Zeal
+f[133] = function(){
+	playSound("fast_collected");
+	for (let ball of game.get("balls"))
+		ball.setSpeed2(ball.getSpeed() + 0.15*4);
+}
+
 
 //Acid
 f[0] = function(){
@@ -759,6 +787,129 @@ f[25] = function(){
 	}
 }
 
+//Energy
+var tempRecord;
+var tempIndex;
+
+let Energy = class{
+	constructor(ball){
+		this.ball = ball;
+		this.maxEnergy = 3;
+		this.balls = [];
+		//keeps track of previous positions of the ball
+		this.record = []; //[t, x, y];
+		this.timeLimit = 500; //remove records older than this
+
+		this.recharge();
+	}
+
+	destructor(){
+		for (let e of this.balls)
+			e.kill();
+	}
+
+	recharge(){
+		let ball = this.ball;
+		let len = this.balls.length;
+		let max = this.maxEnergy;
+		if (len == max)
+			return;
+		playSound("energy_collected");
+		for (let i = len; i < max; i++){
+			let energy = new BallProjectile(
+				"ball_main_7_6", ball.x, ball.y);
+			energy.bounce = "weak";
+			energy.intangible = true;
+			energy.targetTime = 56 + i*60;
+			energy.time = 0;
+			this.balls.push(energy);
+			game.emplace("projectiles", energy);
+		}
+	}
+
+	preUpdate(delta){
+		let ball = this.ball;
+		//update stored positions
+		let record = this.record;
+		record.unshift([0, ball.x, ball.y, ball.vx, ball.vy]);
+		for (let r of record)
+			r[0] += delta;
+		while (record[record.length-1][0] > this.timeLimit)
+			record.pop();
+		//update energy ball positions
+		for (let [i, e] of this.balls.entries()){
+			if (record.length == 0){
+				e.setPos(ball.x, ball.y);
+				continue;
+			}
+			let time = e.time;
+			e.time = Math.min(e.targetTime, e.time + delta);
+			let index = 0;
+			//TODO: add interpolation to make the balls smoother
+			while (index < record.length-1 && record[index][0] < time)
+				index++;
+			tempRecord = record;
+			tempIndex = index;
+			let [t, x, y, vx, vy] = record[index];
+			e.setPos(x, y);
+			e.setVel(vx, vy);
+		}
+	}
+
+	onSpriteHit(obj, norm, mag){
+		let ball = this.ball;
+		if (obj.gameType != "brick")
+			return;
+		if (obj.armor > ball.strength)
+			return;
+		for (let e of this.balls){
+			e.intangible = false;
+		}
+		this.balls = [];
+	}
+
+	onPaddleHit(paddle){
+		this.recharge();
+	}
+}
+f[26] = function(){
+	playSound("energy_collected");
+	for (let ball of game.get("balls")){
+		if (ball.components.energy){
+			ball.components.energy.maxEnergy = 6;
+			ball.components.energy.recharge();
+		}
+		else{
+			ball.normal();
+			ball.components.energy = new Energy(ball);
+		}
+	}
+}
+
+//FireBall
+let FireBall = class{
+	constructor(ball){
+		this.ball = ball;
+	}
+
+	onSpriteHit(obj, norm, mag){
+		if (obj.gameType != "brick")
+			return;
+		let e = new Explosion(obj.x, obj.y, 32*3-1, 16*3-1);
+		e.onSpriteHit = () => {}; //disable the stopping of sounds
+		game.emplace("projectiles", e);
+	}
+}
+f[31] = function(){
+	for (let ball of game.get("balls")){
+		if (!ball.components.fireball){
+			ball.normal();
+			ball.setTexture("ball_main_1_0");
+			ball.components.fireball = new FireBall(ball);
+		}
+	}
+}
+
 //Large Ball
 f[58] = function(){
 	playSound("large_ball_collected");
@@ -819,7 +970,6 @@ let Snapper = class{
 		stopSound(brick.hitSound);
 	}
 }
-
 f[102] = function(){
 	playSound("generic_collected");
 	for (let ball of game.get("balls")){
@@ -830,9 +980,38 @@ f[102] = function(){
 	}
 };
 
+//Weak
+let Weak = class{
+	constructor(ball){
+		this.ball = ball;
+		this.timer = 20000;
+		ball.damage = (Math.random() < 0.5) ? 10 : 0;
+	}
+	onSpriteHit(obj, norm, mag){
+		this.ball.damage = (Math.random() < 0.5) ? 10 : 0;
+	}
+	preUpdate(delta){
+		this.timer -= delta;
+		if (this.timer <= 0)
+			this.ball.normal();
+	}
+}
+f[123] = function(){
+	playSound("weak_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_3_1");
+		ball.components.weak = new Weak(ball);
+	}
+	game.top.createMonitor("Weak", "balls", "weak", "timer");
+}
+
 /*****************
 * Paddle Weapons *
 ******************/
+
+//Gun Weapon subcategory
+
 //NOTE: Need to copy extra arguments too
 let PaddleWeapon = class{
 	constructor(paddle, name, maxBullets){
@@ -869,6 +1048,36 @@ let PaddleWeapon = class{
 	}
 }
 
+let BallCannon = class extends PaddleWeapon{
+	constructor(paddle){
+		super(paddle, "ballcannon", 8);
+	}
+	onClick(mouseVal){
+		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
+			return;
+		let deg = [-15, -5, 5, 15];
+		for (let theta of deg){
+			let rad = theta*Math.PI/180;
+			let [vx, vy] = Vector.rotate(0, -0.8, rad);
+			let p = new BallProjectile("ballcannon_ball", 0, 0, vx, vy);
+			p.damage = 10;
+			p.colFlag.paddle = true;
+			p.setBounce(true);
+			p.timer = 3000;
+
+			this.fireProjectile(p, 0);
+		}
+		playSound("ballcannon_fire");
+	}
+};
+f[5] = function(){
+	playSound("cannon_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_26_2");
+	paddle.setComponent("weapon", new BallCannon(paddle));
+}
+
 //Laser and Laser Plus
 let Laser = class extends PaddleWeapon{
 	constructor(paddle, plus=false){
@@ -882,7 +1091,7 @@ let Laser = class extends PaddleWeapon{
 	}
 
 	onClick(mouseVal){
-		if (mouseVal != 1 || this.bulletCount > this.maxBullets)
+		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
 			return;
 		playSound("laser_fire");
 		let paddle = this.paddle;
@@ -894,6 +1103,51 @@ let Laser = class extends PaddleWeapon{
 			this.fireProjectile(proj, dx); 
 		}
 	}
+}
+
+//Drill Missile
+let DrillMissile = class extends PaddleWeapon{
+	constructor(paddle){
+		super(paddle, "ballcannon", 1);
+	}
+	onClick(mouseVal){
+		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
+			return;
+		let mx = mouse.x;
+		let j = Math.floor((mx - DIM.lwallx) / 32);
+		j = Math.max(0, Math.min(13-1, j));
+		let x = DIM.lwallx + 16 + (32*j);
+		let y = this.paddle.y - 20;
+
+		let drill = new Projectile("drill_0_0", x, y, 0, -0.3);
+		drill.onDeath = function(){
+			Projectile.prototype.onDeath.call(this);
+			let i = Math.floor(Math.random() * 4);
+			let tex = `det_smoke_normal_${i}`;
+			let smoke = new Particle(tex, this.x, this.y);
+			smoke.setGrowth(0.01, -0.00002);
+			smoke.setFade(0.005);
+			game.emplace("particles", smoke);
+			playSound("drill_explode");
+		};
+
+		drill.addAnim("spin", "drill_yellow", 0.25, true, true);
+		drill.damage = 100;
+		drill.strength = 1;
+		drill.pierce = true;
+		drill.parentWeapon = this;
+		this.bulletCount++;
+		game.emplace("projectiles", drill);
+		
+		playSound("drill_fire");
+	}
+};
+f[23] = function(){
+	playSound("drill_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_24_1");
+	paddle.setComponent("weapon", new DrillMissile(paddle));
 }
 
 //laser
@@ -928,6 +1182,122 @@ f[60] = function(){
 			paddle, true));
 	}
 };
+
+let Shotgun = class extends PaddleWeapon{
+	constructor(paddle){
+		super(paddle, "shotgun", 12);
+	}
+	onClick(mouseVal){
+		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
+			return;
+		let deg = [-25, -15, -5, 5, 15, 25];
+		for (let theta of deg){
+			let rad = theta*Math.PI/180;
+			let [vx, vy] = Vector.rotate(0, -0.8, rad);
+			let p = new Projectile("shotgun_pellet", 0, 0, vx, vy);
+			p.scale.set(1);
+			p.damage = 5;
+			this.fireProjectile(p, 0);
+		}
+		playSound("shotgun_fire");
+	}
+};
+f[99] = function(){
+	playSound("shotgun_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_26_1");
+	paddle.setComponent("weapon", new Shotgun(paddle));
+}
+
+//Missile
+let Missile = class extends PaddleWeapon{
+	constructor(paddle){
+		super(paddle, "missile", 4);
+	}
+	onClick(mouseVal){
+		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
+			return;
+		playSound("missile_fire");
+		let paddle = this.paddle;
+		let off = paddle.paddleWidth/2 - 17;
+		for (let dx of [-off, off]){
+			let p = new Projectile("missile_0_0", 0, 0, 0, -0.1);
+			p.ay = -0.002;
+			p.scale.set(1);
+			p.createShape();
+			p.addAnim("spin", "missile_normal", 0.25, true, true);
+			p.onSpriteHit = function(obj, norm, mag){
+				this.kill();
+				DetonatorBrick.explode(obj);
+			};
+			this.fireProjectile(p, dx);
+		}
+	}
+};
+f[66] = function(){
+	playSound("missile_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_23_1");
+	paddle.setComponent("weapon", new Missile(paddle));
+};
+
+//Erratic Missile
+let ErraticMissile = class extends PaddleWeapon{
+	constructor(paddle){
+		super(paddle, "erraticmissile", 4);
+	}
+	onClick(mouseVal){
+		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
+			return;
+		playSound("missile_erratic_fire");
+		let paddle = this.paddle;
+		let off = paddle.paddleWidth/2 - 17;
+		for (let dx of [-off, off]){
+			let p = new Projectile("missile_1_0", 0, 0, 0, -0.6);
+			p.scale.set(1);
+			p.createShape();
+			p.addAnim("spin", "missile_erratic", 0.25, true, true);
+			this.setHoming(p);
+			this.fireProjectile(p, dx);
+		}
+	}
+	//TODO: Add raycasting to to prevent missiles from targeting
+	//		bricks hidden behind indestructible bricks
+	setHoming(p){
+		let updateSteer = Ball.prototype.updateSteer;
+		p.update = function(delta){
+			let closest = {br: null, dist: Infinity};
+			for (let br of game.get("bricks")){
+				if (br.armor > 0)
+					continue;
+				let dist = (br.x-this.x)**2 + (br.y-this.y)**2;
+				if (dist < closest.dist){
+					closest.br = br;
+					closest.dist = dist;
+				}
+			}
+			if (closest.br){
+				let br = closest.br;
+				let steer = [br.x-this.x, br.y-this.y, 0.01, 0.01];
+				updateSteer.call(this, steer, delta);
+				let rad = Math.atan2(this.vy, this.vx);
+				this.setRotation(rad+Math.PI/2);
+			}
+			Projectile.prototype.update.call(this, delta);
+		}
+	}
+};
+f[27] = function(){
+	playSound("missile_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_24_1");
+	paddle.setComponent("weapon", new ErraticMissile(paddle));
+};
+
+//Subcategory Subweapons
 
 //Javelin
 let Javelin = class{
@@ -976,7 +1346,7 @@ let Javelin = class{
 		//create custom hitbox
 		let points = [0, 0, 32-1, 146];
 		p.setShape(new PolygonShape(points));
-		p.boundCheck = false;
+		p.wallCheck = false;
 		p.damage = 1000;
 		p.strength = 1;
 		p.pierce = "strong";
@@ -1167,12 +1537,7 @@ let Xbomb = class{
 	}
 }
 f[127] = function(){
-	//xbomb will always hit the target in the
-	//same amount of time
-	const time = 1000;
-
 	playSound("xbomb_collected");
-
 	let paddle = game.get("paddles")[0];
 	if (paddle.components.subweapon?.name == "xbomb")
 		return;
@@ -1183,6 +1548,33 @@ f[127] = function(){
 /****************
 * Paddle Modify *
 *****************/
+//Autopilot
+let Autopilot = class{
+	//Implmentation of Autopilot is done in Paddle.autopilot
+	//This component only keeps track of the timer
+	constructor(paddle){
+		this.paddle = paddle;
+		this.timer = 10000;
+	}
+
+	update(delta){
+		this.timer -= delta;
+		if (this.timer <= 0)
+			this.paddle.clearPowerups();
+	}
+}
+f[4] = function(){
+	let paddle = game.get("paddles")[0];
+	let auto = paddle.components.autopilot;
+	if (auto){
+		auto.timer += 10000;
+		return;
+	}
+	paddle.clearPowerups();
+	paddle.setComponent("autopilot", new Autopilot(paddle));
+	game.top.createMonitor(
+		"Autopilot", "paddles", "autopilot", "timer");
+}
 
 //Catch
 let Catch = class{
@@ -1232,10 +1624,176 @@ let Glue = class extends Catch{
 			this.paddle.clearPowerups();
 		}
 	}
-}
+};
 f[38] = function(){
 	let paddle = game.get("paddles")[0];
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_18_3");
 	paddle.setComponent("catch", new Glue(paddle));
 };
+
+/****************
+* Brick-Related *
+*****************/
+
+//Bulk
+let bulkNormal = function(br){
+	let {i, j} = br.normalInfo;
+	if (j == 20)
+		i = 0;
+	let bulkTex = `brick_bulk_${i}_${j}`;
+	let oldTex = br.texture;
+	br.setTexture(bulkTex);
+	br.health = 20;
+	br.points *= 2; 
+
+	br.takeDamage = function(damage, strength){
+		NormalBrick.prototype.takeDamage.call(this, damage, strength);
+		if (this.health <= 10)
+			this.setTexture(oldTex);
+	};
+};
+let bulkMetal = function(br){
+	let level = Math.min(6, br.level + 1);
+	let tex = `brick_main_6_${level}`;
+	let anistr = `brick_shine_${3+level}`;
+	br.setTexture(tex);
+	br.addAnim("shine", anistr, 0.25);
+	br.level = level;
+	br.health = (level + 1) * 10;
+	br.points = 100 + (level - 1) * 20;
+};
+f[11] = function(){
+	playSound("bulk_collected");
+	for (let br of game.get("bricks")){
+		if (br.brickType == "normal")
+			bulkNormal(br);
+		else if (br.brickType == "metal")
+			bulkMetal(br);
+	}
+}
+
+//Quasar
+let Quasar = class extends Special{
+	static growth = {
+		s: 1, //scale
+		vs: 7.5, //velocity
+		as: -0.0075 //acceleration
+	};
+	constructor(){
+		let s = Quasar.growth.s;
+		super("quasar", DIM.w/2, DIM.h/2-16);
+		this.growth = Object.assign({}, Quasar.growth);
+		this.scale.set(this.growth.s);
+	}
+	update(delta){
+		let {s, vs, as} = this.growth;
+		let dt = delta/1000;
+
+		s += vs*dt + 0.5*as*dt*dt;
+		vs += as*delta;
+		if (s <= 0){
+			this.kill();
+			return;
+		}
+		this.scale.set(s);
+
+		this.rotation += 3 * dt;
+
+		Object.assign(this.growth, {s, vs});
+
+		let r = this.width/2;
+		for (let br of game.get("bricks")){
+			if (br.armor > 1)
+				continue;
+			if (!circleRectOverlap(this.x, this.y, r, br.x, br.y, 32, 16))
+				continue;
+			if (br.brickType == "funky" && br.isRegenerating)
+				continue;
+			br.suppress = true;
+			br.kill();
+			this.createBrickParticle(br);
+		}
+	}
+	createBrickParticle(br){
+		let tex = br.texture;
+		//Funky bricks are special because they turn invisible
+		//instead of 
+		if (br.brickType == "funky")
+			tex = br.storedTexture;
+		let p = new Particle(tex, br.x, br.y);
+		p.orbit = {
+			cx: this.x,
+			cy: this.y,
+			rad: Math.atan2(br.y - this.y, br.x - this.x),
+			r: Vector.dist(this.x, this.y, br.x, br.y)
+		};
+		p.orbit.vr = -0.005 * p.orbit.r ** 2;
+		p.setGrowth(-0.00075);
+		p.setFade(0.00075);
+		p.update = function(delta){
+			let dt = delta/1000;
+			let {cx, cy, rad, r, vr} = this.orbit;
+
+			this.x = cx + r * Math.cos(rad);
+			this.y = cy + r * Math.sin(rad);
+			rad += 2 * dt;
+			r += vr * dt;
+
+			Object.assign(this.orbit, {rad, r});
+			Particle.prototype.update.call(this, delta);
+		}
+
+		game.emplace("particles", p);
+	}
+};
+f[87] = function(){
+	playSound("quasar_collected");
+	game.emplace("specials1", new Quasar());
+};
+
+//Vendetta
+f[117] = function(){
+	let gr = game.top.brickGrid;
+	let target = {row: 0, count: 0};
+	for (let i = 0; i < 32; i++){
+		let count = 0;
+		for (let j = 0; j < 13; j++){
+			for (let br of gr.grid[i][j]){
+				if (br.armor < 2)
+					count++;
+			}
+		}
+		if (count > target.count){
+			target.row = i;
+			target.count = count;
+		}
+	}
+
+	let [x, y] = getGridPosInv(target.row, 0);
+	let drill = new Projectile("drill_1_0", x, y, 0.3, 0);
+	drill.onDeath = function(){
+		Projectile.prototype.onDeath.call(this);
+		let i = Math.floor(Math.random() * 4);
+		let tex = `det_smoke_normal_${i}`;
+		let smoke = new Particle(tex, this.x, this.y);
+		smoke.setGrowth(0.01, -0.00002);
+		smoke.setFade(0.005);
+		game.emplace("particles", smoke);
+		playSound("drill_explode");
+	};
+
+	drill.addAnim("spin", "drill_green", 0.25, true, true);
+	drill.damage = 100;
+	drill.strength = 1;
+	drill.pierce = true;
+	//give it a smaller hitbox
+	drill.setShape(new PolygonShape([
+		0,0, 15,0, 15,31, 0,31
+	]));
+	drill.setRotation(Math.PI/2);
+	game.emplace("projectiles", drill);
+
+	playSound("drill_fire");
+}
+

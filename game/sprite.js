@@ -347,7 +347,7 @@ class Sprite extends PIXI.Sprite{
 	}
 }
 
-//Special are game objects that do not fit in any other catagories
+//Specials are game objects that do not fit in any other catagories
 class Special extends Sprite{
 	constructor(
 		texture=null, x=0, y=0, vx=0, vy=0, angle=0, sx=2, sy=2)

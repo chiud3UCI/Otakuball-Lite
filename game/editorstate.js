@@ -165,7 +165,7 @@ class EditorState{
 			"Import", "arcade", 0x000000, 1, 7, 8
 		));
 		butt.onClick = function(){
-			state.importLevel();
+			game.push(state.createImportExportDialogue(true));
 		}
 		this.add("hud", butt);
 
@@ -174,7 +174,8 @@ class EditorState{
 			"Export", "arcade", 0x000000, 1, 7, 8
 		));
 		butt.onClick = function(){
-			state.exportLevel();
+			// state.exportLevel();
+			game.push(state.createImportExportDialogue(false));
 		}
 		this.add("hud", butt);
 
@@ -188,6 +189,11 @@ class EditorState{
 		this.add("hud", butt);
 
 		this.stateName = "editorstate";
+	}
+
+	destructor(){
+		for (let input of this.enemySpawnInputs)
+			input.destroy();
 	}
 
 	setBackground(color=0x000080, tile=null){
@@ -593,6 +599,95 @@ class EditorState{
 		panel.addChild(this.toolButtonHighlight);
 	}
 
+	//Remember that "import" and "export" are reserved words
+	createImportExportDialogue(isImport){
+		let title = isImport ? "Import Level" : "Export Level";
+		let width = 400, height = 250;
+		let dialogue = new DialogueBox(width, height, title, this);
+
+		let textArea = new PIXI.TextInput({
+			input: {
+				fontSize: "12px",
+				width: "350px",
+				height: "120px",
+				color: 0x000000,
+				multiline: true,
+			},
+			box: {
+				fill: 0xFFFFFF,
+				stroke: {
+					color: 0x000000,
+					width: 2
+				}
+			}
+		});
+		textArea.substituteText = false;
+		textArea.isTextInput = true;
+		let rect = textArea.getBounds();
+		// textArea.text = `width: ${rect.width}, height: ${rect.height}`;
+		//center the text area within the dialogue box
+		let dx = width - rect.width;
+		textArea.position.set(dx/2 - 4, 20);
+		dialogue.add(textArea);
+
+		if (isImport){
+			let errorText = printText("ERROR: Invalid JSON string",
+				"windows", 0xDD0000, 1, 20, height - 80 );
+			errorText.maxWidth = 100;
+			errorText.visible = false;
+			dialogue.add(errorText);
+
+			let cancelButton = new Button(
+				width - 115, height - 80, 95, 40
+			);
+			cancelButton.add(printText(
+				"Cancel", "arcade", 0x000000, 1, 7, 10
+			));
+			cancelButton.onClick = function(){
+				game.pop();
+			}
+			dialogue.add(cancelButton);
+
+			let importButton = new Button(
+				width - 220, height - 80, 95, 40
+			);
+			importButton.add(printText(
+				"Import", "arcade", 0x000000, 1, 5, 10
+			));
+			importButton.onClick = function(){
+				let str = textArea.text;
+				let level = null;
+				try{
+					level = JSON.parse(str);
+				} catch (err) {
+					errorText.visible = true;
+				}
+				if (level){
+					let editorstate = game.states[game.states.length-2];
+					editorstate.loadLevel(level);
+					game.pop();
+				}
+			}
+			dialogue.add(importButton);
+		}
+		else{
+			let level = this.createLevel();
+			textArea.text = JSON.stringify(level);
+			let closeButton = new Button(
+				width - 100, height - 80, 80, 40
+			);
+			closeButton.add(printText(
+				"Close", "arcade", 0x000000, 1, 5, 10
+			));
+			closeButton.onClick = function(){
+				game.pop();
+			}
+			dialogue.add(closeButton);
+		}
+
+		return dialogue;
+	}
+
 	//resets the level to its default state
 	reset(){
 		for (let node of this.allNodes)
@@ -754,36 +849,10 @@ class EditorState{
 			this.slotPowerups = level.slotPowerups;
 	}
 
-	//writes the level json to the textbox
-	exportLevel(){
-		let level = this.createLevel();
-		let str = JSON.stringify(level);
-		let textbox = document.getElementById("textbox");
-		textbox.value = str;
-	}
-
-	importLevel(){
-		let textbox = document.getElementById("textbox");
-		let str = textbox.value;
-		let level = null;
-		try{
-			level = JSON.parse(str);
-		} catch (err) {
-			console.error("ERROR: Invalid import string.");
-		}
-		if (level)
-			this.loadLevel(level);
-	}
-
 	startGame(){
 		let level = this.createLevel();
 		game.push(new PlayState("test", level));
 	}
-}
-
-function exportLevel(){
-	if (game.top.exportLevel)
-		game.top.exportLevel();
 }
 
 class GridNode{

@@ -1941,13 +1941,13 @@ class SlotMachineBrick extends Brick{
 	//but must vary between brick
 	static globalIndex = 0;
 
-	constructor(x, y, isYellow){
+	//slotPowerups is a special argument given by the playstate
+	constructor(x, y, isYellow, slotPowerups){
 		super("brick_invis", x, y);
 
 		this.health = 1000;
 		this.armor = 2;
 		this.isYellow = isYellow;
-		let slotPowerups = game.top.slotPowerups;
 		this.powIds = slotPowerups[isYellow ? 1 : 0];
 		this.powIndex = SMB.globalIndex;
 		SMB.globalIndex = (SMB.globalIndex+1) % 3;

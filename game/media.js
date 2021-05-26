@@ -217,6 +217,9 @@ let recursive_sound_names = [
 		"bomber_explode",
 		"bomber_fuse",
 		"combo",
+		"split_small",
+		"split_med",
+		"split_large",
 	]],
 	["powerup/", [
 		"acid_collected",
@@ -242,6 +245,10 @@ let recursive_sound_names = [
 		"quasar_collected",
 		"cannon_collected",
 		"drill_collected",
+		"blackout_collected",
+		"nano_collected",
+		"nano_launch",
+		"catch_collected"
 	]],
 	["enemy/", [
 		"enemy_death",

@@ -32,6 +32,8 @@ function ALERT_ONCE(message){
 	}
 }
 
+var ENABLE_RIGHT_CLICK = false;
+
 //need to put everything in a function
 //so it can be called after the document
 //is created
@@ -225,7 +227,9 @@ function setup(){
 //disable right click contex menu and
 //disable mouse click while cursor is in game
 function alterMouseEvents(){
-	let mouseInWindow = function(){
+	function mouseInWindow(){
+		if (ENABLE_RIGHT_CLICK)
+			return false;
 		let mx = appMouse.global.x;
 		let my = appMouse.global.y;
 		return (

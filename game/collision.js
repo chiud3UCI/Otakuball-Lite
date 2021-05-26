@@ -16,6 +16,13 @@ class Vector{
 		return Math.sqrt(dx*dx + dy*dy);
 	}
 
+	//squared dist
+	static dist2(x0, y0, x1=0, y1=0){
+		let dx = x1-x0;
+		let dy = y1-y0;
+		return dx*dx + dy*dy;
+	}
+
 	static normalize(x, y){
 		if (x == 0 && y == 0)
 			return [0, 0];
@@ -190,6 +197,65 @@ class Polygon{
 			});
 		}
 	}
+
+	//this ray is more like a line segment
+	intersectionsWithRay(x, y, dx, dy){
+		function determinant(x0, y0, x1, y1){
+			return x0*y1 - x1*y0;
+		}
+
+		let vertices = this.vertices;
+		let n = vertices.length;
+		//get normal/perpendicular of dx, dy
+		let nx = -dy;
+		let ny = dx;
+		//list of distances of each intersection point along ray
+		let ts = [];
+
+		for (let i = 0; i < n; i++){
+			let v1 = vertices[i];
+			let v2 = vertices[(i+1)%n];
+			let wx = v2.x - v1.x;
+			let wy = v2.y - v1.y;
+			let det = determinant(dx, dy, wx, wy);
+
+			//check for intersection between lines (not parallel)
+			if (det !== 0){
+				//check to see if intersection lies on both the ray
+				//and line segment
+				let rx = v2.x - x;
+				let ry = v2.y - y;
+				let l = determinant(rx, ry, wx, wy) / det;
+				let m = determinant(dx, dy, rx, ry) / det;
+				if (m >= 0 && m <= 1)
+					ts.push(l);
+			}
+		}
+
+		return ts;
+	}
+
+	//check if ray intersects with shape and returns
+	//closest distance if true
+	raycast(x, y, dx, dy){
+		let result = this.intersectionsWithRay(x, y, dx, dy);
+		if (result.length == 0)
+			return [false, null];
+		let min = result[0];
+		for (let mag of result)
+			min = Math.min(min, mag);
+		return [true, min];
+	}
+
+	//draw polygon to a PIXI.Graphics instance
+	draw(gr, color=0xFFFFFF){
+		let vertices = this.vertices;
+		gr.lineStyle(1, color);
+		let v0 = vertices[vertices.length-1];
+		gr.moveTo(v0.x, v0.y);
+		for (let v of vertices)
+			gr.lineTo(v.x, v.y);
+	}
 }
 
 class PolygonShape{
@@ -225,6 +291,24 @@ class PolygonShape{
 			return arr;
 		}
 		return SAT.collide(this, other);
+	}
+
+	intersectionsWithRay(x, y, dx, dy){
+		return this.polygon.intersectionsWithRay(x, y, dx, dy);
+	}
+
+	raycast(x, y, dx, dy){
+		return this.polygon.raycast(x, y, dx, dy);
+	}
+
+	draw(gr, color){
+		this.polygon.draw(gr, color);
+	}
+}
+
+class RectangleShape extends PolygonShape{
+	constructor(w, h){
+		super([0,0, w,0, w,h, 0,h]);
 	}
 }
 
@@ -270,6 +354,54 @@ class CircleShape{
 			return [true, vec.scale(1/dist), diff];
 		}
 		return SAT.collideCircle(this, other);
+	}
+
+	intersectionsWithRay(x, y, dx, dy){
+		let center = this.center;
+		let radius = this.radius;
+		let pcx = x - center.x;
+		let pcy = y - center.y;
+
+		let a = Vector.dist2(dx, dy);
+		let b = 2 * (dx*pcx + dy*pcy);
+		let c = Vector.dist2(pcx, pcy) - radius*radius;
+		let discr = b*b - 4*a*c; //discriminant
+
+		if (discr < 0)
+			return [];
+
+		discr = Math.sqrt(discr);
+		let ts = [];
+		let t1 = discr - b;
+		let t2 = -discr - b;
+		if (a > 0){ //prevent divide by zero error
+			if (t1 >= 0)
+				ts.push(t1 / (2*a));
+			if (t2 >= 0)
+				ts.push(t2 / (2*a));
+		}
+
+		return ts;
+	}
+
+	//check if ray intersects with shape and returns
+	//closest distance if true
+	raycast(x, y, dx, dy){
+		let result = this.intersectionsWithRay(x, y, dx, dy);
+		if (result.length == 0)
+			return [false, null];
+		let min = result[0];
+		
+		for (let mag of result)
+			min = Math.min(min, mag);
+		return [true, min];
+	}
+
+	//draw circle to a PIXI.Graphics instance
+	draw(gr, color=0xFFFFFF){
+		let c = this.center;
+		let r = this.radius;
+		gr.lineStyle(1, color).drawCircle(c.x, c.y, r);
 	}
 }
 

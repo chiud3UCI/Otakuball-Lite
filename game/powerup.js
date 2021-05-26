@@ -36,7 +36,7 @@ for (let id of badPowerups)
 		+ more flexible
 		+ can be copied?
 		+ can use shorter ball var name?
-	Conclusion:
+	Conclusion: Component with ball member wins!!!
 		- there is no need for ball in parameter as
 		most components have stuff that's attached to a single ball
 		- Although some components are simple enough to be copied,
@@ -179,14 +179,46 @@ let f = powerupFunc; //alias
 //Disrupt
 f[21] =  function(){
 	Ball.split(8);
+	playSound("split_med");
 };
 //Frenzy
 f[33] =  function(){
 	Ball.split(24);
+	playSound("split_large");
 };
 //Multiple
 f[68] =  function(){
 	Ball.split(3, true);
+	playSound("split_small");
+};
+//Nano
+f[70] = function(){
+	playSound("nano_collected");
+	let left = Math.random() < 0.5;
+	const d0 = left ? 60 : 120;
+	const x0 = left ? DIM.lwallx : DIM.rwallx;
+	game.top.emplaceCallback(500, () => {
+		playSound("nano_launch");
+		for (let i = 0; i < 3; i++){
+			let deg = d0 + (i-1) * 5;
+			let rad = deg * Math.PI / 180;
+			let [vx, vy] = Vector.rotate(0.8, 0, rad);
+			let nano = new BallProjectile(
+				"ball_main_5_5", x0, DIM.ceiling, vx, vy);
+			nano.colFlag = {paddle: true};
+			nano.onPaddleHit = function(paddle){
+				this.kill();
+				let ball = new Ball(this.x, this.y, this.vx, this.vy);
+				ball.setTexture("ball_main_2_5");
+				ball.strength = 1;
+				ball.damage = 100;
+				ball.pierce = true;
+				ball.components.mega = new Mega(ball);
+				game.emplace("balls", ball);
+			};
+			game.emplace("projectiles", nano);
+		}
+	});
 };
 //New Ball
 f[72] =  function(){
@@ -207,14 +239,17 @@ f[88] =  function(){
 		ball.rotateVel(rad);
 		game.emplace("balls", ball);
 	}
+	playSound("split_small");
 };
 //Triple
 f[109] = function(){
 	Ball.split(3);
+	playSound("split_small");
 };
 //Two
 f[111] = function(){
 	Ball.split(2, true);
+	playSound("split_small");
 };
 
 
@@ -268,19 +303,26 @@ f[0] = function(){
 let Antigravity = class{
 	constructor(ball){
 		this.ball = ball;
+		this.timer = 10000;
 	}
 	update(delta){
 		this.ball.setSteer(0, -1, 0.005);
+		this.timer -= delta;
+		if (this.timer <= 0)
+			this.ball.normal();
 	}
 };
 
 f[1] = function(){
-	playSound("generic_collected");
+	// playSound("generic_collected");
 
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.components.antigravity = new Antigravity(ball);
 	}
+
+	game.top.createMonitor(
+		"Antigravity", "balls", "antigravity", "timer");
 };
 
 //Attract
@@ -311,7 +353,7 @@ let Attract = class{
 };
 
 f[3] = function(){
-	playSound("generic_collected");
+	// playSound("generic_collected");
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.components.attract = new Attract(ball);
@@ -375,7 +417,7 @@ let Blossom = class{
 f[9] = function(){
 	const n = 24; //# of pellets
 	
-	playSound("generic_collected");
+	// playSound("generic_collected");
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.setTexture("ball_main_2_0");
@@ -949,10 +991,124 @@ f[65] = function(){
 		ball.normal();
 		ball.setTexture("ball_main_2_5");
 		ball.strength = 1;
+		ball.damage = 100;
 		ball.pierce = true;
 		ball.components.mega = new Mega(ball);
 	}
 };
+
+//Sight laser
+let SightLaser = class{
+	constructor(ball){
+		this.ball = ball;
+		//create a graphics object in order to draw lasers on it
+		let laser = new PIXI.Graphics();
+		game.top.hud.addChild(laser);
+		this.laser = laser;
+		//used for drawing the paddle's hitbox for debugging
+		this.debugHitbox = new PIXI.Graphics();
+		laser.addChild(this.debugHitbox);
+	}
+	destructor(){
+		game.top.hud.removeChild(this.laser);
+	}
+	preUpdate(delta){
+		let paddle = game.get("paddles")[0];
+		let ball = this.ball;
+		let [x0, y0] = ball.getPos();
+		let [x1, y1] = [null, null];		
+		let vx = ball.vx;
+		let vy = ball.vy;
+		[vx, vy] = Vector.normalize(vx, vy);
+		let r = ball.shape.radius;
+		let lwall = DIM.lwallx + r;
+		let rwall = DIM.rwallx - r;
+		let floor = DIM.height;
+		let ceil = DIM.ceiling;
+
+		let laser = this.laser;
+		laser.clear()
+			.lineStyle(1, 0xFFFF00)
+			.moveTo(x0, y0);
+
+		let debugHitbox = this.debugHitbox;
+
+		debugHitbox.clear();
+
+		//limit number of laser bounces to 10
+		for (let i = 0; i < 10; i++){
+			let [check, mag] = Ball.raycastTo(
+				paddle, x0, y0, vx, vy, r, //debugHitbox
+			);
+			if (check && vy > 0){
+				//Rebound off paddle
+				//draw line to paddle hit location
+				x1 = x0 + vx * mag;
+				y1 = y0 + vy * mag;
+				laser.lineTo(x1, y1);
+				[x0, y0] = [x1, y1];
+				//draw projected ball hit location
+				debugHitbox.beginFill(0xFF0000, 0.5)
+					.drawCircle(x1, y1, r)
+					.endFill();
+				//change velocity based on paddle rebound
+				//see Paddle.reboundBall()
+				let dx = x1 - paddle.x;
+				let mag2 = dx / (paddle.paddleWidth/2);
+				mag2 = Math.max(-1, Math.min(1, mag2));
+				let rad = 60 * mag2 * Math.PI / 180; //radians
+				[vx, vy] = Vector.rotate(0, -1, rad);
+			}
+			else{
+				if (vx == 0)
+					break;
+				let wall = (vx < 0) ? lwall : rwall;
+				let dx = wall - x0;
+				let dy = dx * vy / vx;
+				x1 = x0 + dx;
+				y1 = y0 + dy;
+				//stop the laser if it goes above the ceiling
+				//or below the floor
+				if (y1 < ceil || y1 > floor){
+					y1 = (y1 < ceil) ? ceil : floor;
+					x1 = x0 + ((y1 - y0) * vx / vy);
+					laser.lineTo(x1, y1);
+					break;
+				}
+				laser.lineTo(x1, y1);
+				vx = -vx;
+				[x0, y0] = [x1, y1];
+			}
+			//ceiling = m*x
+			//ceiling = (vy / vx) * x
+		}
+
+
+
+
+		// let dist = 1000;
+		// let dx = nx * dist;
+		// let dy = ny * dist;
+		// laser.lineTo(x0 + dx, y0 + dy);
+
+		// let [check, mag] = Ball.raycastTo(paddle, x0, y0, vx, vy, r, laser);
+		// if (check){
+		// 	let x1 = x0 + nx * mag;
+		// 	let y1 = y0 + ny * mag;
+		// 	laser.lineStyle()
+		// 		.beginFill(0xFF0000, 0.5)
+		// 		.drawCircle(x1, y1, r);
+		// }
+
+	}
+}
+f[100] = function(){
+	playSound("generic_collected");
+	for (let ball of game.get("balls")){
+		if (!ball.components.sightlaser)
+			ball.components.sightlaser = new SightLaser(ball);
+	}
+}
 
 //Snapper
 let Snapper = class{
@@ -1099,6 +1255,7 @@ let Laser = class extends PaddleWeapon{
 		let tex = this.isPlus ? "laser_1" : "laser_0";
 		for (let dx of [-off, off]){
 			let proj = new Projectile(tex, 0, 0, 0, -1);
+			proj.damage = this.isPlus ? 1000 : 10;
 			proj.isLaser = true;
 			this.fireProjectile(proj, dx); 
 		}
@@ -1587,6 +1744,7 @@ let Catch = class{
 	}
 };
 f[14] = function(){
+	playSound("catch_collected");
 	let paddle = game.get("paddles")[0];
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_10_2");
@@ -1605,6 +1763,7 @@ let HoldOnce = class extends Catch{
 	}
 }
 f[40] = function(){
+	playSound("catch_activated");
 	let paddle = game.get("paddles")[0];
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_30_1");
@@ -1797,3 +1956,37 @@ f[117] = function(){
 	playSound("drill_fire");
 }
 
+/********
+* Other *
+*********/
+
+//Blackout
+f[7] = function(){
+	let black = new Special(PIXI.Texture.WHITE);
+	black.anchor.set(0, 0);
+	black.setPos(DIM.lwallx, DIM.ceiling);
+	//PIXI.Texture.WHITE has a base size of 16x16
+	black.scale.set(DIM.boardw/16, DIM.boardh/16);
+	black.tint = 0x000000;
+	black.alpha = 0;
+
+	black.timer = 10000;
+	black.update = function(delta){
+		this.timer -= delta;
+		if (this.timer <= 0){
+			this.kill();
+			return;
+		}
+
+		let t = 10000 - this.timer;
+		if (t <= 1000)
+			this.alpha = t/1000;
+		else if (t <= 9000)
+			this.alpha = 1;
+		else
+			this.alpha = 1 - (t-9000)/1000;
+	};
+
+	game.emplace("specials2", black);
+	playSound("blackout_collected");
+}

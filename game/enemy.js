@@ -277,43 +277,11 @@ class Menacer extends Ball{
 class Dizzy extends Enemy{
 	constructor(){
 		super("enemy_main_0_0");
-		this.setShape(new PolygonShape([
-			0,0, 20,0, 20,32, 0,32
-		]));
+		this.setShape(new RectangleShape(20, 30));
 		this.addAnim("spin", "enemy_dizzy", 0.125, true, true);
 		this.phase = "tracing";
 		this.enemyType = "dizzy";
-
-		// console.log(this.getAABB());
-		// this.debugOverlap = new PIXI.Graphics();
-		// this.debugOverlap.alpha = 0.5;
-		// this.addChild(this.debugOverlap);
-		// this.vx = 0;
-		// this.vy = 0;
 	}
-
-	// update(delta){
-	// 	if (true){
-	// 		let gr = this.debugOverlap;
-	// 		gr.clear();
-	// 		let [br, norm, mag] = this.scanBrickHit();
-	// 		if (br){
-	// 			gr.beginFill(0xFF0000);
-	// 			gr.drawRect(-8, -8, 16, 16);
-	// 		}
-	// 		else{
-	// 			gr.beginFill(0x00FF00);
-	// 			gr.drawRect(-8, -8, 16, 16);
-	// 		}
-	// 	}
-	// 	let mx = mouse.x;
-	// 	let my = mouse.y;
-	// 	if (mx > DIM.lwallx && mx < DIM.rwallx && my > DIM.ceiling &&
-	// 		my < DIM.height)
-	// 		this.setPos(mouse.x, mouse.y);
-		
-	// 	super.update(delta);
-	// }
 
 	setRandomDir(){
 		if (!this.storedDir){
@@ -462,7 +430,7 @@ class Cubic extends Dizzy{
 	constructor(){
 		super();
 		this.setTexture("enemy_main_1_0");
-		this.createShape();
+		this.setShape(new RectangleShape(30, 30));
 		this.setTexture(null); //hide texture for animation
 		this.removeAnim("spin");
 		this.addAnim("spin", "enemy_cubic", 0.125, true, true);
@@ -512,7 +480,7 @@ class GumballTrio extends Dizzy{
 		this.ballAngle = 0;
 		this.updateBalls(0);
 
-		this.enemyType = "gumball";
+		this.enemyType = "gumballtrio";
 	}
 
 	onDeath(){

@@ -233,7 +233,7 @@ class Ball extends Sprite{
 	}
 
 	update(delta){
-		//preUpdate will update the components regardless if
+		//components with preupdate will update regardless if
 		//the ball is stuck to the paddle
 		for (let [key, comp] of Object.entries(this.components))
 			comp.preUpdate?.(delta);
@@ -245,16 +245,6 @@ class Ball extends Sprite{
 			comp.update?.(delta);
 
 		if (this.steer){
-			// let [tx, ty, mag, epsilon] = this.steer;
-			// let vx = this.vx;
-			// let vy = this.vy;
-			// let spd = this.getSpeed();
-			// let sign = Vector.angleSign(vx, vy, tx, ty);
-			// let maxTheta = Vector.angleBetween(vx, vy, tx, ty);
-			// maxTheta = Math.max(0, maxTheta - epsilon);
-			// let theta = mag * delta * spd;
-			// theta = Math.min(maxTheta, theta);
-			// this.rotateVel(sign * theta);
 			this.updateSteer(this.steer, delta);
 			this.steer = null;
 		}
@@ -292,5 +282,49 @@ class Ball extends Sprite{
 			this.vy = vy;
 			this.velOverride = null;
 		}
+	}
+
+	//Check if a ball with a certain velocity and radius
+	//will collide with a object's aabb
+	//pass debugGraphics to draw the hitbox
+	static raycastTo(obj, x0, y0, vx, vy, r, debugGraphics){
+		//Step 1: Create a rounded rectangular hitbox
+		//Composed of 2 rectangles and 4 circles
+		let [x1, y1] = obj.getPos();
+		let aabb = obj.getAABB();
+		let w = aabb[2] - aabb[0];
+		let h = aabb[3] - aabb[1];
+
+		let corners = [
+			new CircleShape(x1 - w/2, y1 - h/2, r),
+			new CircleShape(x1 - w/2, y1 + h/2, r),
+			new CircleShape(x1 + w/2, y1 + h/2, r),
+			new CircleShape(x1 + w/2, y1 - h/2, r)
+		];
+		//These two rectangles are arranged in a cross formation
+		let rects = [
+			new RectangleShape(w + 2*r, h),
+			new RectangleShape(w, h + 2*r)
+		];
+		rects[0].moveTo(x1, y1);
+		rects[1].moveTo(x1, y1);
+		//corner circles should be prioritized
+		let shapes = corners.concat(rects);
+
+		if (debugGraphics){
+			for (let shape of shapes)
+				shape.draw(debugGraphics, 0x00FFFF);
+		}
+
+		//Step 2: Find the closest raycast intersection
+		let min = Infinity;
+		for (let shape of shapes){
+			let [check, mag] = shape.raycast(x0, y0, vx, vy);
+			if (check && mag > 0 && mag < min)
+				min = mag;
+		}
+		if (Number.isFinite(min))
+			return [true, min];
+		return [false, null];
 	}
 }

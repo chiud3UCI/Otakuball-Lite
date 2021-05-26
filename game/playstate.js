@@ -132,6 +132,8 @@ class PlayState{
 		else
 			this.setState("intro");
 
+		this.ballCount = 0;
+
 		//create powerup spawner
 		this.powerupSpawner = new PowerupSpawner(
 			0.15,
@@ -309,6 +311,8 @@ class PlayState{
 			//if includeMoving if false, then it will
 			//ignore moving bricks
 			isEmpty(i, j, includeMoving=false){
+				if (!boundCheck(i, j))
+					return false;
 				if (includeMoving && this.grid[i][j].length > 0)
 					return false;
 				for (let br of this.grid[i][j]){
@@ -539,6 +543,9 @@ class PlayState{
 			console.err("invalid name");
 			return;
 		}
+		//limit the number of balls
+		if (name == "balls" && this.ballCount + arr.length >= 100)
+			return;
 		arr.push(obj);
 	}
 
@@ -666,9 +673,6 @@ class PlayState{
 
 
 	loadLevel(level){
-		if (level.slotPowerups)
-			this.slotPowerups = level.slotPowerups;
-
 		let x = DIM.lwallx;
 		let y = DIM.ceiling;
 		let w = DIM.boardw;
@@ -695,13 +699,14 @@ class PlayState{
 			let brickClass = brickClasses[brickType];
 			let pos = getGridPosInv(i, j);
 			let args2 = pos.concat(args);
+			if (brickType == "SlotMachineBrick")
+				args2.push(level.slotPowerups);
 			let br = new brickClass(...args2);
 			if (patch)
 				br.initPatches(patch);
 			this.add("bricks", br);
 		}
 
-		//TODO: Add enemy spawner
 		let enemy = level.enemies;
 		if (!enemy)
 			this.spawner = null;
@@ -947,8 +952,9 @@ class PlayState{
 		}
 
 		//count balls
-		let numBalls = this.balls.children.length;
-		if (numBalls == 0){
+		let ballCount = this.balls.children.length;
+		this.ballCount = ballCount;
+		if (ballCount == 0){
 			let paddle = this.paddles.children[0];
 			paddle.normal();
 

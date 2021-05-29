@@ -135,6 +135,8 @@ class BallProjectile extends Projectile{
 	}
 
 	onSpriteHit(obj, norm, mag){
+		if (this.pierce)
+			return;
 		if (this.bounce === false){
 			this.kill();
 			return;

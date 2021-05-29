@@ -53,14 +53,14 @@ function playSound(name, loop=false){
 	queue.push(instance);
 }
 
-function stopSound(name, single=false){
+function stopSound(name, singleInstance=false){
 	if (!name)
 		return;
 	let queue = soundQueue[name];
 	while (queue.length > 0){
 		let instance = queue.pop();
 		instance.stop();
-		if (single)
+		if (singleInstance)
 			break;
 	}
 }
@@ -101,7 +101,7 @@ function setTexture(sprite, texstr){
 }
 
 //list of all textures to be loaded
-//make sure each name is unique across all folders
+//make sure each filename is unique across all folders
 let recursive_texture_names = [
 	["bricks/", [
 		"main_bricks",
@@ -126,6 +126,7 @@ let recursive_texture_names = [
 
 	["balls/", [
 		"main_balls",
+		"giga_forcefield"
 	]],
 	
 	["etc/", [
@@ -174,6 +175,7 @@ let recursive_texture_names = [
 		"ballcannon_ball",
 		"drill",
 		"missile",
+		"rapid_bullets"
 	]]
 ];
 
@@ -193,6 +195,9 @@ let recursive_sound_names = [
 		"ballcannon_fire",
 		"drill_fire",
 		"drill_explode",
+		"cannon_drumroll",
+		"cannon_fire",
+		"rapidfire_fire"
 	]],
 	["brick/", [
 		"brick_hit",
@@ -220,10 +225,13 @@ let recursive_sound_names = [
 		"split_small",
 		"split_med",
 		"split_large",
+		"ball_generator",
+		"iceball_hit",
 	]],
 	["powerup/", [
 		"acid_collected",
 		"extend_collected",
+		"restrict_collected",
 		"fireball_collected",
 		"generic_collected",
 		"large_ball_collected",
@@ -248,7 +256,8 @@ let recursive_sound_names = [
 		"blackout_collected",
 		"nano_collected",
 		"nano_launch",
-		"catch_collected"
+		"catch_collected",
+		"giga_collected",
 	]],
 	["enemy/", [
 		"enemy_death",
@@ -397,6 +406,8 @@ media.processTextures = function(){
 	partition("main_balls", "ball_main", 7, 7, 1, 1);
 	this.textures["ball_large"] = 
 		this.makeTexture("main_balls", 1, 40, 14, 14);
+	this.textures["ball_small"] = 
+		this.makeTexture("main_balls", 31, 40, 3, 3);
 
 	//split paddle into 3 sections
 	//to allow for paddle elargement
@@ -479,6 +490,8 @@ media.processTextures = function(){
 		this.textures["laser_" + i] = tex;
 	}
 
+	partition("rapid_bullets", "rapid", 10, 15, 2, 0);
+
 	//boulder debris/rocks
 	rects = [
 		[0, 0, 5, 5],
@@ -548,7 +561,8 @@ media.processSounds = function(){
 	};
 
 	setVol("bomber_explode", 0.5);
-
+	setVol("rapidfire_fire", 0.5);
+	setVol("iceball_hit", 0.25);
 }
 
 //some animations may be created outside of this method

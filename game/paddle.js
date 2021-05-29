@@ -21,7 +21,16 @@ class Paddle extends Sprite{
 		this.paddleRects = paddleRects;
 		this.addChild(paddleRects);
 
-		this.resize(80);
+		//paddle width info
+		this.widthInfo = {
+			base: 80,
+			increment: 16, 
+			minIndex: -3,
+			maxIndex: 4
+		};
+		this.resize(this.widthInfo.base);
+		this.widthIndex = 0;
+		
 		this.x = DIM.w/2;
 		this.y = Paddle.baseLine;
 
@@ -108,6 +117,20 @@ class Paddle extends Sprite{
 
 		//width is already defined in PIXI.Sprite
 		this.paddleWidth = width;
+	}
+
+	//resize paddle using fixed increments
+	resize2(index){
+		let info = this.widthInfo;
+		index = Math.max(info.minIndex, Math.min(info.maxIndex, index));
+		let width = info.base + info.increment * index;
+		this.resize(width);
+		this.widthIndex = index;
+		return index;
+	}
+
+	incrementSize(deltaIndex){
+		return this.resize2(this.widthIndex + deltaIndex);
 	}
 
 	normal(){

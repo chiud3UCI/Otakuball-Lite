@@ -280,6 +280,7 @@ f[133] = function(){
 		ball.setSpeed2(ball.getSpeed() + 0.15*4);
 }
 
+//Ball modification
 
 //Acid
 f[0] = function(){
@@ -932,6 +933,7 @@ f[26] = function(){
 let FireBall = class{
 	constructor(ball){
 		this.ball = ball;
+		ball.setTexture("ball_main_1_0");
 	}
 
 	onSpriteHit(obj, norm, mag){
@@ -946,9 +948,163 @@ f[31] = function(){
 	for (let ball of game.get("balls")){
 		if (!ball.components.fireball){
 			ball.normal();
-			ball.setTexture("ball_main_1_0");
 			ball.components.fireball = new FireBall(ball);
 		}
+	}
+}
+
+//Generator Ball
+let GeneratorBall = class{
+	constructor(ball){
+		this.ball = ball;
+		this.babies = new PIXI.Container();
+		this.rechargeBalls();
+		this.ball.addChild(this.babies);
+		this.storedRotation = 0;
+	}
+
+	destructor(){
+		this.ball.removeChild(this.babies);
+	}
+
+	createBaby(){
+		let baby = new BallProjectile(
+			"ball_small", 0, 0, 0, 0);
+		Object.assign(baby, {
+			bounce: true,
+			damage: 0,
+			strength: 0
+		});
+		baby.colFlag.paddle = true;
+		baby.onPaddleHit = function(paddle){
+			this.kill();
+			let ball = new Ball(this.x, this.y, this.vx, this.vy);
+			game.emplace("balls", ball);
+		};
+		baby.scale.set(1);
+		return baby;
+	}
+
+	rechargeBalls(){
+		let babies = this.babies;
+		let n = babies.children.length;
+		if (n == 6)
+			return;
+		playSound("ball_generator");
+		for (let i = n; i < 6; i++){
+			let baby = this.createBaby();
+			babies.addChild(baby);
+		}
+		this.preUpdate(0);
+	}
+
+	onSpriteHit(obj, norm, mag){
+		let babies = this.babies;
+		if (obj.isDead() && babies.children.length > 0){
+			let baby = babies.removeChildAt(babies.children.length-1);
+			baby.scale.set(2);
+			let [x, y] = this.ball.getPos();
+			baby.position.set(x, y);
+			game.emplace("projectiles", baby);
+		}
+	}
+
+	onPaddleHit(paddle){
+		this.rechargeBalls();
+	}
+
+	preUpdate(delta){
+		//You can't rotate the Container because it will
+		//rotate the ball sprites
+		// this.babies.rotation += delta * 0.001;
+		this.storedRotation += delta * 0.001;
+		let rot = this.storedRotation;
+
+		for (let [i, baby] of this.babies.children.entries()){
+			let rad = rot + i * 2 * Math.PI / 6;
+			let [dx, dy] = Vector.rotate(0, 10, rad);
+			baby.position.set(dx, dy);
+			baby.vx = this.ball.vx;
+			baby.vy = this.ball.vy;
+		}
+	}
+}
+f[35] = function(){
+	for (let ball of game.get("balls")){
+		if (!ball.components.generator){
+			ball.normal();
+			ball.components.generator = new GeneratorBall(ball);
+		}
+	}
+}
+
+//Giga
+let Giga = class{
+	constructor(ball){
+		this.ball = ball;
+		let aura = new BallProjectile("giga_forcefield");
+		this.aura = aura;
+		aura.damage = 1000;
+		aura.strength = 2;
+		aura.pierce = "strong";
+		aura.flashTimer = 0;
+		aura.flashPeriod = 150;
+		game.emplace("projectiles", aura);
+	}
+
+	destructor(){
+		this.aura.kill();
+	}
+
+	preUpdate(delta){
+		let aura = this.aura;
+		aura.setPos(...this.ball.getPos());
+		aura.flashTimer += delta;
+		if (aura.flashTimer > aura.flashPeriod){
+			aura.flashTimer -= aura.flashPeriod;
+			aura.visible = !aura.visible;
+		}
+	}
+
+	postUpdate(delta){
+		//will makke sure the aura doesn't "lag" 1 frame behind
+		//the ball if the ball isn't stuck to the paddle
+		let aura = this.aura;
+		aura.setPos(...this.ball.getPos());
+	}
+}
+f[37] = function(){
+	for (let ball of game.get("balls")){
+		if (!ball.components.giga){
+			ball.normal();
+			ball.setTexture("ball_main_1_1");
+			ball.components.giga = new Giga(ball);
+		}
+	}
+	playSound("giga_collected");
+}
+
+//Ice Ball
+let IceBall = class{
+	constructor(ball){
+		this.ball = ball;
+	}
+	onSpriteHit(obj, norm, mag){
+		if (obj.gameType != "brick")
+			return;
+		//create cross-shaped explosion composed of 2 rectangle explosions
+		let e1 = new Explosion(obj.x, obj.y, 32*3-1, 16*1-1, true);
+		let e2 = new Explosion(obj.x, obj.y, 32*1-1, 16*3-1, true);
+		game.emplace("projectiles", e1);
+		game.emplace("projectiles", e2);
+		playSound("iceball_hit");
+	}
+}
+f[45] = function(){
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_2_0");
+		ball.components.iceball = new IceBall(ball);
 	}
 }
 
@@ -1340,6 +1496,50 @@ f[60] = function(){
 	}
 };
 
+//Rapidfire
+let RapidFire = class extends PaddleWeapon{
+	constructor(paddle){
+		super(paddle, "rapidfire");
+		this.maxDelay = 200;
+		this.delay = this.maxDelay;
+		this.maxFlipDelay = 1000;
+		this.flipDelay = this.maxFlipDelay;
+		this.flip = false;
+	}
+
+	update(delta){
+		this.flipDelay -= delta;
+		if (this.flipDelay <= 0){
+			this.flipDelay = this.maxFlipDelay;
+			this.flip = !this.flip;
+		}
+
+		this.delay = Math.max(0, this.delay-delta);
+		if (this.delay > 0 || !mouse.m1)
+			return;
+
+		this.delay = this.maxDelay;
+		let paddle = this.paddle;
+		let off = paddle.paddleWidth/2 - 17;
+		for (let [i, dx] of [-off, off].entries()){
+			if (this.flip)
+				i = 1 - i;
+			let proj = new Projectile(`rapid_${i}`, 0, 0, 0, -1);
+			proj.damage = 5;
+			this.fireProjectile(proj, dx);
+		}
+		playSound("rapidfire_fire");
+	}
+};
+f[89] = function(){
+	playSound("shotgun_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_4_1");
+	paddle.setComponent("weapon", new RapidFire(paddle));
+}
+
+//Shotgun
 let Shotgun = class extends PaddleWeapon{
 	constructor(paddle){
 		super(paddle, "shotgun", 12);
@@ -1733,6 +1933,91 @@ f[4] = function(){
 		"Autopilot", "paddles", "autopilot", "timer");
 }
 
+//Cannon
+let Cannonball = class{
+	constructor(ball){
+		this.ball = ball;
+		ball.setTexture("ball_main_2_9");
+		ball.damage = 1000;
+		ball.strength = 1;
+		ball.pierce = true;
+	}
+
+	preUpdate(delta){
+		this.ball.velOverride = {vx:0, vy:-1};
+	}
+
+	handleCollision(xn, yn){
+		//turn into a fireball
+		let ball = this.ball;
+		ball.normal();
+		ball.components.fireball = new FireBall(ball);
+		let [vx, vy] = ball.getVel();
+		let rad = randRange(-45, 45) * Math.PI / 180;
+		[vx, vy] = Vector.rotate(vx, vy, rad);
+		ball.setVel(vx, vy);
+	}
+}
+let Cannon = class{
+	constructor(paddle){
+		this.paddle = paddle;
+		this.name = "cannon";
+		this.ball = null;
+
+		let stuckBalls = paddle.stuckBalls;
+		if (stuckBalls.length > 0){
+			let [ball, offset] = stuckBalls.pop();
+			this.attachCannonball(ball);
+		}
+
+	}
+
+	attachCannonball(ball){
+		playSound("cannon_drumroll", true);
+		this.ball = ball;
+		ball.normal();
+		ball.components.cannon = new Cannonball(ball);
+		ball.stuckToPaddle = true;
+		ball.setVel(0, -ball.getSpeed());
+	}
+
+	onBallHit(ball){
+		if (this.ball)
+			return;
+		this.attachCannonball(ball);
+	}
+
+	onClick(mouseVal){
+		if (mouseVal != 1 || !this.ball)
+			return;
+
+		let ball = this.ball;
+		ball.stuckToPaddle = false;
+
+		this.paddle.clearPowerups();
+
+		stopSound("cannon_drumroll");
+		playSound("cannon_fire");
+	}
+
+	update(delta){
+		if (!this.ball)
+			return;
+
+		let ball = this.ball;
+		ball.setPos(...this.paddle.getPos());
+	}
+}
+f[13] = function(){
+	let paddle = game.get("paddles")[0];
+	if (paddle.components.subweapon?.name != "cannon"){
+		playSound("cannon_collected");
+		paddle.clearPowerups();
+		paddle.setTexture("paddle_31_1");
+		paddle.setComponent("subweapon", new Cannon(paddle));
+	}
+}
+
 //Catch
 let Catch = class{
 	constructor(paddle){
@@ -1763,7 +2048,7 @@ let HoldOnce = class extends Catch{
 	}
 }
 f[40] = function(){
-	playSound("catch_activated");
+	playSound("catch_collected");
 	let paddle = game.get("paddles")[0];
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_30_1");
@@ -1790,6 +2075,20 @@ f[38] = function(){
 	paddle.setTexture("paddle_18_3");
 	paddle.setComponent("catch", new Glue(paddle));
 };
+
+//Extend
+f[28] = function(){
+	playSound("extend_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.incrementSize(1);
+}
+
+//Restrict
+f[90] = function(){
+	playSound("restrict_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.incrementSize(-1);
+}
 
 /****************
 * Brick-Related *

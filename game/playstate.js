@@ -347,10 +347,20 @@ class PlayState{
 
 	initPowerupButtons(){
 		let powerPanel = new PIXI.Container();
-		powerPanel.x = DIM.rwallx + 30;
-		powerPanel.y = DIM.ceiling + 10;
+		powerPanel.x = DIM.rwallx + 10;
+		powerPanel.y = 0;
 		this.add("hud", powerPanel);
 		this.powerPanel = powerPanel;
+
+		let title = new PIXI.Text("Powerup Spawner", {
+			fontSize: 16,
+			fill: 0x000000,
+			fontWeight: "bold",
+			// wordWrap: true,
+			// wordWrapWidth: 100,
+		});
+		title.position.set(20, 45);
+		powerPanel.addChild(title);
 
 		let buttonOrder = [
 			["Ball Addition", [
@@ -387,8 +397,8 @@ class PlayState{
 		let scale = 1.5;
 		let dx = 16 * scale;
 		let dy = 8 * scale;
-		let x0 = 0;
-		let y0 = 0;
+		let x0 = 20;
+		let y0 = DIM.ceiling - 20;
 		let yoff = 0;
 		this.powerButtons = [];
 		for (let [name, arr] of buttonOrder){
@@ -434,11 +444,19 @@ class PlayState{
 
 	initEnemyButtons(){
 		let panel = new PIXI.Container();
-		panel.x = 10;
-		panel.y = 170;
+		panel.position.set(10, 120);
+
+		let title = new PIXI.Text("Enemy Spawner", {
+			fontSize: 16,
+			fill: 0x000000,
+			fontWeight: "bold"
+		});
+		title.position.set(0, 0);
+		panel.addChild(title);
+
 		for (let i = 0; i < 10; i++){
 			let x = (i % 6) * 24;
-			let y = Math.floor(i/6) * 24;
+			let y = 25 + (Math.floor(i/6) * 24);
 			let butt = new EnemyButton(this, x, y, i);
 			panel.addChild(butt);
 		}

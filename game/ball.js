@@ -160,12 +160,13 @@ class Ball extends Sprite{
 	handleCollision(xn, yn){
 		if (!this.validCollision(xn, yn))
 			return;
-		for (let [key, comp] of Object.entries(this.components))
-			comp.handleCollision?.(xn, yn);
 		let dot = (this.vx*xn) + (this.vy*yn);
 		this.vx -= (2*dot*xn);
 		this.vy -= (2*dot*yn);
 		this.preventLowAngleBounce(xn, yn);
+
+		for (let [key, comp] of Object.entries(this.components))
+			comp.handleCollision?.(xn, yn);
 	}
 
 	//check whether the normal vector and the ball's velocity
@@ -249,14 +250,6 @@ class Ball extends Sprite{
 			this.steer = null;
 		}
 
-		let storedVel;
-		if (this.velOverride){
-			storedVel = {vx: this.vx, vy: this.vy};
-			let {vx, vy} = this.velOverride;
-			this.vx = vx ?? this.vx;
-			this.vy = vy ?? this.vy;
-		}
-
 		if (!this.disableBounce){
 			if (this.y - this.shape.radius > DIM.h && !cheats.disable_pit)
 				this.dead = true;
@@ -274,6 +267,14 @@ class Ball extends Sprite{
 			this.stuckBounceTimer += delta;
 		}
 
+		let storedVel;
+		if (this.velOverride){
+			storedVel = {vx: this.vx, vy: this.vy};
+			let {vx, vy} = this.velOverride;
+			this.vx = vx ?? this.vx;
+			this.vy = vy ?? this.vy;
+		}
+
 		super.update(delta);
 
 		if (this.velOverride){
@@ -282,6 +283,9 @@ class Ball extends Sprite{
 			this.vy = vy;
 			this.velOverride = null;
 		}
+
+		for (let [key, comp] of Object.entries(this.components))
+			comp.postUpdate?.(delta);
 	}
 
 	//Check if a ball with a certain velocity and radius

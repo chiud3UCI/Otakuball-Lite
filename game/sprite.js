@@ -150,6 +150,10 @@ class Sprite extends PIXI.Sprite{
 		this.vy = nvy * spd;
 	}
 
+	getVel(){
+		return [this.vx, this.vy];
+	}
+
 	setVel(vx, vy){
 		this.vx = vx;
 		this.vy = vy;

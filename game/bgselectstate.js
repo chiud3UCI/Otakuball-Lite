@@ -217,7 +217,7 @@ class ColorSlider extends PIXI.Container{
 		});
 		hitbox.updateBar = () => {
 			let mx = mouse.x;
-			let x = hitbox.getGlobalPosition().x;
+			let x = getTrueGlobalPosition(hitbox).x;
 			let dx = mx - x;
 			let ratio = dx / sw;
 			ratio = Math.max(0, Math.min(1, ratio));

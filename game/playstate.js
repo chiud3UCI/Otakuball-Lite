@@ -1,8 +1,26 @@
-
 var cheats = {
-	instant_powerups: false,
-	disable_pit: false,
-	fling_existing: false
+	enabled: true,
+	_disable_pit: false,
+	_instant_powerups: false,
+	_fling_existing: false,
+	_show_forbidden: false,
+	_disable_powerup_spawning: false,
+
+	get disable_pit(){
+		return this.enabled && this._disable_pit;
+	},
+	get instant_powerups(){
+		return this.enabled && this._instant_powerups;
+	},
+	get fling_existing(){
+		return this.enabled && this._fling_existing;
+	},
+	get show_forbidden(){
+		return this.enabled && this._show_forbidden;
+	},
+	get disable_powerup_spawning(){
+		return this.enabled && this._disable_powerup_spawning;
+	},
 }
 
 //I chose to use a class approach instead of a singleton
@@ -14,6 +32,14 @@ class PlayState{
 	//   or a campaign object
 	constructor(mode, arg){
 		this.mode = mode;
+
+		if (mode == "test"){
+			this.prevCheatEnabled = cheats.enabled;
+			cheats.enabled = true;
+		}
+
+		this.windowTitle = "Playing";
+
 		let level;
 		if (mode == "test" || mode == "play")
 			level = arg;
@@ -24,8 +50,8 @@ class PlayState{
 			"background",
 			"game",
 			"walls",
+			"monitors",
 			"hud",
-			"monitors"
 		];
 
 		//these layers will be put inside the game layer
@@ -41,6 +67,7 @@ class PlayState{
 			"powerups",
 			"enemies",
 			"menacers",
+			"ball_underlay",
 			"balls",
 		]
 		this.activeLayers = gameLayerNames;
@@ -65,9 +92,10 @@ class PlayState{
 
 		this.bricks.sortableChildren = true;
 		//apply mask to bricks only?
-		this.bricks.mask = new PIXI.Graphics()
-			.beginFill(0xFFFFFF)
-			.drawRect(DIM.lwallx, DIM.ceiling, DIM.boardw, DIM.boardh);
+		//TODO: Make sure this mask stays on after
+		//The INTRO SWEEPER disappears
+		this.bricks.mask =
+			new Mask(DIM.lwallx, DIM.ceiling, DIM.boardw, DIM.boardh);
 
 		//callbacks are special because they're not sprites
 		this.callbacks = [];
@@ -190,9 +218,10 @@ class PlayState{
 		this.add("hud", livesDisplay);
 		this.livesDisplay = livesDisplay;
 		this.updateLivesDisplay();
+		this.initOtherInfo();
 
-		//testing mode
-		if (mode == "test"){
+		//testing/cheat stuff
+		if (cheats.enabled){
 			this.initPowerupButtons();
 			this.initEnemyButtons();
 			this.initCheckboxes();
@@ -200,6 +229,19 @@ class PlayState{
 		}
 
 		this.stateName = "playstate";
+	}
+
+	destructor(){
+		if (this.mode == "test"){
+			cheats.enabled = this.prevCheatEnabled;
+		}
+		stopAllSounds();
+	}
+
+	//Either pops itself or replace itself with a new
+	//PlayState with the next level
+	nextLevel(){
+		game.pop();
 	}
 
 	initBrickGrid(){
@@ -322,7 +364,7 @@ class PlayState{
 				return true;
 			},
 
-			//adds a Null Brick that disappears by the next frame
+			//inserts a Null Brick that disappears by the next frame
 			reserve(i, j){
 				let [x, y] = getGridPosInv(i, j);
 				let br = new NullBrick(x, y);
@@ -444,7 +486,7 @@ class PlayState{
 
 	initEnemyButtons(){
 		let panel = new PIXI.Container();
-		panel.position.set(10, 120);
+		panel.position.set(10, 150);
 
 		let title = new PIXI.Text("Enemy Spawner", {
 			fontSize: 16,
@@ -464,43 +506,46 @@ class PlayState{
 	}
 
 	initCheckboxes(){
+		let ps = this;
 		let x = 20;
 		let y = DIM.ceiling + 150;
+		function create(dy, var_name, text, font_size=16, func=null){
+			var_name = "_" + var_name;
+			let curr_val = cheats[var_name];
+			let func2 = function(val){
+				cheats[var_name] = val;
+				func?.();
+			};
+			let cb = new Checkbox(x, y, text, curr_val, func2);
+			cb.label.style.fontSize = font_size;
+			ps.add("hud", cb);
+			y += dy;
+		}
+
 		let text = "Disable Pit";
-		let val = cheats.disable_pit;
-		let func = function(state){
-			cheats.disable_pit = state;
-		};
-		let cb = new Checkbox(x, y, text, val, func);
-		this.add("hud", cb);
+		create(25, "disable_pit", text);
 
-		x = 20;
-		y += 25;
 		text = "Instant Powerups";
-		val = cheats.instant_powerups;
-		func = function(state){
-			cheats.instant_powerups = state;
-		};
-		cb = new Checkbox(x, y, text, val, func);
-		this.add("hud", cb);
+		create(25, "instant_powerups", text);
 
-		x = 20;
-		y += 25;
 		text = "ON: Fling Existing Ball";
 		text += "\nOFF: Fling New Ball";
 		text += "\n(Right Click to Fling)";
-		val = cheats.fling_existing;
-		func = function(state){
-			cheats.fling_existing = state;
-		};
-		cb = new Checkbox(x, y, text, val, func);
-		cb.label.style.fontSize = 12;
-		this.add("hud", cb);
-	}
+		create(50, "fling_existing", text, 12);
 
-	destructor(){
-		PIXI.sound.stopAll();
-		clearSoundQueue();
+		text = "Show Forbidden Bricks";
+		create(25, "show_forbidden", text, 12, () => {
+			if (game.top.stateName == "playstate"){
+				for (let br of game.get("bricks")){
+					if (br.brickType == "forbidden")
+						br.updateAppearance();
+				}
+			}
+		});
+
+		text = "Disable Normal Brick";
+		text += "\nPowerup Drops";
+		create(50, "disable_powerup_spawning", text, 12);
 	}
 
 	//score has 8 digits
@@ -553,12 +598,48 @@ class PlayState{
 		}
 	}
 
+	initOtherInfo(){
+		let info = new PIXI.Container();
+		info.position.set(10, 105);
+		this.info = info;
+		this.add("hud", info);
+		info.add = function(name, obj){
+			this[name] = obj;
+			this.addChild(obj);
+		};
+		let create = (x, y) => 
+			printText("", "windows", 0x000000, 1, x, y);
+
+		info.add("ball_count", create(0, 0));
+		info.add("ball_speed", create(0, 15));
+		info.add("bricks", create(0, 30));
+
+		this.updateOtherInfo();
+	}
+
+	//remaining bricks will be calculated before-hand
+	updateOtherInfo(remaining=0){
+		let info = this.info;
+
+		let balls = this.get("balls");
+
+		let count = balls.length;
+		let speed = 0;
+		for (let ball of balls)
+			speed = Math.max(speed, ball.getSpeed());
+		speed = Math.floor(speed * 1000);
+
+		info.ball_count.text = "# balls:  " + count;
+		info.ball_speed.text = "ball speed:  " + speed;
+		info.bricks.text = "remaining bricks:  " + remaining;
+	}
+
 	//adds objects at the bottom of the update loop
 	//so it doesn't cause any problems with iteration
 	emplace(name, obj){
 		let arr = this.newObjects[name];
 		if (arr === undefined){
-			console.err("invalid name");
+			console.error("invalid name");
 			return;
 		}
 		//limit the number of balls
@@ -821,9 +902,9 @@ class PlayState{
 	}
 
 	//generator
-	*activeBalls(){
+	*activeBalls(including_parachute=false){
 		for (let ball of this.balls.children){
-			if (ball.isActive())
+			if (ball.isActive() || (including_parachute && ball.parachute))
 				yield ball;
 		}
 	}
@@ -832,7 +913,8 @@ class PlayState{
 	//due to spatial partitioning
 	collideBrick(objType){
 		let arr = (objType == "balls") ?
-			this.activeBalls() : this[objType].children;
+			this.activeBalls() : 
+			this[objType].children;
 
 		let brickGrid = this.brickGrid;
 		for (let obj of arr){
@@ -849,7 +931,8 @@ class PlayState{
 
 	collide(projType, recieveType){
 		let arr1 = (projType == "balls") ?
-			this.activeBalls() : this[projType].children;
+			this.activeBalls(recieveType == "paddles") : 
+			this[projType].children;
 
 		let arr2 = this[recieveType].children;
 
@@ -884,8 +967,10 @@ class PlayState{
 			return;
 		}
 
-		if (!this.updateState(delta))
+		if (!this.updateState(delta)){
+			playQueuedSounds();
 			return;
+		}
 		
 		//update Brick Grid
 		this.brickGrid.refresh();
@@ -936,7 +1021,7 @@ class PlayState{
 			let cont = this[name];
 			let dead = [];
 			for (let obj of cont.children){
-				if (obj.isDead())
+				if (obj.shouldBeRemoved())
 					dead.push(obj);
 			}
 			for (let obj of dead){
@@ -983,8 +1068,50 @@ class PlayState{
 				this.setState("death");
 		}
 
-		if (this.mode == "test")
+		//count remaining essential bricks
+		let remaining = 0;
+		for (let br of this.get("bricks")){
+			if (br.essential)
+				remaining++;
+		}
+
+		if (this.mode == "play" && remaining == 0)
+			this.setState("victory");
+
+		//update other info
+		this.updateOtherInfo(remaining);
+
+		if (cheats.enabled)
 			this.ballFling();
+
+		//activate queued sounds
+		playQueuedSounds();
+
+		// this.shockifyTest(delta);
+	}
+
+	shockifyTest(delta){
+		if (!this.shock){
+			this.shock = new PIXI.Graphics();
+			this.stage.addChild(this.shock);
+			this.shockTimer = 0;
+			this.maxShockTimer = 1/30 * 1000;
+		}
+		this.shockTimer -= delta;
+		if (this.shockTimer <= 0){
+			this.shockTimer += this.maxShockTimer;
+			this.shock.clear();
+			let colors = [0xFFFFFF, 0xFFFF00, 0x00FFFF];
+			for (let color of colors){
+				shockify(this.shock,
+					DIM.lwallx + 20, DIM.h/2 + 100,
+					DIM.rwallx - 20, DIM.h/2,
+					{
+						color: color,
+					}
+				);
+			}
+		}
 	}
 }
 
@@ -1032,10 +1159,10 @@ PlayState.states = {
 			ps.walls.addChild(sweeper);
 			this.sweeper = sweeper;
 
-			let mask = new PIXI.Graphics()
-				.beginFill(0xFFFFFF)
-				.drawRect(DIM.lwallx, DIM.ceiling, DIM.boardw, 0);
-			ps.bricks.mask = mask;
+			this.oldBrickMask = ps.bricks.mask;
+			this.sweeperMask = new Mask(
+				DIM.lwallx, DIM.ceiling, DIM.boardw, 0);
+			ps.bricks.mask = this.sweeperMask;
 
 			ps.border.visible = false;
 			for (let gate of ps.gates)
@@ -1050,7 +1177,7 @@ PlayState.states = {
 				gate.visible = true;
 			ps.borders.removeChild(...this.introBorders);
 			ps.walls.removeChild(this.sweeper);
-			ps.bricks.mask = null;
+			ps.bricks.mask = this.oldBrickMask;
 		}
 		update(delta){
 			let ps = this.ps;
@@ -1083,14 +1210,12 @@ PlayState.states = {
 				}
 
 				if (sweeper.vy > 0){
-					ps.bricks.mask.clear()
-						.beginFill(0xFFFFFF)
-						.drawRect(
-							DIM.lwallx, 
-							DIM.ceiling, 
-							DIM.boardw,
-							sweeper.y - DIM.ceiling
-						);
+					this.sweeperMask.resize(
+						DIM.lwallx,
+						DIM.ceiling,
+						DIM.boardw,
+						sweeper.y - DIM.ceiling
+					);
 					if (sweeper.y > DIM.height)
 						ps.setState("respawn");
 				}
@@ -1254,7 +1379,7 @@ PlayState.states = {
 					w += delta*dp.growVel + delta*delta*dp.growAccel;
 					dp.growVel += delta*dp.growAccel;
 					w = Math.max(40, w);
-					dp.resize(w);
+					dp._setWidth(w);
 				}
 				else{
 					dp.shakeTimer += delta;
@@ -1329,11 +1454,58 @@ PlayState.states = {
 			this.text = text;
 		}
 		destructor(){
+			let ps = this.ps;
 			ps.paddles.visible = true;
 			ps.balls.visible = true;
 			ps.hud.removeChild(this.text);
 		}
 		update(delta){
+			return false;
+		}
+	},
+
+	victory: class{
+		constructor(ps){
+			this.ps = ps;
+
+			this.blackoutDelay = 2000;
+			this.blackoutTimerMax = 1000;
+			this.blackoutTimer = this.blackoutTimerMax;
+
+			let text = printText("ROUND CLEAR",
+				"arcade", 0xFFFFFF, 2, DIM.w/2, DIM.h*3/4);
+			text.anchor.set(0.5, 0.5);
+			ps.hud.addChild(text);
+			this.text = text;
+
+			let black = new PIXI.Graphics();
+			black.beginFill(0x000000);
+			black.drawRect(0, 0, DIM.w, DIM.h);
+			black.alpha = 0;
+			ps.add("hud", black);
+			this.blackout = black;
+		}
+		destructor(){
+			let ps = this.ps;
+			ps.hud.removeChild(this.text);
+		}
+
+		update(delta){
+			if (this.blackoutDelay > 0){
+				this.blackoutDelay -= delta;
+				return false;
+			}
+
+			if (this.blackoutTimer > 0){
+				this.blackoutTimer -= delta;
+				let alpha = this.blackoutTimer/this.blackoutTimerMax;
+				alpha = Math.max(0, Math.min(1, 1-alpha));
+				this.blackout.alpha = alpha;
+				return false;
+			}
+
+			this.ps.nextLevel();
+
 			return false;
 		}
 	}
@@ -1660,7 +1832,7 @@ class EnemyButton extends PlayButton{
 	
 }
 
-//TODO: move this to a separate file
+//TODO: move this to gui.js
 class Checkbox extends PIXI.Container{
 	constructor(x, y, text, initialValue, func){
 		super();

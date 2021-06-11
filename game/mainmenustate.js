@@ -116,6 +116,8 @@ class MainMenuState{
 		makeButton("menu_button_5", "Level Editor", function(){
 			game.push(new EditorState());
 		});
+
+		this.windowTitle = "Title Screen";
 	}
 
 	add(name, obj){

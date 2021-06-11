@@ -16,12 +16,12 @@ class Projectile extends Sprite{
 		}
 		//pierce can be false, true, or "strong"
 		this.pierce = false;
-		//lifespan in milliseconds
-		this.timer = null;
+
 		this.wallCheck = true;
 		this.floorCheck = true;
 
 		this.gameType = "projectile";
+		this.projectileType = "projectile";
 	}
 
 	destructor(){
@@ -58,16 +58,6 @@ class Projectile extends Sprite{
 	onPaddleHit(paddle){
 		this.kill();
 	}
-
-	update(delta){
-		if (this.timer !== null){
-			this.timer -= delta;
-			if (this.timer <= 0)
-				this.kill();
-		}
-
-		super.update(delta);
-	}
 }
 
 function freezeBrick(brick){
@@ -89,6 +79,7 @@ class Explosion extends Projectile{
 		this.damage = 100;
 		this.strength = 1;
 		this.freeze = freeze;
+		this.projectileType = "explosion";
 	}
 
 	isDead(){
@@ -123,6 +114,7 @@ class BallProjectile extends Projectile{
 		this.wallCheck = false;
 		this.floorCheck = true;
 		this.radius = this.shape.radius;
+		this.projectileType = "ballprojectile";
 	}
 
 	//false, "weak", true(strong)

@@ -29,6 +29,7 @@ class Brick extends Sprite{
 		this.health = 10;
 		this.armor = 0;
 		this.score = 20;
+		this.essential = true;
 		this.suppress = false;
 
 		this.hitSound = "brick_armor";
@@ -71,6 +72,10 @@ class Brick extends Sprite{
 			this.addChild(laserShield);
 			this.patch.antilaser = true;
 		}
+
+		//regen
+		if (p[7] === 0)
+			this.initRegenPatch();
 	}
 
 	initShield(dir){
@@ -106,6 +111,60 @@ class Brick extends Sprite{
 			this.patch.storedMove = move;
 		else
 			this.patch.move = move;
+	}
+
+	initRegenPatch(){
+		this.essential = false;
+		let mask = new Sprite("brick_regen_mask_8");
+		mask.scale.set(1);
+		let spd = 0.25;
+		mask.regen = {
+			aniDelay: 1000 / (60 * spd),
+			aniTimer: 1000 / (60 * spd),
+			delay: 1000,
+			timer: 0,
+			index: 8,
+			baseHealth: this.health,
+			healthFlag: false,
+			hasStarted: false,
+		};
+		let brick = this;
+		mask.startRegen = function(){
+			let regen = this.regen;
+			if (regen.hasStarted)
+				return;
+			regen.hasStarted = true;
+			regen.index = 0;
+			this.setTexture("brick_regen_mask_0");
+			regen.timer = regen.delay;
+			regen.aniTimer = 0;
+			regen.healthFlag = false;
+			brick.onDeath();
+		};
+		mask.updateRegen = function(delta){
+			let regen = this.regen;
+			if (regen.index == 8)
+				return;
+			regen.timer -= delta;
+			if (regen.timer > 0)
+				return;
+			if (!regen.healthFlag){
+				regen.healthFlag = true;
+				regen.hasStarted = false;
+				brick.health = regen.baseHealth;
+			}
+			regen.aniTimer -= delta;
+			if (regen.aniTimer > 0)
+				return;
+			
+			regen.aniTimer += regen.aniDelay;
+			regen.index++;
+			let tex = `brick_regen_mask_${regen.index}`;
+			this.setTexture(tex);
+		};
+		this.addChild(mask);
+		this.mask = mask;
+		this.regenMask = mask;
 	}
 
 	onDeath(){
@@ -150,11 +209,25 @@ class Brick extends Sprite{
 				}
 			}
 		},
+		//kill any brick it overlaps
+		kill(brick){
+			let grid = game.top.brickGrid;
+			let [i, j] = getGridPos(brick.x, brick.y);
+			if (!boundCheck(i, j)){
+				brick.kill();
+				return;
+			}
+			for (let br of grid.get(i, j)){
+				if (br != brick && !br.isMoving())
+					br.kill();
+			}
+		}
 	};
 
 	//x and y are the destination coordinates
 	//mode can either be "speed" or "time"
-	//onComplete can either be a string or function
+	//onComplete can either be a string from Brick.travelComplete
+	//or a custom function
 	setTravel(x, y, mode="speed", value=0.5, onComplete="default"){
 		if (this.patch.move || this.patch.storedMove)
 			return;
@@ -279,6 +352,8 @@ class Brick extends Sprite{
 
 	//extra checking for ball collisions
 	checkSpriteHit(obj, overlapCheck=true){
+		if (this.regenMask && this.health <= 0)
+			return [false];
 		let resp = super.checkSpriteHit(obj);
 		if (!resp[0])
 			return [false];
@@ -314,10 +389,18 @@ class Brick extends Sprite{
 			this.health -= damage;
 			this.damaged = true;
 		}
-		if (this.health <= 0)
+		if (this.health <= 0){
 			playSound(this.deathSound);
+			this.regenMask?.startRegen();
+		}
 		else
 			playSound(this.hitSound);
+	}
+
+	shouldBeRemoved(){
+		if (this.regenMask)
+			return false;
+		return super.shouldBeRemoved();
 	}
 
 	isDead(){
@@ -326,6 +409,7 @@ class Brick extends Sprite{
 
 	kill(){
 		this.health = 0;
+		this.regenMask?.startRegen();
 	}
 
 	update(delta){
@@ -337,6 +421,7 @@ class Brick extends Sprite{
 			else
 				this.overlap.delete(obj);
 		}
+		this.regenMask?.updateRegen(delta);
 		super.update(delta);
 	}
 }
@@ -344,6 +429,8 @@ class Brick extends Sprite{
 class NullBrick extends Brick{
 	constructor(x, y){
 		super("brick_invis", x, y);
+		this.essential = false;
+		this.brickType = "null";
 	}
 
 	isDead(){
@@ -360,6 +447,17 @@ class ForbiddenBrick extends Brick{
 		super("brick_invis", x, y);
 		this.health = 1000;
 		this.armor = 10;
+		this.score = 0;
+		this.essential = false;
+		this.brickType = "forbidden";
+
+		this.updateAppearance();
+	}
+
+	updateAppearance(){
+		this.setTexture(
+			cheats.show_forbidden ? "brick_main_12_12" : "brick_invis"
+		);
 	}
 
 	checkSpriteHit(obj){
@@ -372,8 +470,9 @@ class GhostBrick extends Brick{
 		super("brick_invis", x, y);
 		this.health = 1000;
 		this.armor = 2;
-
+		this.essential = false;
 		this.addAnim("shine", "ghost_shine", 0.25);
+		this.brickType = "ghost";
 	}
 
 	takeDamage(damage, strength){
@@ -385,16 +484,18 @@ class GhostBrick extends Brick{
 class NormalBrick extends Brick{
 	//return arguments for a random colored brick
 	static randomColor(){
-		let n = randRange(0, 123+1);
+		let n = randRange(0, 123);
 		let i = n % 6;
 		let j = Math.floor(n / 6);
 		return [i, j];
 	}
 
-	constructor(x, y, i, j){
+	constructor(x, y, i=null, j=null){
+		if (i === null)
+			[i, j] = NormalBrick.randomColor();
 		let tex = "brick_main_" + i + "_" + j;
 		super(tex, x, y);
-		this.normalInfo = {i, j};
+		this.normalInfo = [i, j];
 
 		this.brickType = "normal";
 	}
@@ -527,6 +628,7 @@ class GoldBrick extends Brick{
 		this.health = 100;
 		this.armor = 1;
 		this.points = 500;
+		this.essential = false;
 
 		this.addAnim("shine", "brick_shine_3", 0.25);
 		this.addAnim("plated_shine", "brick_shine_10", 0.25);
@@ -556,6 +658,7 @@ class PlatinumBrick extends Brick{
 		this.health = 100;
 		this.armor = 2;
 		this.points = 500;
+		this.essential = false;
 
 		this.addAnim("shine", "brick_shine_13", 0.25);
 
@@ -579,6 +682,7 @@ class SpeedBrick extends Brick{
 			this.health = 100;
 			this.armor = 1;
 			this.points = 500;
+			this.essential = false;
 			let j = fast ? 11 : 12;
 			let anistr = "brick_shine_" + j;
 			this.addAnim("shine", anistr, 0.25);
@@ -614,6 +718,7 @@ class CopperBrick extends Brick{
 		this.health = 100;
 		this.armor = 1;
 		this.points = 500;
+		this.essential = false;
 
 		this.addAnim("shine", "brick_shine_14", 0.25);
 
@@ -718,6 +823,7 @@ class OneWayBrick extends Brick{
 		super(`brick_main_${i}_${j}`, x, y);
 		this.health = 1000;
 		this.armor = 10;
+		this.essential = false;
 		this.norm = [xn, yn];
 
 		this.disableOverlapCheck = true;
@@ -759,6 +865,9 @@ class ConveyorBrick extends Brick{
 		let [i, xn, yn] = ConveyorBrick.data[dir];
 		let j = speedLevel;
 		super(`brick_main_${i}_${21+j}`, x, y);
+
+		this.essential = false;
+
 		let [mag, anispd] = ConveyorBrick.speeds[speedLevel];
 		this.steerArgs = [xn, yn, mag, 0.01];
 
@@ -790,6 +899,7 @@ class FunkyBrick extends Brick{
 		super(tex, x, y);
 		this.health = (level + 2) * 10;
 		this.storedHealth = this.health;
+		this.essential = false;
 
 		this.storedTexture = tex;
 		this.isRegenerating = false;
@@ -864,6 +974,7 @@ class ShooterBrick extends FunkyBrick{
 		this.health = 100;
 		this.armor = 2;
 		this.points = 500;
+		this.essential = false;
 		this.storedHealth = this.health;
 		this.level = level;
 
@@ -1051,6 +1162,16 @@ class IceBrick extends GlassBrick{
 			makeSprite("brick_main_7_4", 1, -8, -4));
 		this.brickType = "ice";
 	}
+
+	onSpriteHit(obj, norm, mag){
+		//ignore any freezing explosions
+		if (obj.gameType == "projectile" &&
+			obj.projectileType == "explosion"){
+			if (obj.freeze)
+				return;
+		}
+		super.onSpriteHit(obj, norm, mag);
+	}
 }
 
 class AlienBrick extends Brick{
@@ -1194,8 +1315,7 @@ class RainbowBrick extends Brick{
 
 		for (let [i, j] of empty){
 			let [x, y] = getGridPosInv(i, j);
-			let [ni, nj] = NormalBrick.randomColor();
-			let br = new NormalBrick(this.x, this.y, ni, nj);
+			let br = new NormalBrick(this.x, this.y);
 			br.zIndex = -1;
 			br.setTravel(x, y, "time", 250);
 			game.emplace("bricks", br);
@@ -1210,6 +1330,7 @@ class GateBrick extends Brick{
 		super(tex, x, y);
 		this.health = 1000;
 		this.armor = 1000;
+		this.essential = false;
 		this.gateId = gateId;
 		this.exitOnly = exitOnly;
 
@@ -1364,6 +1485,12 @@ class CometBrick extends Brick{
 		comet.emitterTimer = 0;
 		comet.emitterDelay = 10;
 
+		//give horizontal comets a shorter hitbox
+		//the reason why this rectangle is like this is
+		//because the original comet is vertical
+		if (dir == "left" || dir == "right")
+			comet.setShape(new RectangleShape(12, 32));
+
 		comet.update = function(delta){
 			this.emitterTimer -= delta;
 			if (this.emitterTimer <= 0){
@@ -1466,6 +1593,7 @@ class TikiBrick extends Brick{
 		super("brick_main_8_11", x, y);
 		this.health = 100;
 		this.armor = 1;
+		this.essential = false;
 		this.hitCount = 0;
 
 		this.addAnim("shine", "tiki_shine", 0.25);
@@ -1575,6 +1703,7 @@ class SwitchBrick extends Brick{
 		this.texOn = tex1;
 		this.health = 1000;
 		this.armor = 2;
+		this.essential = false;
 		this.brickType = "switch";
 	}
 
@@ -1640,6 +1769,7 @@ class StrongFlipBrick extends Brick{
 		this.texOn = tex1;
 		this.health = 100;
 		this.armor = 1;
+		this.essential = false;
 
 		let anistr = `brick_shine_${15+switchId}`;
 		this.addAnim("shine", anistr, 0.25);
@@ -1686,6 +1816,7 @@ class OnixBrick extends Brick{
 		this.setShape(new PolygonShape(points));
 		this.health = 100;
 		this.armor = 1;
+		this.essential = false;
 
 		let anistr = `onix_shine_${n}`;
 		this.addAnim("shine", anistr, 0.25);
@@ -1783,8 +1914,7 @@ class FactoryBrick extends Brick{
 			return;
 		this.cooldown = 500;
 
-		let [ni, nj] = NormalBrick.randomColor();
-		let br = new NormalBrick(this.x, this.y, ni, nj);
+		let br = new NormalBrick(this.x, this.y);
 		let dat = {
 			//dir: [di, dj, dx, dy]
 			up:    [ 1,  0,   0,  16],
@@ -1965,10 +2095,7 @@ class SlotMachineBrick extends Brick{
 		powerups.addChild(this.top, this.bottom);
 		this.setTurn();
 
-		let mask = new PIXI.Graphics()
-			.beginFill(0xFFFFFF)
-			.drawRect(this.x-16, this.y-8, 32, 16);
-		powerups.mask = mask;
+		powerups.mask = new Mask(this.x-16, this.y-8, 32, 16);
 		this.addChild(powerups);
 
 		let j = isYellow ? 1 : 0;
@@ -2183,6 +2310,74 @@ class TwinLauncherBrick extends Brick{
 }
 
 class ParachuteBrick extends Brick{
+	static Parachute = class{
+		constructor(ball){
+			this.ball = ball;
+			ball.setVel(0, ball.getSpeed());
+			this.speed = 0.15; //0.2
+
+			this.frames = [2, 3, 4, 3, 2, 1, 0, 1];
+			this.index = 0;
+			this.aniDelay = 250;
+			this.aniTimer = this.aniDelay;
+			this.pos = [ball.x, ball.y];
+			let off = {
+				2: [0, 0],
+				1: [-4, -2],
+				0: [-8, -4]
+			};
+			off[3] = [-off[1][0], off[1][1]];
+			off[4] = [-off[0][0], off[0][1]];
+			this.off = off;
+
+			let para = new Sprite("parachute_2");
+			para.setPos(ball.x, ball.y);
+			this.paraSprite = para;
+			game.emplace("ball_underlay", para);
+		}
+
+		destructor(){
+			// let ball = this.ball;
+			// ball.moveTo(...this.pos);
+			this.paraSprite.kill();
+		}
+
+		update(delta){
+			let ball = this.ball;
+			let pos = this.pos;
+			pos[1] += this.speed * delta;
+			let r = ball.shape.radius;
+
+			let disable_pit = cheats.disable_pit;
+			if ((disable_pit && pos[1] + r > DIM.h) ||
+				(!disable_pit && pos[1] - r > DIM.h))
+			{
+				this.destructor();
+				delete ball.parachute;
+				return;
+			}
+
+			let para = this.paraSprite;
+			let frames = this.frames;
+			para.setPos(pos[0], pos[1] - 16);
+			this.aniTimer -= delta;
+			if (this.aniTimer <= 0){
+				this.aniTimer += this.aniDelay;
+				this.index = (this.index + 1) % frames.length;
+				let tex = "parachute_" + frames[this.index];
+				para.setTexture(tex);
+			}
+			//animation
+			let off = this.off[frames[this.index]];
+			ball.moveTo(pos[0] + off[0], pos[1] + off[1]);
+		}
+
+		onPaddleHit(){
+			this.destructor();
+			delete this.ball.parachute;
+		}
+	};
+
 	constructor(x, y){
 		super("brick_main_9_7", x, y);
 		this.brickType = "parachute";
@@ -2191,9 +2386,12 @@ class ParachuteBrick extends Brick{
 	onSpriteHit(obj, norm, mag){
 		super.onSpriteHit(obj, norm, mag);
 		if (obj.gameType == "ball"){
-			console.log("Implement Parachute Later");
+			let ball = obj;
+			if (!ball.parachute)
+				ball.parachute = new ParachuteBrick.Parachute(ball);
 		}
 	}
+
 }
 
 class SplitBrick extends Brick{

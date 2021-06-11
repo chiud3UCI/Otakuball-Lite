@@ -82,6 +82,10 @@ class Ball extends Sprite{
 		return ball;
 	}
 
+	get radius(){
+		return this.shape.radius;
+	}
+
 	//check to see if ball should freely move and collide with
 	//the other game objects
 	isActive(){
@@ -91,7 +95,7 @@ class Ball extends Sprite{
 		}
 		return !(
 			this.stuckToPaddle ||
-			this.parachuting ||
+			this.parachute ||
 			this.teleporting
 		)
 	}
@@ -100,10 +104,12 @@ class Ball extends Sprite{
 	normal(){
 		this.setTexture("ball_main_0_0");
 		this.tint = 0xFFFFFF;
+		this.alpha = 1;
 		this.createShape(true);
 
 		this.damage = 10;
 		this.strength = 0;
+		this.intangible = false;
 
 		this.pierce = false;
 
@@ -206,6 +212,9 @@ class Ball extends Sprite{
 	//due to ball-paddle collision behavior being radically different
 	onPaddleHit(paddle){
 		this.stuckBounceTimer = 0;
+		
+		if (this.parachute)
+			this.parachute.onPaddleHit();
 
 		for (let [key, comp] of Object.entries(this.components))
 			comp.onPaddleHit?.(paddle);
@@ -238,6 +247,9 @@ class Ball extends Sprite{
 		//the ball is stuck to the paddle
 		for (let [key, comp] of Object.entries(this.components))
 			comp.preUpdate?.(delta);
+
+		if (this.parachute)
+			this.parachute.update(delta);
 
 		if (!this.isActive())
 			return;

@@ -65,6 +65,8 @@ class PowerupSpawner{
 	//randomly decide if powerup should spawn
 	//will be false if all weights are 0
 	canSpawn(){
+		if (cheats.disable_powerup_spawning)
+			return false;
 		return (
 			this.sum > 0 &&
 			Math.random() < this.globalRate
@@ -128,7 +130,7 @@ class Powerup extends Sprite{
 		this.dead = true;
 		let func = powerupFunc[this.id];
 		if (func)
-			func();
+			func(this);
 		else
 			console.log("powerup " + this.id + " not implemented");
 
@@ -164,6 +166,10 @@ class Powerup extends Sprite{
 	// 	this.drawHitbox();
 	// }
 }
+
+//Powerup Ordering:
+//	Although most will be ordered alphabetically, 
+//  Similar ones will be grouped together
 
 //Catagories:
 //	Ball Addition
@@ -313,10 +319,7 @@ let Antigravity = class{
 			this.ball.normal();
 	}
 };
-
 f[1] = function(){
-	// playSound("generic_collected");
-
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.components.antigravity = new Antigravity(ball);
@@ -326,10 +329,33 @@ f[1] = function(){
 		"Antigravity", "balls", "antigravity", "timer");
 };
 
+//Gravity
+let Gravity = class{
+	constructor(ball){
+		this.ball = ball;
+		this.timer = 10000;
+	}
+	update(delta){
+		this.ball.setSteer(0, 1, 0.005);
+		this.timer -= delta;
+		if (this.timer <= 0)
+			this.ball.normal();
+	}
+};
+f[39] = function(){
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.components.gravity = new Gravity(ball);
+	}
+	game.top.createMonitor(
+		"Gravity", "balls", "gravity", "timer");
+};
+
 //Attract
 let Attract = class{
 	constructor(ball){
 		this.ball = ball;
+		this.strength = 0.005;
 	}
 	update(delta){
 		let ball = this.ball;
@@ -349,7 +375,7 @@ let Attract = class{
 		let dx = closest.x - ball.x;
 		let dy = closest.y - ball.y;
 		let [tx, ty] = Vector.normalize(dx, dy);
-		ball.setSteer(tx, ty, 0.005);
+		ball.setSteer(tx, ty, this.strength);
 	}
 };
 
@@ -437,7 +463,7 @@ let Bomber = class{
 	}
 	destructor(){
 		this.ball.removeChild(this.fuse);
-		stopSound("bomber_fuse", true);
+		stopSound("bomber_fuse");
 	}
 	//return array of any extra args after ball
 	getArgs(){
@@ -1077,6 +1103,8 @@ f[37] = function(){
 	for (let ball of game.get("balls")){
 		if (!ball.components.giga){
 			ball.normal();
+			ball.damage = 1000;
+			ball.strength = 2;
 			ball.setTexture("ball_main_1_1");
 			ball.components.giga = new Giga(ball);
 		}
@@ -1084,19 +1112,99 @@ f[37] = function(){
 	playSound("giga_collected");
 }
 
+//Halo
+let Halo = class{
+	constructor(ball){
+		this.ball = ball;
+		this.hasDamagedBrick = true;
+		this.active = false;
+		this.activate();
+	}
+
+	//prevent Halo from activating again if the ball
+	//hasn't damaged any bricks between activations
+	activate(){
+		if (this.active || !this.hasDamagedBrick)
+			return;
+
+		this.active = true;
+		let ball = this.ball;
+		ball.alpha = 0.5;
+		ball.intangible = true;
+		this.hasDamagedBrick = false;
+	}
+
+	deactivate(){
+		if (!this.active)
+			return;
+
+		this.active = false;
+		let ball = this.ball;
+		ball.alpha = 1;
+		ball.intangible = false;
+	}
+
+	onPaddleHit(paddle){
+		this.activate();
+	}
+
+	onSpriteHit(obj, norm, mag){
+		if (obj.gameType != "brick")
+			return;
+
+		let br = obj;
+		if (br.armor <= 0)
+			this.hasDamagedBrick = true;
+	}
+
+	//become tangible once ball is traveling downwards and
+	//is not overlapping any bricks
+	update(delta){
+		let ball = this.ball;
+		if (!this.active || ball.vy <= 0)
+			return;
+
+		let grid = game.top.brickGrid;
+		for (let br of grid.getBucket(ball)){
+			let arr = br.checkCollision(ball);
+			if (arr[0])
+				return;
+		}
+
+		this.deactivate();
+	}
+}
+f[42] = function(){
+	playSound("halo_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.components.halo = new Halo(ball);
+	}
+}
+
 //Ice Ball
 let IceBall = class{
 	constructor(ball){
 		this.ball = ball;
 	}
+	//component.onSpriteHit will not activate if the ball
+	//pierced through a brick (such as an Ice Brick)
 	onSpriteHit(obj, norm, mag){
 		if (obj.gameType != "brick")
 			return;
-		//create cross-shaped explosion composed of 2 rectangle explosions
-		let e1 = new Explosion(obj.x, obj.y, 32*3-1, 16*1-1, true);
-		let e2 = new Explosion(obj.x, obj.y, 32*1-1, 16*3-1, true);
-		game.emplace("projectiles", e1);
-		game.emplace("projectiles", e2);
+		let brick = obj;
+		if (brick.isDead()){
+			stopSound(brick.deathSound);
+			freezeBrick(brick);
+		}
+		//spawn 4 small freezing explosions around the block
+		let off = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+		for (let [i, j] of off){
+			let x = brick.x + 32 * j;
+			let y = brick.y + 16 * i;
+			let e = new Explosion(x, y, 32-1, 16-1, true);
+			game.emplace("projectiles", e);
+		}
 		playSound("iceball_hit");
 	}
 }
@@ -1104,7 +1212,91 @@ f[45] = function(){
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.setTexture("ball_main_2_0");
+		ball.damage = 100;
+		ball.strength = 1;
 		ball.components.iceball = new IceBall(ball);
+	}
+	playSound("iceball_collected");
+}
+
+//Irritate
+let Irritate = class{
+	constructor(ball){
+		this.ball = ball;
+	}
+
+	//Should the ball also bounce randomly on walls?
+	onSpriteHit(obj, norm, mag){
+		let ball = this.ball;
+		let spd = ball.getSpeed();
+		let vec = norm.scale(spd);
+		let rad = (2 * Math.random() - 1) * Math.PI/2;
+		vec = vec.rotate(rad);
+		ball.setVel(vec.x, vec.y);
+	}
+}
+f[50] = function(){
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_4_0");
+		ball.components.irritate = new Irritate(ball);
+	}
+}
+
+//Kamikaze
+//it's just a copy of Attract
+let Kamikaze = class extends Attract{
+	constructor(ball){
+		super(ball);
+		this.strength = 0.025;
+	}
+}
+f[55] = function(){
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_1_0");
+		ball.components.kamikaze = new Kamikaze(ball);
+	}
+}
+
+//Knocker
+let Knocker = class{
+	constructor(ball){
+		this.ball = ball;
+		this.knockerHealth = 3;
+		this.count = this.knockerHealth;
+		let component = this;
+		ball.pierce = function(_ball, obj){
+			if (obj.isDead() && component.count > 0){
+				component.count--;
+				component.updateAppearance();
+				return true;
+			}
+			return false;
+		};
+
+		this.knocker = new Sprite(PIXI.Texture.EMPTY,
+			0, 0, 0, 0, 0, 1, 1);
+		this.knocker.addAnim("spin", "knocker_spin", 1/8, true, true);
+		this.ball.addChild(this.knocker);
+	}
+	destructor(){
+		this.ball.removeChild(this.knocker);
+	}
+	updateAppearance(){
+		this.knocker.visible = (this.count > 0);
+	}
+	onPaddleHit(paddle){
+		this.count = this.knockerHealth;
+		this.updateAppearance();
+	}
+}
+f[56] = function(){
+	playSound("knocker_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_2_3");
+		ball.components.knocker = new Knocker(ball);
 	}
 }
 
@@ -1152,6 +1344,67 @@ f[65] = function(){
 		ball.components.mega = new Mega(ball);
 	}
 };
+
+//Node.js
+let Node = class{
+	constructor(ball){
+		this.ball = ball;
+		this.timer = 0;
+		this.splitDelay = 500;
+	}
+
+	preUpdate(delta){
+		let count = game.get("balls").length;
+		count += game.top.newObjects.balls.length;
+
+		if (count >= 3){
+			this.timer = this.splitDelay;
+			return;
+		}
+
+		this.timer -= delta;
+		if (this.timer > 0)
+			return;
+
+		playSound("node");
+		this.timer = this.splitDelay;
+
+		//split once or twice based on current ball count
+		let rad = 10 * Math.PI / 180;
+		let angles = (count == 1) ? [-rad, rad] : [rad];
+		for (let theta of angles){
+			let newBall = this.ball.clone();
+			newBall.rotateVel(theta);
+			game.emplace("balls", newBall);
+		}
+	}
+}
+f[73] = function(){
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_1_8");
+		ball.components.node = new Node(ball);
+	}
+}
+
+//Normal Ball
+f[74] = function(){
+	playSound("normal_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+	}
+}
+
+//Shrink
+f[97] = function(){
+	playSound("shrink_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_small");
+		ball.createShape(true);
+		ball.damage = 5;
+	}
+}
 
 //Sight laser
 let SightLaser = class{
@@ -1235,27 +1488,7 @@ let SightLaser = class{
 				vx = -vx;
 				[x0, y0] = [x1, y1];
 			}
-			//ceiling = m*x
-			//ceiling = (vy / vx) * x
 		}
-
-
-
-
-		// let dist = 1000;
-		// let dx = nx * dist;
-		// let dy = ny * dist;
-		// laser.lineTo(x0 + dx, y0 + dy);
-
-		// let [check, mag] = Ball.raycastTo(paddle, x0, y0, vx, vy, r, laser);
-		// if (check){
-		// 	let x1 = x0 + nx * mag;
-		// 	let y1 = y0 + ny * mag;
-		// 	laser.lineStyle()
-		// 		.beginFill(0xFF0000, 0.5)
-		// 		.drawCircle(x1, y1, r);
-		// }
-
 	}
 }
 f[100] = function(){
@@ -1292,6 +1525,162 @@ f[102] = function(){
 	}
 };
 
+//Volt
+let Volt = class{
+	constructor(ball){
+		const ticks_per_second = 10;
+		const damage_per_tick = 3;
+		const shock_framerate = 30;
+
+		this.ball = ball;
+		this.target = null;
+		this.attackRadius = 250;
+		this.searchRadius = 200;
+		this.timer = 0;
+		this.delay = 1000 / ticks_per_second;
+		this.damage = damage_per_tick;
+
+		this.shock = new PIXI.Graphics();
+		game.top.hud.addChild(this.shock);
+		this.shockTimer = 0;
+		this.shockDelay = 1000 / shock_framerate;
+	}
+
+	destructor(){
+		game.top.hud.removeChild(this.shock);
+		stopSound("volt_attack", false, this);
+	}
+
+	preUpdate(delta){
+		if (!this.ball.isActive())
+			this.shock.clear();
+	}
+
+	update(delta){
+		//update the gameplay tick (find target, damage target)
+		let change = false;
+
+		this.timer -= delta;
+		if (this.timer <= 0){
+			this.timer += this.delay;
+			change = this.tick();
+		}
+
+		if (this.target){
+			if (change)
+				this.shockTimer = 0;
+			else
+				this.shockTimer -= delta;
+			if (this.shockTimer <= 0){
+				this.shockTimer += this.shockDelay;
+				this.drawShock();
+			}
+		}
+		else if (change)
+			this.shock.clear();
+	}
+
+	getDist(obj){
+		let [x0, y0] = this.ball.getPos();
+		let [x1, y1] = obj.getPos();
+		return Vector.dist(x0, y0, x1, y1);
+	}
+
+	//returns true if this.target has changed
+	tick(){
+		let prevTarget = this.target;
+		//remove target if it is too far away
+		if (this.target && this.getDist(this.target) > this.attackRadius)
+			this.target = null;
+		//acquire a new target if target doesn't exist
+		if (!this.target){
+			let closest = null;
+			let minDist = Infinity;
+			for (let br of game.get("bricks")){
+				if (br.armor <= 0){
+					let dist = this.getDist(br);
+					if (dist < minDist){
+						closest = br;
+						minDist = dist;
+					}
+				}
+			}
+			if (minDist < this.searchRadius)
+				this.target = closest;
+		}
+		//deal damage to the target and remove if target is dead
+		if (this.target){
+			//do not do damage to newly-acquired targets
+			if (prevTarget === this.target)
+				this.target.takeDamage(this.damage, 0);
+			if (this.target.isDead())
+				this.target = null;
+			else
+				stopSound(this.target.hitSound);
+		}
+		if (!prevTarget && this.target)
+			playSound("volt_attack", true, this);
+		else if (prevTarget && !this.target)
+			stopSound("volt_attack", false, this);
+		return prevTarget !== this.target;
+	}
+
+	drawShock(){
+		if (!this.target){
+			alert("Volt Target does not exist!");
+			return;
+		}
+		let [x0, y0] = this.ball.getPos();
+		let [x1, y1] = this.target.getPos();
+
+		let shock = this.shock;
+		shock.clear();
+		let colors = [0xFFFFFF, 0xFFFF00, 0x00FFFF];
+		for (let color of colors)
+			shockify(shock, x0, y0, x1, y1, {color});
+	}
+}
+f[120] = function(){
+	playSound("volt_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_1_2");
+		ball.components.weak = new Volt(ball);
+	}
+}
+
+//Voodoo
+let Voodoo = class{
+	constructor(ball){
+		this.ball = ball;
+	}
+	onSpriteHit(obj, norm, mag){
+		if (obj.gameType != "brick")
+			return;
+		if (obj.armor > 0)
+			return;
+
+		//instantly damage two other bricks
+		let bricks = game.get("bricks").filter(
+			brick => (brick.armor < 1 && brick != obj)
+		);
+		for (let i = 0; i < 2; i++){
+			if (bricks.length == 0)
+				break;
+			let [br] = bricks.splice(randRange(bricks.length), 1);
+			br.takeDamage(10, 0);
+		}
+	}
+}
+f[121] = function(){
+	playSound("voodoo_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_1_1");
+		ball.components.voodoo = new Voodoo(ball);
+	}
+}
+
 //Weak
 let Weak = class{
 	constructor(ball){
@@ -1316,6 +1705,53 @@ f[123] = function(){
 		ball.components.weak = new Weak(ball);
 	}
 	game.top.createMonitor("Weak", "balls", "weak", "timer");
+}
+
+//Whiskey or Whisky if you're Canadian
+let Whiskey = class{
+	constructor(ball){
+		this.ball = ball;
+		this.timer = 0;
+		this.emitterTimer = 0;
+		this.emitterDelay = 15;
+	}
+
+	preUpdate(delta){
+		this.emitterTimer -= delta;
+		if (this.emitterTimer > 0)
+			return;
+
+		let ball = this.ball;
+		this.emitterTimer += this.emitterDelay;
+		let tex = "whiskey_" + randRange(4);
+
+		let vel = new Vector(0, -1);
+		vel = vel.rotate(randRange(-60, 60) * Math.PI / 180);
+		vel = vel.scale(randRangeFloat(0.01, 0.1));
+
+		let pos = new Vector(0, randRangeFloat(ball.radius));
+		pos = pos.rotate(randRangeFloat(2 * Math.PI));
+		pos = pos.add(new Vector(...ball.getPos()));
+
+		let p = new Particle(tex, pos.x, pos.y, vel.x, vel.y);
+		p.setFade(0.002, 0, 100, true);
+		game.emplace("particles", p);
+
+	}
+	update(delta){
+		this.timer += delta;
+		let deg = Math.sin(15 * this.timer / (1000 * Math.PI));
+		deg *= 0.12 * delta;
+		this.ball.rotateVel(deg * Math.PI / 180);
+	}
+}
+f[126] = function(){
+	playSound("whiskey_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_3_2");
+		ball.components.whiskey = new Whiskey(ball);
+	}
 }
 
 /*****************
@@ -1710,10 +2146,8 @@ let Javelin = class{
 		let superUpdate = p.update;
 		p.update = function(delta){
 			let [x0, y0, x1, y1] = this.getAABB();
-			if (y1 < DIM.ceiling){
+			if (y1 < DIM.ceiling)
 				this.kill();
-				console.log("javelin die");
-			}
 			superUpdate.call(this, delta);
 		}
 
@@ -2083,6 +2517,13 @@ f[28] = function(){
 	paddle.incrementSize(1);
 }
 
+//Normal Ship
+f[75] = function(){
+	playSound("normal_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.normal();
+}
+
 //Restrict
 f[90] = function(){
 	playSound("restrict_collected");
@@ -2096,11 +2537,12 @@ f[90] = function(){
 
 //Bulk
 let bulkNormal = function(br){
-	let {i, j} = br.normalInfo;
+	let [i, j] = br.normalInfo;
 	if (j == 20)
 		i = 0;
 	let bulkTex = `brick_bulk_${i}_${j}`;
-	let oldTex = br.texture;
+	if (!br.preBulkTex)
+		br.preBulkTex = br.texture;
 	br.setTexture(bulkTex);
 	br.health = 20;
 	br.points *= 2; 
@@ -2108,7 +2550,7 @@ let bulkNormal = function(br){
 	br.takeDamage = function(damage, strength){
 		NormalBrick.prototype.takeDamage.call(this, damage, strength);
 		if (this.health <= 10)
-			this.setTexture(oldTex);
+			this.setTexture(this.preBulkTex);
 	};
 };
 let bulkMetal = function(br){
@@ -2128,6 +2570,102 @@ f[11] = function(){
 			bulkNormal(br);
 		else if (br.brickType == "metal")
 			bulkMetal(br);
+	}
+}
+
+//HaHa
+f[43] = function(powerup){
+	playSound("haha_collected");
+	let [px, py] = powerup.getPos();
+	let grid = game.top.brickGrid;
+	//get all empty grid nodes
+	let choices = [];
+	for (let i = 0; i < 32-8; i++){
+		for (let j = 0; j < 13; j++){
+			if (grid.isEmpty(i, j))
+				choices.push([i, j]);
+		}
+	}
+	//spawn bricks in random empty spaces
+	for (let n = 0; n < 14; n++){
+		if (choices.length == 0)
+			break;
+		let index = randRange(choices.length);
+		let [i, j] = choices[index];
+		choices.splice(index, 1);
+		let [x, y] = getGridPosInv(i, j);
+		//Spawn a Forbidden Brick at target location
+		//to reserve the Normal Brick's destination
+		let fb = new ForbiddenBrick(x, y);
+		game.emplace("bricks", fb);
+		fb.timer = 100 + n * 50
+			+ Vector.dist(px, py, x, y) / 0.5;
+		//Spawn a Normal Brick in a callback
+		let br = new NormalBrick(px, py);
+		br.setTravel(x, y, "speed", 0.5, "kill");
+		game.top.emplaceCallback(
+			n * 50,
+			() => {game.emplace("bricks", br);}
+		);
+	}
+}
+
+//Indigestion
+f[47] = function(){
+	playSound("indigestion_collected");
+	let grid = game.top.brickGrid;
+	for (let br of game.get("bricks")){
+		if (br.brickType != "normal")
+			continue;
+		if (br.isMoving())
+			continue;
+		let [x0, y0] = br.getPos();
+		let [i0, j0] = getGridPos(x0, y0);
+		let off = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+		for (let [di, dj] of off){
+			let [i, j] = [i0 + di, j0 + dj];
+			if (i >= 32-8)
+				continue;
+			if (!boundCheck(i, j))
+				continue;
+			if (!grid.isEmpty(i, j, true))
+				continue;
+			let [x, y] = getGridPosInv(i, j);
+			let br2 = new NormalBrick(x0, y0, ...br.normalInfo);
+			br2.setTravel(x, y, "time", 200);
+			game.emplace("bricks", br2);
+			grid.reserve(i, j);
+		}
+	}
+}
+
+//Trail
+let Trail = class{
+	constructor(ball){
+		this.ball = ball;
+		this.count = 10;
+	}
+	update(delta){
+		let grid = game.top.brickGrid;
+		let [i, j] = getGridPos(...this.ball.getPos());
+		if (grid.isEmpty(i, j)){
+			let [x, y] = getGridPosInv(i, j);
+			let br = new NormalBrick(x, y);
+			br.overlap.set(this.ball, 1);
+			game.emplace("bricks", br);
+
+			this.count--;
+			if (this.count == 0)
+				delete this.ball.components.trail;
+		}
+	}
+}
+f[106] = function(){
+	for (let ball of game.get("balls")){
+		if (ball.components.trail)
+			ball.components.trail.count += 10;
+		else
+			ball.components.trail = new Trail(ball);
 	}
 }
 
@@ -2166,7 +2704,9 @@ let Quasar = class extends Special{
 				continue;
 			if (!circleRectOverlap(this.x, this.y, r, br.x, br.y, 32, 16))
 				continue;
-			if (br.brickType == "funky" && br.isRegenerating)
+			// if (br.brickType == "funky" && br.isRegenerating)
+			// 	continue;
+			if (br.isDead())
 				continue;
 			br.suppress = true;
 			br.kill();

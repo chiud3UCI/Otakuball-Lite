@@ -5,7 +5,7 @@
 //the game board is 13 bricks wide and 32 bricks high
 
 //DIM stands for dimensions
-//window was already taken
+//window would have been a better var name, but it was already taken
 var DIM = {w: 800, h: 600};
 DIM.width = DIM.w;
 DIM.height = DIM.h;
@@ -15,6 +15,11 @@ DIM.ceiling = 88;
 DIM.wallw = DIM.lwallx;
 DIM.boardw = DIM.rwallx - DIM.lwallx;
 DIM.boardh = DIM.h - DIM.ceiling;
+//offset due to outer border
+DIM.outerx = 12;
+DIM.outery = 36;
+DIM.offx = 6;
+DIM.offy = 30;
 
 var app;
 var renderer;
@@ -33,6 +38,21 @@ function ALERT_ONCE(message){
 }
 
 var ENABLE_RIGHT_CLICK = false;
+
+//custom mask class that takes in account of the window offset
+class Mask extends PIXI.Graphics{
+	constructor(x, y, w, h){
+		super();
+		this.beginFill(0xFFFFFF);
+		this.drawRect(x + DIM.offx, y + DIM.offy, w, h);
+	}
+
+	resize(x, y, w, h){
+		this.clear();
+		this.beginFill(0xFFFFFF);
+		this.drawRect(x + DIM.offx, y + DIM.offy, w, h);
+	}
+}
 
 //need to put everything in a function
 //so it can be called after the document
@@ -54,8 +74,8 @@ function init(){
 	keycode = PIXI.keyboard.Key;
 
 	app = new PIXI.Application({
-		width: 800,
-		height: 600,
+		width: DIM.w + DIM.outerx,
+		height: DIM.h + DIM.outery,
 		antialias: false,
 		transparent: false,
 		resolution: 1
@@ -72,8 +92,8 @@ function init(){
 		m1: 0,
 		m2: 0,
 		updatePos(){
-			this.x = appMouse.global.x;
-			this.y = appMouse.global.y;
+			this.x = appMouse.global.x - DIM.offx;
+			this.y = appMouse.global.y - DIM.offy;
 		},
 		//differentiate between mouse click and hold
 		updateButton(){
@@ -170,8 +190,14 @@ function setup(){
 		//switch rendering to the top layer
 		switchStage(){
 			this.stage.removeChildren();
-			if (this.top)
-				this.stage.addChild(this.top.stage);
+			if (this.top){
+				let top = this.top;
+				this.stage.addChild(top.stage);
+				if (top.windowTitle){
+					let text = `Otaku-Ball - ${top.windowTitle}`;
+					this.windowTitle.text = text;
+				}
+			}
 			//also clear mouse buttons
 			mouse.m1 = 0;
 			mouse.m2 = 0;
@@ -202,6 +228,14 @@ function setup(){
 		}
 	}
 
+	let [box, title] = 
+		createOuterBorder(DIM.w + DIM.outerx, DIM.h + DIM.outery);
+	app.stage.addChild(box);
+	game.windowTitle = title;
+	game.stage.position.set(DIM.offx, DIM.offy);
+	//create a 800 x 600 mask
+	game.stage.mask = new Mask(0, 0, DIM.w, DIM.h);
+
 	game.push(new MainMenuState());
 	// game.push(new EditorState());
 	// game.push(new TestState());
@@ -219,6 +253,34 @@ function setup(){
 	ticker.add(update);
 }
 
+function createOuterBorder(w, h){
+	let fr = function(graphics, color, x, y, w, h){
+		graphics.beginFill(color);
+		graphics.drawRect(x, y, w, h);
+	}
+
+	let box = new PIXI.Graphics();
+	fr(box, 0x000000, 0, 0, w  , h  );
+	fr(box, 0xC0C0C0, 0, 0, w-2, h-2);
+	fr(box, 0x646464, 2, 2, w-4, h-4);
+	fr(box, 0xFFFFFF, 2, 2, w-6, h-6);
+	fr(box, 0xAAAAAA, 4, 4, w-8, h-8);
+	//blue title bar
+	fr(box, 0x000080, 6, 6, w-12, 22);
+
+	let title = printText("Otaku-Ball", 
+		"arcade", 0xFFFFFF, 1, 8, 8
+	);
+	box.addChild(title);
+
+	return [box, title];
+}
+
+//takes in account of outer border offset
+function getTrueGlobalPosition(obj){
+	let p = obj.getGlobalPosition();
+	return new PIXI.Point(p.x-DIM.offx, p.y-DIM.offy);
+}
 
 
 //Other important utility functions that I don't know
@@ -233,10 +295,10 @@ function alterMouseEvents(){
 		let mx = appMouse.global.x;
 		let my = appMouse.global.y;
 		return (
-			mx > 0 &&
-			mx < DIM.w &&
-			my > 0 &&
-			my < DIM.h
+			mx > DIM.offx &&
+			mx < DIM.offx + DIM.w &&
+			my > DIM.offy &&
+			my < DIM.offy + DIM.h
 		);
 	}
 
@@ -297,6 +359,20 @@ function clampGridPos(i, j){
 	return [i2, j2];
 }
 
+//removes all elements from array that satisfy condition
+//returns a list of removed elements
+function remove_if(arr, func){
+	let removed = [];
+	let index = 0;
+	while (index != arr.length){
+		if (func(arr[index]))
+			removed.push(...arr.splice(index, 1));
+		else
+			index++;
+	}
+	return removed;
+}
+
 //returns an integer from [a to b-1] inclusive
 function randRange(a, b){
 	if (b === undefined){
@@ -304,6 +380,15 @@ function randRange(a, b){
 		a = 0;
 	}
 	return a + Math.floor(Math.random() * (b-a));
+}
+
+//returns a float from [a to b] inclusive
+function randRangeFloat(a, b){
+	if (b === undefined){
+		b = a;
+		a = 0;
+	}
+	return a + Math.random() * (b-a);
 }
 
 function deltaEqual(a, b, epsilon=0.001){

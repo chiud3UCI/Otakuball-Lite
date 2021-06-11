@@ -12,7 +12,7 @@ var media = {
 };
 
 // var sound = PIXI.sound;
-var soundQueue = {};
+// var soundQueue = {};
 
 //limit the number of times the sound can be played at a time
 //also prevent the same sound from playing multiple times
@@ -21,55 +21,133 @@ var maxSoundInstances = 3;
 var minSoundInterval = 0.1; //in seconds
 PIXI.sound.volumeAll = 0.15;
 
-function playSound(name, loop=false){
+//stores all running sound instances
+var sound_record = {
+	//queue is an array of SoundWrappers
+	queue: [],
+	//playing is an object with keys being the sound name
+	//and values being the array of SoundWrappers
+	playing: {},
+}
+
+class SoundWrapper{
+	constructor(name, loop, object){
+		this.name = name;
+		this.loop = !!loop;
+		this.object = object;
+		this.sound = PIXI.sound._sounds[name];
+		this.instance = null;
+	}
+
+	get elapsedTime(){
+		if (!this.instance)
+			return 0;
+		return this.instance.progress * this.sound.duration;
+	}
+
+	start(){
+		let playing = sound_record.playing;
+		let wrap = this;
+		let instance = this.sound.play({
+			loop: this.loop,
+			complete(){
+				playing[wrap.name].shift();
+			}
+		});
+		this.instance = instance;
+		playing[this.name].push(this);
+	}
+
+	stop(){
+		this.instance.stop();
+	}
+}
+
+//Doesn't play the sound immediately.
+//Instead, it queues the sound so it gets played at
+//the update loop (simlar to PlayState.emplace)
+function playSound(name, loop=false, object=null){
 	if (!name)
 		return;
-	
-	let sound = PIXI.sound._sounds[name];
-	let queue = soundQueue[name];
-
-	//don't play new sound if previous sound
-	//was recently played
-	if (queue.length > 0){
-		let instance = queue[queue.length-1];
-		let elapsed_time = instance.progress * sound.duration;
-		if (instance.progress <= minSoundInterval)
-			return;
+	if (sound_record.playing[name] === undefined){
+		alert(`sound "${name}" does not exist`);
+		return;
 	}
 
-	if (queue.length >= maxSoundInstances){
-		//stop the oldest instance
-		let instance = queue.shift();
-		instance.stop();
-	}
-
-	let options = {
-		loop: loop,
-		complete(){
-			queue.shift(); //pops first element
-		}
-	}
-	let instance = sound.play(options);
-	queue.push(instance);
+	let queue = sound_record.queue;
+	//get rid of duplicate sounds
+	if (queue.some(wrap => wrap.name == name))
+		return;
+	queue.push(new SoundWrapper(name, loop, object));
 }
 
-function stopSound(name, singleInstance=false){
+//stops all queued and playing sounds
+//if object is passed, then only stop sound wrappers
+//	with specified object
+//TODO: implement suppress, which will cancel incoming
+//	sounds if no sounds have been stopped
+function stopSound(name, suppress=false, object=null){
 	if (!name)
 		return;
-	let queue = soundQueue[name];
-	while (queue.length > 0){
-		let instance = queue.pop();
-		instance.stop();
-		if (singleInstance)
-			break;
+	if (sound_record.playing[name] === undefined){
+		alert(`sound "${name}" does not exist`);
+		return;
+	}
+
+	//remove from sound queue
+	let record = sound_record;
+	if (object){
+		remove_if(record.queue,
+			wrap => wrap.name == name && wrap.object === object
+		);
+	}
+	else{
+		remove_if(record.queue,
+			wrap => wrap.name == name
+		);
+	}
+
+	//remove from currently playing sounds
+	let play = record.playing[name];
+	if (object){
+		let removed = remove_if(play,
+			wrap => wrap.object === object
+		);
+		for (let wrap of removed)
+			wrap.stop();
+	}
+	else{
+		while (play.length > 0)
+			play.pop().stop();
 	}
 }
 
-function clearSoundQueue(){
-	for (let name of Object.keys(soundQueue))
-		soundQueue[name] = [];
+function playQueuedSounds(){
+	let record = sound_record;
+
+	for (let wrap of record.queue){
+		let name = wrap.name;
+		let playing = record.playing[name];
+		if (playing === undefined)
+			console.log("undefined: " + name);
+		let n = playing.length;
+
+		if (n > 0 && playing[n-1].elapsedTime <= minSoundInterval)
+			continue;
+		wrap.start();
+		if (n == maxSoundInstances)
+			playing.shift().stop();
+	}
+	record.queue = [];
 }
 
+function stopAllSounds(){
+	PIXI.sound.stopAll();
+	sound_record.queue = [];
+	let playing = sound_record.playing;
+	for (let name of Object.keys(playing))
+		playing[name] = [];
+}
 
 let fontData = {};
 
@@ -116,7 +194,8 @@ let recursive_texture_names = [
 		"brick_slot",
 		"brick_title",
 		"snapper",
-		"bulk"
+		"bulk",
+		"brick_regen_mask",
 	]],
 
 	["paddles/", [
@@ -126,7 +205,9 @@ let recursive_texture_names = [
 
 	["balls/", [
 		"main_balls",
-		"giga_forcefield"
+		"giga_forcefield",
+		"knocker_border",
+		"parachute",
 	]],
 	
 	["etc/", [
@@ -152,6 +233,7 @@ let recursive_texture_names = [
 		"explosion_mega",
 		"comet_ember",
 		"quasar",
+		"whiskey",
 	]],
 
 	["gui/", [
@@ -227,6 +309,8 @@ let recursive_sound_names = [
 		"split_large",
 		"ball_generator",
 		"iceball_hit",
+		"volt_attack",
+		"node",
 	]],
 	["powerup/", [
 		"acid_collected",
@@ -258,6 +342,16 @@ let recursive_sound_names = [
 		"nano_launch",
 		"catch_collected",
 		"giga_collected",
+		"iceball_collected",
+		"haha_collected",
+		"indigestion_collected",
+		"volt_collected",
+		"knocker_collected",
+		"normal_collected",
+		"shrink_collected",
+		"halo_collected",
+		"whiskey_collected",
+		"voodoo_collected",
 	]],
 	["enemy/", [
 		"enemy_death",
@@ -300,7 +394,7 @@ media.load = function(callback){
 				trunc = name.slice(0, i);
 			loader.add(trunc, path + name);
 			//initialize a queue for each sound
-			soundQueue[trunc] = [];
+			sound_record.playing[trunc] = [];
 		}
 	}
 
@@ -347,6 +441,7 @@ media.makeTexture = function(texname, rx, ry, rw, rh){
 }
 
 media.processTextures = function(){
+	let rects;
 
 	//make white_pixel and clear_pixel
 	this.textures.white_pixel = new PIXI.Texture(
@@ -402,12 +497,18 @@ media.processTextures = function(){
 	//title bricks are half the size of regular bricks
 	partition("brick_title", "brick_title", 8, 4);
 
+	//experimental brick regen mask
+	partition("brick_regen_mask", "brick_regen_mask", 16, 8);
+
 	//process main_balls
 	partition("main_balls", "ball_main", 7, 7, 1, 1);
 	this.textures["ball_large"] = 
 		this.makeTexture("main_balls", 1, 40, 14, 14);
 	this.textures["ball_small"] = 
 		this.makeTexture("main_balls", 31, 40, 3, 3);
+
+	//ball parachute
+	partition("parachute", "parachute", 15, 16, 1, 1);
 
 	//split paddle into 3 sections
 	//to allow for paddle elargement
@@ -471,13 +572,28 @@ media.processTextures = function(){
 	partition("explosion_freeze", "det_smoke_freeze", 24, 24);
 	partition("explosion_mega", "det_smoke_neo", 32, 32);
 
+	//whiskey bubbles
+	rects = [
+		[1, 1, 9, 9],
+		[11, 2, 7, 7],
+		[19, 3, 6, 6],
+		[26, 4, 4, 4]
+	];
+	for (let [i, rect] of rects.entries()){
+		let tex = this.makeTexture("whiskey", ...rect);
+		this.textures["whiskey_"+i] = tex;
+	}
+
+	//knocker saw blade
+	partition("knocker_border", "knocker", 13, 13);
+
 	//projectiles
 
 	//lasers
 	//NOTE: lasers.png had to be enlarged to 64x64
 	//		in order to prevent graphical errors.
 	//		Maybe the old texture was too small?
-	let rects = [
+	rects = [
 		[0, 0, 3, 10],
 		[4, 0, 4, 10],
 		[9, 0, 3, 7],
@@ -581,6 +697,21 @@ media.createAnimations = function(){
 		return arr;
 	}
 
+	//for one-dimensional sprite sheets
+	let create2 = (name, basetex, i0, irange) => {
+		let arr = [];
+		for (let i = i0; i < i0 + irange; i++){
+			let name = `${basetex}_${i}`;
+			arr.push(this.textures[name]);
+		}
+		this.animations[name] = arr;
+		return arr;
+	}
+
+	//ball stuff
+	//knocker sawblade spin
+	create2("knocker_spin", "knocker", 0, 2);
+
 	//regular brick shine
 	for (let i = 0; i < 23; i++){
 		let col = i % 14;
@@ -640,6 +771,9 @@ media.createAnimations = function(){
 		let name = "brick_regen_" + i;
 		create(name, "brick_regen", 0, i, 8, 1);
 	}
+
+	//experimental regen mask
+	// create2("brick_regen_mask", "brick_regen_mask", 0, 9);
 
 	//jumper brick
 	for (let i = 0; i < 3; i++){
@@ -742,6 +876,78 @@ media.createAnimations = function(){
 	//missiles
 	create("missile_normal", "missile", 0, 0, 1, 3);
 	create("missile_erratic", "missile", 1, 0, 1, 3);
+}
 
+//draws a lightning bolt to a PIXI.Graphics object
+//Code adapted from: https://gamedevelopment.tutsplus.com/tutorials/how-to-generate-shockingly-good-2d-lightning-effects--gamedev-2681
+function shockify(gr, x0, y0, x1, y1, options={}){
+	//default options
+	let opt = {
+		color: 0xFFFF00,
+		minSegment: 10,
+		maxSegment: 20,
+		deviation: 20,
+		amplitude: 30,
+	};
+	Object.assign(opt, options);
+
+	let start = new Vector(x0, y0);
+	let end = new Vector(x1, y1);
+
+	let tangent = end.sub(start);
+	let normal = tangent.perpendicular().normalized();
+	let length = tangent.len();
+
+	const minSeg = opt.minSegment / length;
+	const maxSeg = opt.maxSegment / length;
+	let segments = [0];
+	while (true){
+		let segOff = randRangeFloat(minSeg, maxSeg);
+		let seg = segments[segments.length-1] + segOff;
+		if (seg >= 1)
+			break;
+		segments.push(seg);
+	}
+
+	//maximum height difference between adjacent points
+	const deviation = opt.deviation;
+	//all points must be between 2 sine waves with this amplitude
+	const amplitude = opt.amplitude;
+
+	let points = [start];
+	let prevHeight = 0;
+
+	for (let i = 1; i < segments.length; i++){
+		let seg = segments[i];
+		let prevSeg = segments[i-1];
+
+		let sineBound = Math.sin(Math.PI * seg) * amplitude;
+		let minHeight = prevHeight - deviation;
+		let maxHeight = prevHeight + deviation;
+
+		minHeight = Math.max(-sineBound, minHeight);
+		maxHeight = Math.min(sineBound, maxHeight);
+
+		let height = randRangeFloat(minHeight, maxHeight);
+		prevHeight = height;
+
+		let base = tangent.scale(seg);
+		let offset = normal.scale(height);
+		let point = start.add(base.add(offset));
+		points.push(point);
+	}
+	points.push(end);
+
+	gr.lineStyle(1, opt.color);
+	gr.moveTo(...points[0].unpack());
+	for (let i = 1; i < points.length; i++)
+		gr.lineTo(...points[i].unpack());
+
+	//debug draw red points
+	// gr.lineStyle();
+	// gr.beginFill(0xFF0000, 0.5);
+	// for ({x, y} of points)
+	// 	gr.drawCircle(x, y, 2);
+	// gr.endFill();
 }
 

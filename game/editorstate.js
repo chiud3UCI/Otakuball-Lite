@@ -8,6 +8,8 @@ class EditorState{
 			"hud",
 		];
 
+		this.windowTitle = "Level Editor";
+
 		let stage = new PIXI.Container();
 		this.stage = stage;
 
@@ -463,7 +465,7 @@ class EditorState{
 		}
 
 		create(0, 0, 5, 0);
-		create(64, 0, 6, 0);
+		create(32, 0, 6, 0);
 		for (let i = 0; i < 4; i++){
 			create(i*32, 16*3, i, 0);
 		}
@@ -474,6 +476,7 @@ class EditorState{
 			let y = 16*5 + i*16;
 			create(x, y, 4, n);
 		}
+		create(64, 0, 7, 0);
 
 		this.patchButtonHighlight = new PIXI.Graphics();
 		panel.addChild(this.patchButtonHighlight);
@@ -875,11 +878,10 @@ class GridNode{
 		stage.addChild(sprite);
 		this.brickId = null;
 
-		//TODO: patch
 		//4 shields, movement, invisible, antilaser
 		this.patch = null;
 		this.patchSprites = [];
-		for (let i = 0; i < 7; i++){
+		for (let i = 0; i < 8; i++){
 			let sprite = new Sprite(null);
 			this.patchSprites.push(sprite);
 			stage.addChild(sprite);
@@ -1159,6 +1161,7 @@ class PatchCycler{
 			[4],
 			[5],
 			[6],
+			[7]
 		];
 
 		let lookup = {};

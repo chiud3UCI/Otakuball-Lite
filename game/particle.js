@@ -2,16 +2,13 @@ class Particle extends Sprite{
 	constructor(texture, x, y, vx, vy, angle, sx, sy){
 		super(texture, x, y, vx, vy, angle, sx, sy);
 
-		this.timer = null;
 		this.dieOnFade = false;
-		this.diieOnShrink = false;
+		this.dieOnShrink = false;
 		this.dieOnAniFinish = false;
 	}
 
 	isDead(){
 		if (this.dead)
-			return true;
-		if (this.timer !== null && this.timer <= 0)
 			return true;
 		if (this.dieOnFade && this.alpha <= 0)
 			return true;
@@ -72,9 +69,6 @@ class Particle extends Sprite{
 	}
 
 	update(delta){
-		if (this.timer !== null)
-			this.timer -= delta;
-
 		this.updateFade(delta);
 		this.updateGrowth(delta);
 

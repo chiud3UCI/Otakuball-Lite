@@ -28,7 +28,7 @@ class Paddle extends Sprite{
 			minIndex: -3,
 			maxIndex: 4
 		};
-		this.resize(this.widthInfo.base);
+		this._setWidth(this.widthInfo.base);
 		this.widthIndex = 0;
 		
 		this.x = DIM.w/2;
@@ -100,9 +100,9 @@ class Paddle extends Sprite{
 		this.components = {};
 	}
 
-	//resize both the shape as well as the sprite sections
-	//min width is 40;
-	resize(width){
+	//Resize both the shape and sprites to a certain width (in pixels)
+	//Does not update widthIndex
+	_setWidth(width){
 		width = Math.max(40, width);
 		//remember that these sprites are 1x scale not 2x
 		//length of each outer section is 10 pixels
@@ -120,28 +120,30 @@ class Paddle extends Sprite{
 	}
 
 	//resize paddle using fixed increments
-	resize2(index){
+	//also updates the widthIndex
+	resize(index){
 		let info = this.widthInfo;
 		index = Math.max(info.minIndex, Math.min(info.maxIndex, index));
 		let width = info.base + info.increment * index;
-		this.resize(width);
+		this._setWidth(width);
 		this.widthIndex = index;
 		return index;
 	}
 
 	incrementSize(deltaIndex){
-		return this.resize2(this.widthIndex + deltaIndex);
+		return this.resize(this.widthIndex + deltaIndex);
 	}
 
 	normal(){
-		this.resize(80);
+		this.resize(0);
 		this.clearPowerups();
 	}
 
 	//does not revert size
 	clearPowerups(){
-		this.setTexture("paddle_0_0");
 		this.clearComponents();
+		this.setTexture("paddle_0_0");
+		this.alpha = 1;
 	}
 
 	attachBall(ball, random){

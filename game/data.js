@@ -204,6 +204,8 @@ var patchData = {
 		this.textures["5_0"] = "patch_0_0";
 		//antilaser
 		this.textures["6_0"] = "patch_1_0";
+		//regen
+		this.textures["7_0"] = "patch_2_0";
 	}
 }
 

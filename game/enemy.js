@@ -1,3 +1,10 @@
+var ENEMY_LOG_ENABLED = false;
+
+function enemy_log(message){
+	if (ENEMY_LOG_ENABLED)
+		console.log(message);
+}
+
 class Enemy extends Sprite{
 	constructor(texture, x, y, vx, vy){
 		super(texture, x, y, vx, vy);
@@ -26,7 +33,7 @@ class Enemy extends Sprite{
 			update: state.update.bind(this)
 		};
 		this.state.init(...args);
-		console.log("Advance State: " + name + " " + args);
+		enemy_log("Advance State: " + name + " " + args);
 	}
 
 	advanceState(args={}){
@@ -97,7 +104,7 @@ class Enemy extends Sprite{
 		let grid = game.top.brickGrid;
 		for (let br of grid.getBucket(this)){
 			if (filter && !filterFunc(br)){
-				console.log("filtered " + br.gridDat.i + " " + br.gridDat.j);
+				enemy_log("filtered " + br.gridDat.i + " " + br.gridDat.j);
 				continue;
 			}
 			//Remember to disable overlap check
@@ -816,7 +823,7 @@ Enemy.states = {
 			//check brick collision
 			let [br, norm, mag] = this.scanBrickHit(this.scanFilter);
 			if (br){
-				console.log("collide side");
+				enemy_log("collide side");
 				//skip to "going through bricks" phase
 				//if enemy still is overlapping bricks
 				let arg = {status: "collide", br: br};

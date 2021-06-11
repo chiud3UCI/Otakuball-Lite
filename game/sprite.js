@@ -16,20 +16,28 @@ class Sprite extends PIXI.Sprite{
 	//width and height are determined by texture
 	//acx and acy is the anchor point
 	constructor(
-		texture=null, x=0, y=0, vx=0, vy=0, angle=0, sx=2, sy=2)
+		texture=null, x=0, y=0, vx=0, vy=0, angle=0, sx=2, sy)
 	{
 		//if texture is null then PIXI.Sprite will use
 		//PIXI.Texture.EMPTY which is a clear 1x1 pixel
 		if (typeof(texture) === "string"){
-			texture = media.textures[texture];
+			let texStr = texture;
+			texture = media.textures[texStr];
+			if (!texture)
+				alert(`texture "${texStr}" does not exist`);
 		}
 		super(texture);
 		//start at center
 		this.anchor.set(0.5, 0.5);
 		//almost all sprites are scaled 2x
+		if (sy === undefined)
+			sy = sx;
 		this.scale.set(sx, sy);
 		this.position.set(x, y);
 		this.rotation = angle; //radians
+
+		//lifespan in milliseconds
+		this.timer = null;
 
 		//die if sprite touches the wall/ceiling
 		this.wallCheck = false;
@@ -309,6 +317,12 @@ class Sprite extends PIXI.Sprite{
 	//override this method
 	onSpriteHit(obj, norm, mag){}
 
+	//playstate will call this to check if object should
+	//be removed from the game
+	shouldBeRemoved(){
+		return this.isDead();
+	}
+
 	isDead(){
 		return this.dead;
 	}
@@ -322,6 +336,12 @@ class Sprite extends PIXI.Sprite{
 	//Currently, PIXI.Sprite and all parents do not have an update() method.
 	//However, PIXI.AnimatedSprite does has an update() method.
 	update(delta){
+		if (this.timer !== null){
+			this.timer -= delta;
+			if (this.timer <= 0)
+				this.kill();
+		}
+
 		if (this.wallCheck || this.floorCheck){
 			let [x0, y0, x1, y1] = this.getAABB();
 			if (this.wallCheck && (

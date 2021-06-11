@@ -28,7 +28,7 @@ class DialogueBox{
 		//blue title bar + title
 		fr(box, 0x000080, 6, 6, w-12, 22);
 		this.title = printText(
-			title, "arcade", 0xFFFFFF, 1, 8, 6);
+			title, "arcade", 0xFFFFFF, 1, 8, 8);
 		box.addChild(this.title);
 
 		//the space underneath the title bar

@@ -2,12 +2,14 @@ class LevelSelectState{
 	//modes: ["play", "save", "load"]
 	constructor(mode){
 		this.mode = mode;
+
+		this.windowTitle = "Level Select";
 		//do we need multiple layers?
 		let stage = new PIXI.Container();
 		this.stage = stage;
 
 		let bg = new PIXI.Graphics();
-		bg.beginFill(0x888888)
+		bg.beginFill(0xAAAAAA)
 			.drawRect(0, 0, DIM.w, DIM.h);
 		stage.addChild(bg);
 
@@ -134,12 +136,8 @@ class LevelSelectState{
 
 		let levelList = new PIXI.Container();
 		widget.addChild(levelList);
-		//mask coordinates are global
 		let p = whiteBox.getGlobalPosition();
-		let mask = new PIXI.Graphics()
-			.beginFill(0x000000)
-			.drawRect(p.x, p.y, 300, 400);
-		levelList.mask = mask;
+		levelList.mask = new Mask(p.x, p.y, 300, 400);
 		this.levelList = levelList;
 		
 		this.allLevelButtons = [];

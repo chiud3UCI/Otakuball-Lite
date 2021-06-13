@@ -721,11 +721,11 @@ class WalkBlock extends Enemy{
 }
 
 
-
+//NOTE: Enemy instance will be bound to this due to 
+//		function binding in Eneny.setState()
 Enemy.states = {
 	//emerging from the gate
 	emerging: {
-		//enemy will be bound to this via function binding
 		init(spd=0.05){
 			this.vx = 0;
 			this.vy = spd;
@@ -762,7 +762,7 @@ Enemy.states = {
 	//	then stop after timer reaches 0
 	tracingdown: {
 		init(spd, time=null, filter=null){
-			this.timer = time;
+			this.traceTimer = time;
 			this.vx = 0;
 			this.vy = spd;
 			this.scanFilter = filter;
@@ -801,9 +801,9 @@ Enemy.states = {
 				}
 			}
 
-			if (clear && this.timer){
-				this.timer -= delta;
-				if (this.timer <= 0){
+			if (clear && this.traceTimer){
+				this.traceTimer -= delta;
+				if (this.traceTimer <= 0){
 					let arg = {status: "timeout", skip: true};
 					this.advanceState(arg);
 					return;

@@ -3,7 +3,9 @@
 
 var brickData = {
 	//contains all brick data
-	lookup: [],
+	//NOTE: with the addition of Powerup bricks,
+	//lookup no longer has consecutive ids
+	lookup: {},
 	//contains same brick data but divided
 	//into named groups
 	group: {},
@@ -139,16 +141,17 @@ var brickData = {
 			[7, 4, "GlassBrick", []],
 			[12, 19, "GhostBrick", []],
 			[12, 12, "ForbiddenBrick", []],
-		]
+		];
 
 		let rawGroup = [
 			["normal", normal],
 			["nonbrick", nonbrick],
 			["flip", flip],
 			["other", other],
-		]
+		];
 
 		let index = 0;
+
 		for (let [name, arr] of rawGroup){
 			let group = [];
 			this.group[name] = group;
@@ -159,11 +162,27 @@ var brickData = {
 				let data = {
 					tex, brickType, args, id: index
 				}
-				this.lookup.push(data);
+				this.lookup[index] = data;
 				group.push(data);
 				index++;
 			}
 		}
+
+		//Powerup Bricks
+		//There are 135 of them and their ids start at 1000
+		this.group.powerup = [];
+		for (let i = 0; i < 135; i++){
+			let data = {
+				tex: "powerup_default_" + i,
+				brickType: "PowerupBrick",
+				args: [i],
+				id: 1000 + i,
+			};
+			this.lookup[1000 + i] = data;
+			this.group.powerup.push(data);
+		}
+		this.group.other.push(this.lookup[1000]);
+		
 	}
 };
 

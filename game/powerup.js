@@ -1312,6 +1312,55 @@ f[58] = function(){
 	}
 };
 
+//Laser Ball
+let LaserBall = class{
+	static delays = [500, 250, 100, 50, 25, 10];
+
+	constructor(ball){
+		this.ball = ball;
+		this.level = 0;
+		this.fireDelay = LaserBall.delays[0];
+		this.timer = 0;
+		this.preUpdate(0);
+	}
+
+	incrementLevel(){
+		let delays = LaserBall.delays;
+		this.level = Math.min(delays.length, this.level + 1);
+		this.fireDelay = delays[this.level];
+	}
+
+	preUpdate(delta){
+		this.timer -= delta;
+		if (this.timer > 0)
+			return;
+		this.timer = this.fireDelay;
+
+		let ball = this.ball;
+		let rad = randRangeFloat(0, 2 * Math.PI);
+		let norm = new Vector(...Vector.rotate(1, 0, rad));
+		let vel = norm.scale(0.8);
+		let pos = norm.scale(10).add(new Vector(...ball.getPos()));
+
+		let laser = new Projectile("laser_2",
+			pos.x, pos.y, vel.x, vel.y, rad + Math.PI/2, 2, 2);
+		game.emplace("projectiles", laser);
+		playSound("laser_fire");
+	}
+}
+f[61] = function(){
+	playSound("laserball_collected");
+	for (let ball of game.get("balls")){
+		if (ball.components.laserball)
+			ball.components.laserball.incrementLevel();
+		else{
+			ball.normal();
+			ball.setTexture("ball_main_2_4");
+			ball.components.laserball = new LaserBall(ball);
+		}
+	}
+}
+
 //Mega Ball
 let Mega = class{
 	constructor(ball){
@@ -1332,7 +1381,6 @@ let Mega = class{
 		game.emplace("particles", p);
 	}
 }
-
 f[65] = function(){
 	playSound("mega_collected");
 	for (let ball of game.get("balls")){
@@ -1392,6 +1440,229 @@ f[74] = function(){
 	playSound("normal_collected");
 	for (let ball of game.get("balls")){
 		ball.normal();
+	}
+}
+
+//Particle powerup
+let ParticlePowerup = class{
+	constructor(ball){
+		this.ball = ball;
+		this.speedMultiplier = 1.2;
+		this.outerRadius = 200;
+		this.innerRadius = 30;
+		this.projectiles = [];
+		this.addProjectile();
+		this.addProjectile();
+
+		// ball.addChild((new PIXI.Graphics())
+		// 	.lineStyle(1, 0xFFFF00)
+		// 	.drawCircle(0, 0, this.outerRadius/2)
+		// 	.drawCircle(0, 0, this.innerRadius/2)
+		// );
+	}
+
+	destructor(){
+		for (let p of this.projectiles)
+			p.actuallyDead = true;
+	}
+
+	setRandomVel(p, spd=1){
+		let rad = randRangeFloat(0, 2 * Math.PI);
+		let [vx, vy] = Vector.rotate(spd, 0, rad);
+		p.setVel(vx, vy);
+	}
+
+	addProjectile(){
+		const r = 4;
+		let ball = this.ball;
+
+		let p = new BallProjectile(
+			null, ball.x, ball.y);
+		this.setRandomVel(p);
+
+		p.setShape(new CircleShape(0, 0, r));
+		let gr = new PIXI.Graphics();
+		gr.beginFill(0xFFFFFF).drawCircle(0, 0, r/2);
+		p.addChild(gr);
+		p.particleCircle = gr;
+		
+		p.setBounce(true);
+		p.actuallyDead = false;
+		p.shouldBeRemoved = function(){
+			return this.actuallyDead;
+		};
+
+		game.emplace("projectiles", p);
+		this.projectiles.push(p);
+	}
+
+	preUpdate(delta){
+		let ball = this.ball;
+		let spd = ball.getSpeed() * this.speedMultiplier;
+		spd = Math.max(0.5, spd);
+		for (let p of this.projectiles){
+			//TODO: Figure out why p velocity becomes NaN
+			if (Number.isNaN(p.vx) ||
+				Number.isNaN(p.vy) ||
+				p.getSpeed() < 0.01)
+			{
+				this.setRandomVel(p);
+				p.setPos(...ball.getPos());
+			}
+			p.setSpeed(spd);
+			let [bx, by] = ball.getPos();
+			let [px, py] = p.getPos();
+			let [nx, ny] = Vector.normalize(bx-px, by-py);
+			Ball.prototype.updateSteer.call(p,
+				[nx, ny, 0.01, 0.01], delta);
+			//make the particles intangible if it stays too far
+			//away from the ball
+			let dist = Vector.dist(bx-px, by-py);
+			if (dist > this.outerRadius){
+				p.intangible = true;
+				p.particleCircle.tint = 0xFFFF00;
+			}
+			else if (dist < this.innerRadius){
+				p.intangible = false;
+				p.particleCircle.tint = 0xFFFFFF;
+			}
+		}
+	}
+};
+f[80] = function(){
+	playSound("particle_collected");
+	for (let ball of game.get("balls")){
+		if (ball.components.particle){
+			ball.components.particle.addProjectile();
+		}
+		else{
+			ball.normal();
+			ball.components.particle = new ParticlePowerup(ball);			
+		}
+	}
+}
+
+//Probe
+let Probe = class{
+	constructor(ball){
+		this.ball = ball;
+		let paddle = game.get("paddles")[0];
+		this.paddle = paddle;
+
+		this.probe = new BallProjectile("probe");
+		Object.assign(this.probe,
+			{damage: 100, strength: 1, pierce: "strong"});
+		this.probe.setPos(DIM.w/2, DIM.h/2);
+		this.probe.actuallyDead = false;
+		this.probe.shouldBeRemoved = function(){
+			return this.actuallyDead;
+		};
+		game.emplace("projectiles", this.probe);
+
+		//fixed overlay for both ball and paddle for convenience
+		this.ballOverlay = new Sprite("probe");
+		this.ballOverlay.scale.set(1);
+		ball.addChild(this.ballOverlay);
+
+		this.paddleOverlay = new Sprite("probe");
+		this.paddleOverlay.scale.set(1);
+		paddle.addChild(this.paddleOverlay); 
+
+		this.steerStrength = 0.025;
+		//probe will travel in a straight line for short time
+		//before homing in on the paddle
+		this.homingDelay = 300;
+		this.homingTimer = 0;
+
+		this.setState("ball");
+	}
+
+	destructor(){
+		this.probe.actuallyDead = true;
+		this.ball.removeChild(this.ballOverlay);
+		this.paddle.removeChild(this.paddleOverlay);
+	}
+
+	//set where the probe is located
+	//"ball", "paddle", or "free"
+	setState(state){
+		let ball = this.ball;
+		let probe = this.probe;
+		let ballOverlay = this.ballOverlay;
+		let paddleOverlay = this.paddleOverlay;
+
+		if (state == "ball"){
+			playSound("probe_collected");
+			probe.setVel(0, 0);
+			probe.visible = false;
+			probe.intangible = true;
+			ballOverlay.visible = true;
+			paddleOverlay.visible = false;
+		}
+		else if (state == "paddle"){
+			probe.setVel(0, 0);
+			probe.visible = false;
+			probe.intangible = true;
+			paddleOverlay.visible = true;
+		}
+		else{ //"free"
+			probe.visible = true;
+			probe.intangible = false;
+			ballOverlay.visible = false;
+
+			let [vx, vy] = ball.getVel();
+			let spd = Vector.dist(vx, vy);
+			[vx, vy] = Vector.normalize(vx, vy);
+			spd *= 1.5;
+			probe.setVel(vx * spd, vy * spd);
+			probe.setPos(...ball.getPos());
+
+			this.homingTimer = this.homingDelay;
+		}
+
+		this.state = state;
+	}
+
+	onPaddleHit(paddle){
+		if (this.state == "paddle" && paddle === this.paddle){
+			this.setState("ball");
+		}
+	}
+
+	preUpdate(delta){
+		let probe = this.probe;
+		let paddle = game.get("paddles")[0];
+
+		if (this.state == "free"){
+			this.homingTimer -= delta;
+			if (this.homingTimer <= 0){
+				//home in on the paddle
+				//maybe I should move this to probe.update()
+				let [bx, by] = probe.getPos();
+				let [px, py] = paddle.getPos();
+				let [nx, ny] = Vector.normalize(px-bx, py-by);
+				Ball.prototype.updateSteer.call(probe,
+					[nx, ny, this.steerStrength, 0.01], delta);
+			}
+			//attach to paddle
+			let [check] = paddle.checkCollision(probe);
+			if (check)
+				this.setState("paddle");
+		}
+	}
+
+	update(delta){
+		if (mouse.m1 == 1 && this.state == "ball"){
+			this.setState("free");
+		}
+	}
+}
+f[83] = function(){
+	for (let ball of game.get("balls")){
+		if (!ball.components.probe){
+			ball.normal();
+			ball.components.probe = new Probe(ball);
+		}
 	}
 }
 
@@ -1753,6 +2024,56 @@ f[126] = function(){
 		ball.components.whiskey = new Whiskey(ball);
 	}
 }
+//YoYo
+let Yoyo = class{
+	constructor(ball){
+		this.ball = ball;
+	}
+
+	preUpdate(delta){
+		let ball = this.ball;
+		let by = ball.y;
+		let multiplier = 0.8 + 5*Math.pow(1-(by/900), 2);
+		ball.velOverride = {
+			vx: ball.vx * multiplier,
+			vy: ball.vy * multiplier
+		};
+	}
+}
+f[129] = function(){
+	playSound("yoyoga_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_4_5");
+		ball.components.yoyo = new Yoyo(ball);
+	}
+}
+
+//Y-Return YReturn
+let YReturn = class{
+	constructor(ball){
+		this.ball = ball;
+	}
+
+	update(delta){
+		let ball = this.ball;
+		if (ball.vy <= 0)
+			return;
+
+		let paddle = game.get("paddles")[0];
+		let [bx, by] = ball.getPos();
+		let [px, py] = paddle.getPos();
+		ball.setSteer(px-bx, py-by, 0.005);
+	}
+}
+f[131] = function(){
+	playSound("yreturn_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_1_5");
+		ball.components.yreturn = new YReturn(ball);
+	}
+}
 
 /*****************
 * Paddle Weapons *
@@ -1841,7 +2162,7 @@ let Laser = class extends PaddleWeapon{
 	onClick(mouseVal){
 		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
 			return;
-		playSound("laser_fire");
+		playSound(this.isPlus ? "laserplus_fire" : "laser_fire");
 		let paddle = this.paddle;
 		let off = paddle.paddleWidth/2 - 17;
 		let tex = this.isPlus ? "laser_1" : "laser_0";

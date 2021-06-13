@@ -18,7 +18,7 @@ var media = {
 //also prevent the same sound from playing multiple times
 //	in a short time window
 var maxSoundInstances = 3;
-var minSoundInterval = 0.1; //in seconds
+var minSoundInterval = 0.05; //in seconds
 PIXI.sound.volumeAll = 0.15;
 
 //stores all running sound instances
@@ -257,7 +257,8 @@ let recursive_texture_names = [
 		"ballcannon_ball",
 		"drill",
 		"missile",
-		"rapid_bullets"
+		"rapid_bullets",
+		"probe"
 	]]
 ];
 
@@ -352,6 +353,11 @@ let recursive_sound_names = [
 		"halo_collected",
 		"whiskey_collected",
 		"voodoo_collected",
+		"laserball_collected",
+		"yreturn_collected",
+		"yoyoga_collected",
+		"probe_collected",
+		"particle_collected",
 	]],
 	["enemy/", [
 		"enemy_death",
@@ -679,6 +685,7 @@ media.processSounds = function(){
 	setVol("bomber_explode", 0.5);
 	setVol("rapidfire_fire", 0.5);
 	setVol("iceball_hit", 0.25);
+	setVol("laser_fire", 0.75);
 }
 
 //some animations may be created outside of this method

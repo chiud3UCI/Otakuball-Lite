@@ -231,6 +231,8 @@ class Ball extends Sprite{
 	//it seems this functions crashes when epsilon is 0
 	updateSteer(steer, delta){
 		let [tx, ty, mag, epsilon] = steer;
+		if (tx == 0 && ty == 0)
+			return;
 		let vx = this.vx;
 		let vy = this.vy;
 		let spd = this.getSpeed();

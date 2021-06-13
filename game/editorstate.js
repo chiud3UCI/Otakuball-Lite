@@ -389,6 +389,8 @@ class EditorState{
 				state.brickButtons.push(butt);
 				if (dat.brickType == "SlotMachineBrick")
 					state.slotButtons.push(butt);
+				if (dat.brickType == "PowerupBrick")
+					state.powerupButton = butt;
 			}
 		}
 
@@ -414,24 +416,40 @@ class EditorState{
 		let powerPanel = this.powerPanel;
 		let widget = this.widget;
 		powerPanel.visible = false;
+		powerPanel.mode = "slotmachine";
 
-		//repurpose the buttons
+		//repurpose the powerup buttons
 		for (let butt of this.powerButtons){
 			butt.highlight = EditorButton.prototype.highlight;
 			butt.pointerDown = function(e){
-				let newPows = state.newSlotPowerups;
-				let pows = state.slotPowerups;
-				for (let p of newPows){
-					//no duplicate powerups
-					if (p == this.id)
-						return;
+				if (powerPanel.mode == "slotmachine"){
+					let newPows = state.newSlotPowerups;
+					let pows = state.slotPowerups;
+					for (let p of newPows){
+						//no duplicate powerups
+						if (p == this.id)
+							return;
+					}
+					newPows.push(this.id);
+					if (newPows.length == 3){
+						powerPanel.visible = false;
+						widget.visible = true;
+						state.tooltip.text = "";
+						pows[state.newSlotColor] = newPows;
+					}
 				}
-				newPows.push(this.id);
-				if (newPows.length == 3){
+				else{ //mode == "powerup"
+					//change the brickId and brickData of the button
+					let butt = state.powerupButton;
+					let id = 1000 + this.id;
+					butt.id = id;
+					butt.dat = brickData.lookup[id];
+					butt.updateAppearance();
+					state.selectedBrick = id;
+
 					powerPanel.visible = false;
-					state.tooltip.text = "";
 					widget.visible = true;
-					pows[state.newSlotColor] = newPows;
+					state.tooltip.text = "";
 				}
 			}
 		}
@@ -443,12 +461,36 @@ class EditorState{
 					state.newSlotPowerups = [];
 					state.newSlotColor = 
 						(this.dat.args[0]) ? 1 : 0;
+					powerPanel.mode = "slotmachine";
 					powerPanel.visible = true;
 					widget.visible = false;
 				}
 				oldFunc.call(this, e);
 			};
 		}
+		//modify the powerup brick button
+		let butt = this.powerupButton;
+		let oldFunc = butt.pointerDown;
+		butt.pointerDown = function(e){
+			let id = state.selectedBrick;
+			if (id >= 1000 && id < 2000){
+				powerPanel.mode = "powerup";
+				powerPanel.visible = true;
+				widget.visible = false;
+			}
+			oldFunc.call(this, e);
+		};
+
+		let overlay = new Sprite("brick_main_7_4");
+		overlay.scale.set(1);
+		overlay.alpha = 0.5;
+		overlay.position.set(8, 4);
+		butt.addChild(overlay);
+		butt.updateAppearance = function(){
+			let tex = this.dat.tex;
+			butt.texture = media.textures[tex];
+		};
+		butt.updateAppearance();
 	}
 
 	initPatchButtons(){
@@ -878,6 +920,13 @@ class GridNode{
 		stage.addChild(sprite);
 		this.brickId = null;
 
+		//currently this overlay is for PowerupBrick only
+		let overlay = new Sprite("brick_main_7_4");
+		this.overlay = overlay;
+		overlay.alpha = 0.5;
+		overlay.visible = false;
+		stage.addChild(overlay);
+
 		//4 shields, movement, invisible, antilaser
 		this.patch = null;
 		this.patchSprites = [];
@@ -912,16 +961,23 @@ class GridNode{
 	//no args to clear the brick
 	setBrick(id){
 		if (id === undefined || id === null){
+			//Erase Brick
 			this.brickId = null;
 			this.dat = null;
 			this.sprite.visible = false;
+			this.overlay.visible = false;
 			this.clearPatch();
-			return;
 		}
-		this.brickId = id;
-		this.dat = brickData.lookup[id];
-		this.sprite.setTexture(this.dat.tex);
-		this.sprite.visible = true;
+		else{
+			//Powerup Brick
+			this.brickId = id;
+			this.dat = brickData.lookup[id];
+			this.sprite.setTexture(this.dat.tex);
+			this.sprite.visible = true;
+			this.overlay.visible = false;
+			if (id >= 1000 && id < 2000)
+				this.overlay.visible = true;
+		}
 	}
 
 	//pair is array containing [slot, value];

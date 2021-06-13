@@ -121,7 +121,7 @@ class Brick extends Sprite{
 		mask.regen = {
 			aniDelay: 1000 / (60 * spd),
 			aniTimer: 1000 / (60 * spd),
-			delay: 1000,
+			delay: 2000,
 			timer: 0,
 			index: 8,
 			baseHealth: this.health,
@@ -2456,6 +2456,22 @@ class SplitBrick extends Brick{
 	}
 }
 
+class PowerupBrick extends Brick{
+	constructor(x, y, powId){
+		super("powerup_default_" + powId, x, y);
+		let overlay = new Sprite("brick_main_7_4");
+		overlay.scale.set(1);
+		overlay.alpha = 0.5;
+		this.addChild(overlay);
+		this.powId = powId;
+	}
+
+	onDeath(){
+		super.onDeath();
+		let pow = new Powerup(this.x, this.y, this.powId);
+		game.emplace("powerups", pow);
+	}
+}
 
 var brickClasses = {
 	Brick,
@@ -2496,4 +2512,5 @@ var brickClasses = {
 	TwinLauncherBrick,
 	ParachuteBrick,
 	SplitBrick,
+	PowerupBrick,
 }

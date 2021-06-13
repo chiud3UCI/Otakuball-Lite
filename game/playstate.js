@@ -1,8 +1,8 @@
 var cheats = {
 	enabled: true,
-	_disable_pit: false,
-	_instant_powerups: false,
-	_fling_existing: false,
+	_disable_pit: true,
+	_instant_powerups: true,
+	_fling_existing: true,
 	_show_forbidden: false,
 	_disable_powerup_spawning: false,
 

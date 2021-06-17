@@ -18,9 +18,11 @@ class Sprite extends PIXI.Sprite{
 	constructor(
 		texture=null, x=0, y=0, vx=0, vy=0, angle=0, sx=2, sy)
 	{
-		//if texture is null then PIXI.Sprite will use
-		//PIXI.Texture.EMPTY which is a clear 1x1 pixel
-		if (typeof(texture) === "string"){
+		if (texture === null){
+			//PIXI.Texture.EMPTY is a clear 1x1 pixel
+			texture = PIXI.Texture.EMPTY;
+		}
+		else if (typeof(texture) === "string"){
 			let texStr = texture;
 			texture = media.textures[texStr];
 			if (!texture)
@@ -58,6 +60,8 @@ class Sprite extends PIXI.Sprite{
 		this.dead = false;
 		this.score = null;
 
+		this.showHitbox = false;
+
 		this.gameType = "sprite";
 	}
 
@@ -80,7 +84,7 @@ class Sprite extends PIXI.Sprite{
 
 	//automatically make a rectangle or circle shape based
 	//on the size of the sprite's textures
-	//will work if this Sprite contains mujltiple sprites
+	//will work if this Sprite contains multiple children sprites
 	createShape(circle){
 		if (circle){
 			let r = this.getBounds();
@@ -253,10 +257,18 @@ class Sprite extends PIXI.Sprite{
 			game.top.add("hud", this.debugHitbox);		
 		}
 		let hb = this.debugHitbox;
-		let [x0, y0, x1, y1] = this.getAABB();
-		hb.clear();
-		hb.lineStyle(1, 0x00FFFF);
-		hb.drawRect(x0, y0, x1-x0, y1-y0);
+		if (this.shape.shapeType == "circle"){
+			let circle = this.shape;
+			hb.clear();
+			hb.lineStyle(1, 0x00FFFF);
+			hb.drawCircle(circle.center.x, circle.center.y, circle.radius);
+		}
+		else{
+			let [x0, y0, x1, y1] = this.getAABB();
+			hb.clear();
+			hb.lineStyle(1, 0x00FFFF);
+			hb.drawRect(x0, y0, x1-x0, y1-y0);
+		}
 	}
 
 	//returns Axis Aligned Bounding Box of the
@@ -272,6 +284,20 @@ class Sprite extends PIXI.Sprite{
 		let rh = r.height;
 
 		return [rx, ry, rx+rw, ry+rh];
+	}
+
+	//returns [width, height] of the sprite
+	getDim(spriteOnly){
+		if (!spriteOnly && this.shape){
+			let [x0, y0, x1, y1] = this.shape.getAABB();
+			return [x1-x0, y1-y0];
+		}
+		let r = this.getBounds();
+		return [r.width, r.height];
+	}
+
+	getDims(spriteOnly){
+		return getDim(spriteOnly);
 	}
 
 	//check if 2 sprites' AABB overlap
@@ -365,7 +391,8 @@ class Sprite extends PIXI.Sprite{
 			this.updateShape();
 		}
 
-		// this.drawHitbox();
+		if (this.showHitbox)
+			this.drawHitbox();
 
 		// this.updateGlow();
 	}

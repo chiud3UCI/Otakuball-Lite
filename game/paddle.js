@@ -42,6 +42,11 @@ class Paddle extends Sprite{
 
 		this.components = {};
 
+		//used to prevent automatic weapons from immedately firing
+		//the frame after the player clicks and release the balls
+		//from the paddle
+		this.timeSinceRelease = 0;
+
 		//shader test
 		// let glow = media.shaders.glow;
 		// glow.uniforms.color = [1, 1, 1];
@@ -67,21 +72,21 @@ class Paddle extends Sprite{
 		this.mid.texture  = mid;
 	}
 
-	//paddle needs to call setGlow on each section
-	// setGlow(val){
-	// 	for (let sprite of this.paddleRects.children)
-	// 		sprite.setGlow(val);
-	// }
+	//Ignore any other sprites that may be added to the paddle
+	createShape(){
+		let rects = this.paddleRects;
+		let {x, y, width: w, height: h} = rects.getBounds();
+		this.setShape(new PolygonShape([
+			x  , y  ,
+			x+w, y  ,
+			x+w, y+h,
+			x  , y+h
+		]));
 
-	// updateGlow(){
-	// 	for (let sprite of this.paddleRects.children)
-	// 		sprite.updateGlow();
-	// }
+	}
 
 	setComponent(name, component){
-		let components = this.components;
 		this.components[name]?.destructor?.();
-
 		this.components[name] = component;
 	}
 
@@ -282,19 +287,18 @@ class Paddle extends Sprite{
 			let y = this.y - 8 - ball.shape.radius;
 			ball.moveTo(x, y);
 		}
-
-		let mouseInBoard = (
-			mx > DIM.lwallx &&
-			mx < DIM.rwallx &&
-			my > DIM.ceiling &&
-			my < DIM.h
-		);
-		if (mouse.m1 && mouseInBoard){
+		
+		if (mouse.m1 && mouse.inBoard()){
 			//don't activate component click
 			//if there are balls to be released
-			if (!this.releaseBalls())
+			let hasReleased = this.releaseBalls();
+
+			if (hasReleased)
+				this.timeSinceRelease = 0;
+			else
 				this.componentClick();
 		}
+		this.timeSinceRelease += delta;
 
 		for (let comp of Object.values(this.components))
 			comp.update?.(delta);

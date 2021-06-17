@@ -105,7 +105,7 @@ class LevelSelectState{
 			cont.addChild(sprite);
 		}
 
-		renderer.render(cont, preview);
+		renderer.render(cont, {renderTexture: preview});
 		return preview;
 	}
 
@@ -223,7 +223,7 @@ class ScrollBar extends PIXI.Container{
 		this.position.set(x, y);
 
 		let base = new PIXI.Graphics()
-			.beginFill(0xBBBBBB)
+			.beginFill(0xDDDDDD)
 			.drawRect(0, 0, w, h);
 		this.addChild(base);
 

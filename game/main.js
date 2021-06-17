@@ -28,16 +28,86 @@ var mouse;
 var keyboard;
 var keycode;
 var game;
+var default_levels = null;
+var ENABLE_RIGHT_CLICK = false;
 
-var ALERT_FLAG = false;
-function ALERT_ONCE(message){
-	if (!ALERT_FLAG){
-		ALERT_FLAG = true;
+var alert_record = {};
+function ALERT_ONCE(message, id = 0){
+	if (!alert_record[id]){
+		alert_record[id] = true;
 		alert(message);
 	}
 }
 
-var ENABLE_RIGHT_CLICK = false;
+class Game {
+	constructor(){
+		this.states = [];
+		this.top = null;
+		this.stage = new PIXI.Container();
+	}
+	
+	getState(i){
+		if (i < 0)
+			i += this.states.length;
+		return this.states[i];
+	}
+
+	push(state){
+		this.top = state;
+		this.states.push(state);
+		this.switchStage();
+	}
+	pop(){
+		let states = this.states;
+		let state = states.pop();
+		if (state.destructor)
+			state.destructor();
+		if (states.length == 0)
+			this.top = null;
+		else
+			this.top = states[states.length-1];
+		this.switchStage();
+	}
+	//switch rendering to the top layer
+	switchStage(){
+		this.stage.removeChildren();
+		if (this.top){
+			let top = this.top;
+			this.stage.addChild(top.stage);
+			if (top.windowTitle){
+				let text = `Otaku-Ball - ${top.windowTitle}`;
+				this.windowTitle.text = text;
+			}
+		}
+		//also clear mouse buttons
+		mouse.m1 = 0;
+		mouse.m2 = 0;
+	}
+
+	//add and emplace will be used frequently
+	add(name, obj){
+		this.top.add(name, obj);
+	}
+
+	emplace(name, obj){
+		this.top.emplace(name, obj);
+	}
+
+	incrementScore(score){
+		this.top.incrementScore?.(score);
+	}
+
+	get(name){
+		return this.top.get(name);
+	}
+
+	update(delta){
+		mouse.updatePos();
+		this.top.update(delta);
+		mouse.updateButton();
+		keyboard.update();
+	}
+}
 
 //custom mask class that takes in account of the window offset
 class Mask extends PIXI.Graphics{
@@ -77,7 +147,7 @@ function init(){
 		width: DIM.w + DIM.outerx,
 		height: DIM.h + DIM.outery,
 		antialias: false,
-		transparent: false,
+		backgroundAlpha: false,
 		resolution: 1
 	});
 
@@ -95,23 +165,19 @@ function init(){
 			this.x = appMouse.global.x - DIM.offx;
 			this.y = appMouse.global.y - DIM.offy;
 		},
-		//differentiate between mouse click and hold
 		updateButton(){
+			//m1 = 1 for first frame left mouse button is down
+			//m1 = 2 for subsequent frames until button is released
 			if (this.m1 == 1)
 				this.m1 = 2;
 			if (this.m2 == 1)
 				this.m2 = 2;
-			//release all mice if mouse is outside of the game
-			// let check = (
-			// 	this.x > 0 &&
-			// 	this.x < DIM.w &&
-			// 	this.y > 0 &&
-			// 	this.y < DIM.h
-			// );
-			// if (!check){
-			// 	this.m1 = 0;
-			// 	this.m2 = 0;
-			// }
+		},
+		inBoard(){
+			return (
+				this.x > DIM.lwallx && this.x < DIM.rwallx &&
+				this.y > DIM.ceiling && this.y < DIM.h
+			);
 		}
 	}
 
@@ -145,11 +211,8 @@ function init(){
 
 	document.body.appendChild(app.view);
 
-	media.load(setup);
-
+	media.load(setup); //calls setup() once loading is done
 }
-
-var default_levels = null;
 
 function setup(){
 	console.log("LOAD COMPLETE");
@@ -159,74 +222,7 @@ function setup(){
 	media.createAnimations();
 	default_levels = PIXI.Loader.shared.resources.default_levels.data;
 
-	game = {
-		states: [],
-		top: null,
-		stage: new PIXI.Container(),
-
-		//this supports negative indexing
-		getState(i){
-			if (i < 0)
-				i += this.states.length;
-			return this.states[i];
-		},
-
-		push(state){
-			this.top = state;
-			this.states.push(state);
-			this.switchStage();
-		},
-		pop(){
-			let states = this.states;
-			let state = states.pop();
-			if (state.destructor)
-				state.destructor();
-			if (states.length == 0)
-				this.top = null;
-			else
-				this.top = states[states.length-1];
-			this.switchStage();
-		},
-		//switch rendering to the top layer
-		switchStage(){
-			this.stage.removeChildren();
-			if (this.top){
-				let top = this.top;
-				this.stage.addChild(top.stage);
-				if (top.windowTitle){
-					let text = `Otaku-Ball - ${top.windowTitle}`;
-					this.windowTitle.text = text;
-				}
-			}
-			//also clear mouse buttons
-			mouse.m1 = 0;
-			mouse.m2 = 0;
-		},
-
-		//add and emplace will be used frequently
-		add(name, obj){
-			this.top.add(name, obj);
-		},
-
-		emplace(name, obj){
-			this.top.emplace(name, obj);
-		},
-
-		incrementScore(score){
-			this.top.incrementScore?.(score);
-		},
-
-		get(name){
-			return this.top.get(name);
-		},
-
-		update(delta){
-			mouse.updatePos();
-			this.top.update(delta);
-			mouse.updateButton();
-			keyboard.update();
-		}
-	}
+	game = new Game();
 
 	let [box, title] = 
 		createOuterBorder(DIM.w + DIM.outerx, DIM.h + DIM.outery);
@@ -282,12 +278,11 @@ function getTrueGlobalPosition(obj){
 	return new PIXI.Point(p.x-DIM.offx, p.y-DIM.offy);
 }
 
-
-//Other important utility functions that I don't know
-//where else to put
-
 //disable right click contex menu and
 //disable mouse click while cursor is in game
+//	disabling mouse click is important because otherwise 
+//  double-clicking the game might cause the player to 
+//  highlight html elements outside of the game
 function alterMouseEvents(){
 	function mouseInWindow(){
 		if (ENABLE_RIGHT_CLICK)
@@ -325,6 +320,9 @@ function alterMouseEvents(){
         // console.log("attachevent");
     }
 }
+
+//Other important utility functions that I don't know
+//where else to put
 
 function getGridPos(x, y){
 	if (x instanceof Object){
@@ -382,7 +380,7 @@ function randRange(a, b){
 	return a + Math.floor(Math.random() * (b-a));
 }
 
-//returns a float from [a to b] inclusive
+//returns a float from [a to b)
 function randRangeFloat(a, b){
 	if (b === undefined){
 		b = a;
@@ -395,6 +393,7 @@ function deltaEqual(a, b, epsilon=0.001){
 	return (Math.abs(a-b) < epsilon);
 }
 
+//Remove all dead Sprites from a PIXI.Container
 function updateAndRemove(container, delta){
 	let dead = [];
 	for (let obj of container.children){

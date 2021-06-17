@@ -218,6 +218,7 @@ let recursive_texture_names = [
 		"bg2",
 		"title_bg",
 		"no_bg",
+		"control_crosshair",
 	]],
 
 	["enemy/", [
@@ -280,7 +281,9 @@ let recursive_sound_names = [
 		"drill_explode",
 		"cannon_drumroll",
 		"cannon_fire",
-		"rapidfire_fire"
+		"rapidfire_fire",
+		"beam_fire",
+		"control_active",
 	]],
 	["brick/", [
 		"brick_hit",
@@ -358,6 +361,7 @@ let recursive_sound_names = [
 		"yoyoga_collected",
 		"probe_collected",
 		"particle_collected",
+		"control_collected",
 	]],
 	["enemy/", [
 		"enemy_death",

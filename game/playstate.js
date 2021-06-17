@@ -1,7 +1,7 @@
 var cheats = {
 	enabled: false, //will enable cheats in Play Mode
-	_disable_pit: false,
-	_instant_powerups: false,
+	_disable_pit: true,
+	_instant_powerups: true,
 	_fling_existing: false,
 	_show_forbidden: false,
 	_disable_powerup_spawning: false,
@@ -164,7 +164,7 @@ class PlayState{
 
 		//create powerup spawner
 		this.powerupSpawner = new PowerupSpawner(
-			0.15,
+			GLOBAL_POWERUP_CHANCE,
 			DEFAULT_WEIGHTS,
 		);
 

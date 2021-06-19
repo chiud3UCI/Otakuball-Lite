@@ -1286,6 +1286,7 @@ class AlienBrick extends Brick{
 class RainbowBrick extends Brick{
 	constructor(x, y){
 		super("brick_main_7_7", x, y);
+		this.brickType = "rainbow";
 	}
 
 	onDeath(){
@@ -1345,6 +1346,7 @@ class GateBrick extends Brick{
 		let ani = this.addAnim("flash", anistr, 0.25);
 		ani.onCompleteCustom = () => {
 			this.ejectBall();
+		this.brickType = "gate";
 		}
 	}
 
@@ -1565,6 +1567,7 @@ class BoulderBrick extends Brick{
 		super("brick_main_7_16", x, y);
 		this.health = 20;
 		this.deathSound = "boulder_break";
+		this.brickType = "boulder";
 	}
 
 	onDeath(){
@@ -1820,6 +1823,8 @@ class OnixBrick extends Brick{
 
 		let anistr = `onix_shine_${n}`;
 		this.addAnim("shine", anistr, 0.25);
+
+		this.brickType = "onix";
 	}
 
 	takeDamage(damage, strength){
@@ -1855,6 +1860,7 @@ class ShoveBrick extends Brick{
 		super(tex, x, y);
 		this.isRight = isRight;
 		this.armor = 1;
+		this.brickType = "shove";
 	}
 
 	takeDamage(damage, strength){
@@ -1884,6 +1890,7 @@ class FactoryBrick extends Brick{
 			this.addAnim("shine"+i, anistr, 0.25);
 		}
 		this.updateAppearance();
+		this.brickType = "factory";
 	}
 
 	updateAppearance(){
@@ -1897,14 +1904,18 @@ class FactoryBrick extends Brick{
 		this.setTexture(`brick_shine_0_${14+off}`);
 	}
 
+	takeDamage(damage, strength){
+		super.takeDamage(damage, strength);
+		this.stopAnim();
+		this.updateAppearance();
+		this.playAnim(this.hitAni);
+	}
+
 	onSpriteHit(obj, norm, mag){
 		super.onSpriteHit(obj, norm, mag);
 		if (obj.gameType == "ball"){
 			let side = Brick.getHitSide(norm);
 			this.generateBrick(side);
-			this.stopAnim();
-			this.updateAppearance();
-			this.playAnim(this.hitAni);
 		}
 	}
 
@@ -1942,6 +1953,7 @@ class ShoveDetonatorBrick extends Brick{
 	constructor(x, y){
 		super("brick_main_8_10", x, y);
 		this.addAnim("glow", "brick_glow_7", 0.25, true, true);
+		this.brickType = "shovedetonator";
 	}
 
 	/* Shove Algorithm
@@ -2203,6 +2215,7 @@ class LauncherBrick extends Brick{
 		this.updateAppearance();
 		this.spinDelay = 200;
 		this.spinTimer = this.spinDelay;
+		this.brickType = "launcher";
 	}
 
 	updateAppearance(){
@@ -2310,6 +2323,7 @@ class TwinLauncherBrick extends Brick{
 }
 
 class ParachuteBrick extends Brick{
+	//Parachute is a component just like a ball powerup
 	static Parachute = class{
 		constructor(ball){
 			this.ball = ball;
@@ -2464,6 +2478,8 @@ class PowerupBrick extends Brick{
 		overlay.alpha = 0.5;
 		this.addChild(overlay);
 		this.powId = powId;
+
+		this.brickType == "poewrup";
 	}
 
 	onDeath(){

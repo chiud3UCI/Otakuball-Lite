@@ -2037,7 +2037,7 @@ class Yoyo{
 	preUpdate(delta){
 		let ball = this.ball;
 		let by = ball.y;
-		let multiplier = 0.8 + 5*Math.pow(1-(by/900), 2);
+		let multiplier = 0.8 + 5*(1-(by/900))**2;
 		ball.velOverride = {
 			vx: ball.vx * multiplier,
 			vy: ball.vy * multiplier
@@ -2508,6 +2508,155 @@ f[23] = function(){
 	paddle.setComponent("weapon", new DrillMissile(paddle));
 };
 
+//Hacker
+class Hacker{
+	static hackableBricks = generateLookup([
+		"shooter",
+		"shove",
+		"factory",
+		"jumper",
+		"rainbow",
+		"split",
+		"slotmachine",
+		"launcher",
+		"twinlauncher",
+		"comet"
+	]);
+
+	constructor(paddle){
+		this.paddle = paddle;
+
+		let sprite = new GraphicsSprite();
+		game.emplace("particles", sprite);
+		this.sprite = sprite;
+	}
+
+	destructor(){
+		this.sprite.kill();
+	}
+
+	onClick(mouseVal){
+		if (mouseVal != 1)
+			return;
+		if (!this.target)
+			return;
+
+		let br = this.target;
+		br.takeDamage(10, 0);
+		if (br.brickType == "factory")
+			this.factoryHack(br);
+	}
+
+	factoryHack(br){
+		//angle between horizontal and bottom right corner of brick
+		const phi = Vector.angleBetween(1, 0, 2, 1);
+		const PI = Math.PI;
+
+		let mx = mouse.x;
+		let my = mouse.y;
+		let rad = Math.atan2(my-br.y, mx-br.x);
+		
+		//brick comes out on the side opposite to cursor
+		let side = null;
+		if (rad > -phi && rad < phi)
+			side = "right";
+		else if (rad >= phi && rad < PI - phi)
+			side = "down";
+		else if (rad <= -phi && rad > -(PI - phi))
+			side = "up";
+		else
+			side = "left";
+
+		// console.log(`factory hack ${rad*180/PI} ${dir}`);
+		br.generateBrick(side);
+
+	}
+
+	canHack(brick){
+		return !!Hacker.hackableBricks[brick.brickType];
+	}
+
+	acquireTarget(){
+		let mx = mouse.x;
+		let my = mouse.y;
+
+		let minDist = Infinity;
+		let target = null;
+		for (let br of game.get("bricks")){
+			let dist = Vector.dist2(br.x, br.y, mx, my);
+			if (this.canHack(br) && dist < minDist){
+				minDist = dist;
+				target = br;
+			}
+		}
+
+		this.target = target;
+	}
+
+	update(delta){
+		let gr = this.sprite;
+		let paddle = this.paddle;
+
+		this.acquireTarget();
+
+		gr.clear();
+		if (this.target){
+			let br = this.target;
+			gr.lineStyle(2, 0xFFFF000)
+				.moveTo(paddle.x, paddle.y)
+				.lineTo(br.x, br.y + 8)
+				.drawRect(br.x-16, br.y-8, 32, 16);
+		}
+	}
+}
+
+f[41] = function(){
+	playSound("hacker_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_21_1");
+	paddle.setComponent("weapon", new Hacker(paddle));
+}
+
+
+class Invert{
+	constructor(paddle){
+		this.paddle = paddle;
+		this.cdMax = 2000;
+		this.cd = 0;
+	}
+
+	onClick(mouseVal){
+		if (mouseVal != 1)
+			return;
+		if (this.cd > 0)
+			return;
+		this.cd = this.cdMax;
+
+		for (let ball of game.get("balls")){
+			ball.vy *= -1;
+			let p = new Particle(null, ball.x, ball.y);
+			p.setRotation(Math.PI / 2);
+			let ani = p.addAnim("invert", "invert", 0.25, false, true);
+			ani.onCompleteCustom = function(){
+				p.kill();
+			}
+			game.emplace("particles",  p);
+		}
+
+	}
+
+	update(delta){
+		this.cd = Math.max(0, this.cd - delta);
+	}
+}
+f[49] = function(){
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_29_1");
+	paddle.setComponent("weapon", new Invert(paddle));
+}
+
 //Laser and Laser Plus
 class Laser extends PaddleWeapon{
 	constructor(paddle, plus=false){
@@ -2568,6 +2717,87 @@ f[60] = function(){
 			paddle, true));
 	}
 };
+
+//Pause
+class Pause{
+	constructor(paddle){
+		this.paddle = paddle;
+		this.pausedBalls = new Map();
+
+		//amount of time the balls are slowed down
+		this.pauseTimer = 0;
+		this.pauseTimerMax = 2000;
+		//time between pause activations
+		this.cd = 0;
+		this.cdMax = 5000;
+
+		let ring = new GraphicsSprite();
+		ring.expandSpeed = 0.8;
+		ring.radius = 0;
+		ring.maxRadius = Math.sqrt(DIM.boardw**2 + DIM.boardh**2);
+		game.emplace("particles", ring);
+		this.ring = ring;
+	}
+
+	destructor(){
+		this.ring.kill();
+	}
+
+	onClick(mouseVal){
+		let paddle = this.paddle;
+		let ring = this.ring;
+
+		if (this.cd > 0 || mouseVal != 1)
+			return;
+
+		this.cd = this.cdMax;
+		this.pauseTimer = this.pauseTimerMax;
+
+		this.pausedBalls.clear();
+		ring.x = paddle.x;
+		ring.y = paddle.y;
+		ring.radius = 0;
+		ring.visible = true;
+
+		playSound("pause_activated");
+	}
+
+	update(delta){
+		let {paddle, ring, pausedBalls} = this;
+
+		this.cd = Math.max(0, this.cd-delta);
+
+		if (this.pauseTimer > 0){
+			this.pauseTimer -= delta;
+			if (this.pauseTimer <= 0){
+				ring.visible = false;
+			}
+
+			for (let ball of game.get("balls")){
+				let dist = Vector.dist(ring.x, ring.y, ball.x, ball.y);
+				if (dist < ring.radius)
+					pausedBalls.set(ball, true);
+			}
+			for (let ball of pausedBalls.keys()){
+				let [vx, vy] = ball.getVel();
+				ball.velOverride = {vx: vx*0.1, vy: vy*0.1};
+			}
+
+			ring.radius += ring.expandSpeed * delta;
+			if (ring.radius < ring.maxRadius){
+				ring.clear()
+					.lineStyle(2, 0xFFFFFF)
+					.drawCircle(0, 0, ring.radius);				
+			}
+		}
+	}
+}
+f[81] = function(){
+	playSound("pause_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setComponent("weapon", new Pause(paddle));
+}
 
 //Rapidfire
 class RapidFire extends PaddleWeapon{
@@ -2732,7 +2962,147 @@ f[27] = function(){
 	paddle.setComponent("weapon", new ErraticMissile(paddle));
 };
 
-//Subcategory Subweapons
+//Transform
+var transformableBricks = generateLookup([
+	"metal",
+	"gold",
+	"copper",
+	"speed",
+	"alien",
+	"factory",
+	"tiki",
+	"lasereye",
+	"boulder",
+	"jumper",
+	"rainbow",
+	"parachute",
+	"sequence",
+	"split"
+]);
+
+function canBeTransformed(brick){
+	return !!transformableBricks[brick.brickType];
+}
+
+//kill brick and replace it with a Normal Brick
+function transformBrick(brick, ci=0, cj=0){
+	//make sure to check if brick can be transformed first
+	brick.kill();
+	brick.suppress = true;
+	let [i, j] = getGridPos(...brick.getPos());
+	let [x, y] = getGridPosInv(i, j);
+
+	let newBrick = new NormalBrick(x, y, ci, cj);
+	game.emplace("bricks", newBrick);
+}
+
+class Transform{
+	constructor(paddle){
+		this.paddle = paddle;
+		this.target = null;
+
+		this.timer = 0;
+		this.maxTimer = 1000;
+
+		const [bw, bh] = [32, 16];
+		let glow = new Sprite(null);
+		glow.scale.set(1);
+		let gr = new PIXI.Graphics()
+			.beginFill(0xFFFFFF)
+			.drawRect(-bw/2, -bh/2, bw, bh);
+		glow.addChild(gr);
+		game.emplace("particles", glow);
+		this.glow = glow;
+
+		let lasers = new GraphicsSprite(0, 0);
+		game.emplace("particles", lasers);
+		this.lasers = lasers;
+	}
+
+	destructor(){
+		this.glow.kill();
+		this.lasers.kill();
+	}
+
+	onClick(mouseVal){
+		let paddle = this.paddle;
+		if (paddle.timeSinceRelease < 200)
+			return;
+
+		if (!this.target){
+			this.acquireTarget();
+		}
+	}
+
+	acquireTarget(){
+		let mx = mouse.x;
+		let my = mouse.y;
+		let minDist = Infinity;
+		let target = null;
+		for (let br of game.get("bricks")){
+			let dist = Vector.dist2(mx, my, br.x, br.y);
+			if (canBeTransformed(br) && dist < minDist){
+				minDist = dist;
+				target = br;
+			}
+		}
+
+		if (target){
+			this.target = target;
+			this.glow.setPos(target.x, target.y);
+			this.glow.visible = true;
+			this.lasers.visible = true;
+			this.timer = 0;
+		}
+	}
+
+	update(delta){
+		let glow = this.glow;
+		let lasers = this.lasers;
+		let paddle = this.paddle;
+
+		if (mouse.m1 == 0){
+			this.target = null;
+		}
+
+		if (this.target){
+			this.timer += delta;
+			if (this.timer >= this.maxTimer){
+				transformBrick(this.target, 1, 2);
+				playSound("transform_brick");
+				this.target = null;
+			}
+			else{
+				glow.alpha = this.timer / this.maxTimer;
+
+				let [tx, ty] = this.target.getPos();
+				let [px, py] = paddle.getPos();
+				let pw = paddle.paddleWidth / 2 - 16;
+				lasers.clear()
+					.lineStyle(2, 0xFF9900)
+					.moveTo(px-pw, py)
+					.lineTo(tx, ty)
+					.moveTo(px+pw, py)
+					.lineTo(tx, ty);
+			}
+		}
+
+		glow.visible = !!this.target;
+		lasers.visible = !!this.target;
+
+	}
+}
+
+f[108] = function(){
+	let paddle = game.get("paddles")[0];
+	if (paddle.components.weapon?.name != "transform"){
+		paddle.clearPowerups();
+		paddle.setTexture("paddle_24_1");
+		paddle.setComponent("weapon", new Transform(paddle));
+	}
+}
+
+//Paddle Subweapon Subcategory
 
 //Javelin
 class Javelin{
@@ -2845,6 +3215,68 @@ f[51] = function(){
 		return;
 	paddle.setComponent("subweapon", new Javelin(paddle));
 };
+
+//Rocket
+class Rocket{
+	constructor(paddle){
+		this.paddle = paddle;
+
+		this.rocketSpeed = 1;
+		this.state = "ready";
+		this.loop = 0;
+	}
+
+	destructor(){
+		this.paddle.y = Paddle.baseLine;
+		this.projectiles?.kill();
+	}
+
+	onClick(mouseVal){
+		if (mouseVal != 1)
+			return;
+		if (this.state != "ready")
+			return;
+
+		this.state = "active";
+		this.attachProjectile();
+		playSound("rocket_launch");
+	}
+
+	update(delta){
+		let paddle = this.paddle;
+		if (this.state == "active"){
+			paddle.y -= this.rocketSpeed * delta;
+			if (paddle.y < DIM.ceiling - 16 - 8){
+				paddle.y = DIM.h + 8;
+				this.loop++;
+			}
+			if (this.loop && paddle.y < Paddle.baseLine){
+				paddle.clearPowerups();
+			}
+			this.projectile.setPos(...paddle.getPos());
+		}
+	}
+
+	attachProjectile(){
+		let paddle = this.paddle;
+		let p = new Projectile(null, paddle.x, paddle.y);
+		p.setShape(new RectangleShape(paddle.paddleWidth, 16));
+		p.damage = 100;
+		p.strength = 1;
+		p.pierce = "strong";
+		p.wallCheck = false;
+		p.floorCheck = false;
+		game.emplace("projectiles", p);
+		this.projectile = p;
+	}
+}
+f[95] = function(){
+	playSound("rocket_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setComponent("weapon", new Rocket(paddle));
+
+}
 
 //X-Bomb (Xbomb)
 class Xbomb{
@@ -3286,6 +3718,19 @@ f[47] = function(){
 		}
 	}
 };
+
+//Terraform
+//	See Transform for info on which bricks to convert
+f[104] = function(){
+	playSound("terraform_collected");
+	for (let br of game.get("bricks")){
+		if (canBeTransformed(br)){
+			let i = randRange(1, 5);
+			let j = randRange(7, 9);
+			transformBrick(br, i, j);
+		}
+	}
+}
 
 //Trail
 class Trail{

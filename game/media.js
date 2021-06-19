@@ -235,6 +235,7 @@ let recursive_texture_names = [
 		"comet_ember",
 		"quasar",
 		"whiskey",
+		"invert",
 	]],
 
 	["gui/", [
@@ -284,6 +285,9 @@ let recursive_sound_names = [
 		"rapidfire_fire",
 		"beam_fire",
 		"control_active",
+		"transform_brick",
+		"rocket_launch",
+		"pause_activated",
 	]],
 	["brick/", [
 		"brick_hit",
@@ -362,6 +366,10 @@ let recursive_sound_names = [
 		"probe_collected",
 		"particle_collected",
 		"control_collected",
+		"terraform_collected",
+		"rocket_collected",
+		"hacker_collected",
+		"pause_collected",
 	]],
 	["enemy/", [
 		"enemy_death",
@@ -597,6 +605,9 @@ media.processTextures = function(){
 	//knocker saw blade
 	partition("knocker_border", "knocker", 13, 13);
 
+	//Invert shockwave thing?
+	partition("invert", "invert", 9, 26);
+
 	//projectiles
 
 	//lasers
@@ -690,6 +701,7 @@ media.processSounds = function(){
 	setVol("rapidfire_fire", 0.5);
 	setVol("iceball_hit", 0.25);
 	setVol("laser_fire", 0.75);
+	setVol("transform_brick", 0.5);
 }
 
 //some animations may be created outside of this method
@@ -887,6 +899,10 @@ media.createAnimations = function(){
 	//missiles
 	create("missile_normal", "missile", 0, 0, 1, 3);
 	create("missile_erratic", "missile", 1, 0, 1, 3);
+
+	//particles
+	//invert
+	create2("invert", "invert", 0, 5);
 }
 
 //draws a lightning bolt to a PIXI.Graphics object

@@ -400,10 +400,42 @@ class Sprite extends PIXI.Sprite{
 
 //Specials are game objects that do not fit in any other catagories
 class Special extends Sprite{
-	constructor(
-		texture=null, x=0, y=0, vx=0, vy=0, angle=0, sx=2, sy=2)
-	{
-		super(texture, x, y, vx, vy, angle, sx, sy);
+	constructor(...args){
+		super(...args);
 		this.gameType = "special";
+	}
+}
+
+//A PIXI.Graphics object that pretends to be a Sprite
+class GraphicsSprite extends PIXI.Graphics{
+	constructor(x=0, y=0){
+		super();
+		this.position.set(x, y);
+		this.dead = false;
+		this.gameType = "graphics";
+	}
+
+	destructor(){
+
+	}
+
+	onDeath(){
+		
+	}
+
+	shouldBeRemoved(){
+		return this.isDead();
+	}
+
+	isDead(){
+		return this.dead;
+	}
+
+	kill(){
+		this.dead = true;
+	}
+
+	update(delta){
+
 	}
 }

@@ -990,7 +990,7 @@ class PlayState{
 
 		this.collide("powerups", "paddles");
 
-		//update all layers in the game layer
+		//update all objects in the game layer
 		for (let name of this.activeLayers){
 			for (let obj of this[name].children){
 				obj.update(delta);

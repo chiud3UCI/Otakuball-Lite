@@ -357,8 +357,20 @@ function clampGridPos(i, j){
 	return [i2, j2];
 }
 
-//removes all elements from array that satisfy condition
-//returns a list of removed elements
+/**
+ * Create a lookup table with arr elements as keys
+ */
+function generateLookup(arr){
+	let lookup = {};
+	for (let key of arr)
+		lookup[key] = true;
+	return lookup;
+}
+
+/**
+ * Removes all elements from array that satisfies condition.<br>
+ * Will modify arr and return an Array of removed elements.
+ */
 function remove_if(arr, func){
 	let removed = [];
 	let index = 0;
@@ -371,7 +383,9 @@ function remove_if(arr, func){
 	return removed;
 }
 
-//returns an integer from [a to b-1] inclusive
+/**
+ * returns an integer from [a to b-1] inclusive
+ */
 function randRange(a, b){
 	if (b === undefined){
 		b = a;
@@ -380,7 +394,9 @@ function randRange(a, b){
 	return a + Math.floor(Math.random() * (b-a));
 }
 
-//returns a float from [a to b)
+/**
+ * returns an float from [a to b) not including b
+ */
 function randRangeFloat(a, b){
 	if (b === undefined){
 		b = a;

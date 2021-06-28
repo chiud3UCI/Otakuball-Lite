@@ -1,5 +1,6 @@
 class Paddle extends Sprite{
 	static baseLine = DIM.height - 16*2;
+	static defaultSpeedLimit = {x: 4, y: 4};
 
 	constructor(){
 		//paddle is made out of 3 sections
@@ -34,7 +35,10 @@ class Paddle extends Sprite{
 		this.x = DIM.w/2;
 		this.y = Paddle.baseLine;
 
-		this.speedLimit = {x: Infinity, y: 0};
+		this.speedLimit = Object.assign({}, Paddle.defaultSpeedLimit);
+
+		this.paddleHitSound = "paddle_hit";
+
 		//stun will temporarily reduce speed limit
 		this.stun = null;
 
@@ -85,23 +89,26 @@ class Paddle extends Sprite{
 
 	}
 
-	setComponent(name, component){
-		this.components[name]?.destructor?.();
-		this.components[name] = component;
+	setComponent(key, component){
+		this.components[key]?.destructor?.();
+		this.components[key] = component;
 	}
 
-	removeComponent(name){
+	removeComponent(key){
 		let components = this.components;
-		let comp = components[name];
+		let comp = components[key];
 		if (!comp)
 			return;
 		comp.destructor?.();
-		delete components[name];
+		game.top.killMonitor("paddles", key);
+		delete components[key];
 	}
 
 	clearComponents(){
-		for (let comp of Object.values(this.components))
+		for (let [key, comp] of Object.entries(this.components)){
 			comp.destructor?.();
+			game.top.killMonitor("paddles", key);
+		}
 		this.components = {};
 	}
 
@@ -139,6 +146,12 @@ class Paddle extends Sprite{
 		return this.resize(this.widthIndex + deltaIndex);
 	}
 
+	setSpeedLimit(vx=null, vy=null){
+		let defaultLimit = Paddle.defaultSpeedLimit;
+		this.speedLimit.x = vx ?? defaultLimit.x;
+		this.speedLimit.y = vy ?? defaultLimit.y;
+	}
+
 	normal(){
 		this.resize(0);
 		this.clearPowerups();
@@ -148,13 +161,15 @@ class Paddle extends Sprite{
 	clearPowerups(){
 		this.clearComponents();
 		this.setTexture("paddle_0_0");
+		this.setSpeedLimit();
 		this.alpha = 1;
+		this.intangible = false;
 	}
 
-	attachBall(ball, random){
+	attachBall(ball, isRandom){
 		let offset;
 		let w = this.paddleWidth;
-		if (random)
+		if (isRandom)
 			offset = Math.floor(Math.random() * w/2 + 1) - w/4;
 		else
 			offset = Math.max(-w/2, Math.min(w/2, ball.x - this.x));
@@ -177,7 +192,7 @@ class Paddle extends Sprite{
 		}
 
 		this.stuckBalls = [];
-		playSound("paddle_hit");
+		playSound(this.paddleHitSound);
 		return true;
 	}
 
@@ -207,7 +222,7 @@ class Paddle extends Sprite{
 	onBallHit(ball){
 		this.reboundBall(ball);
 		ball.onPaddleHit(this);
-		playSound("paddle_hit");
+		playSound(this.paddleHitSound);
 
 		for (let [key, comp] of Object.entries(this.components))
 			comp.onBallHit?.(ball);
@@ -215,7 +230,7 @@ class Paddle extends Sprite{
 
 	onMenacerHit(menacer){
 		this.reboundBall(menacer);
-		playSound("paddle_hit");
+		playSound(this.paddleHitSound);
 		menacer.onPaddleHit(this);
 	}
 
@@ -248,8 +263,13 @@ class Paddle extends Sprite{
 	}
 
 	update(delta){
+		//null means paddle's coordinate will not change
 		let mx = mouse.x;
-		let my = mouse.y;
+		let my = Paddle.baseLine;
+
+		if (this.components.movement){
+			[mx, my] = this.components.movement.updateMovement();
+		}
 
 		if (this.stun){
 			this.stun.timer -= delta;
@@ -257,34 +277,40 @@ class Paddle extends Sprite{
 				this.stun = null;
 		}
 
-		//autopilot component gets special treatment
-		if (this.components.autopilot){
-			mx = this.autopilot();
-		}
-
 		//apply speed limit
-		//TODO: add vertical movement
 		let {x: spd_x, y: spd_y} = this.speedLimit;
 		if (this.stun){
 			spd_x = this.stun.x ?? spd_x;
 			spd_y = this.stun.y ?? spd_y;
 		}
-		let dx = mx - this.x;
-		let sign_x = (dx >= 0) ? 1 : -1;
-		dx = Math.min(Math.abs(dx), spd_x * delta) * sign_x;
-		
-		//clamp paddle position
-		let px = this.x + dx;
-		let pw = this.paddleWidth;
-		px = Math.max(DIM.lwallx + pw/2, px);
-		px = Math.min(DIM.rwallx - pw/2, px);
-		this.x = px;
+
+		const pw = this.paddleWidth;
+		const ph = 16;
+
+		if (mx !== null){
+			let dx = mx - this.x;
+			let sign_x = (dx >= 0) ? 1 : -1;
+			dx = Math.min(Math.abs(dx), spd_x * delta) * sign_x;
+			//clamp paddle position 
+			let px = this.x + dx;
+			px = clamp(px, DIM.lwallx + pw/2, DIM.rwallx - pw/2);
+			this.x = px;
+		}
+		if (my !== null){
+			let dy = my - this.y;
+			let sign_y = (dy >= 0) ? 1 : -1;
+			dy = Math.min(Math.abs(dy), spd_y * delta) * sign_y;
+			//clamp paddle position
+			let py = this.y + dy;
+			py = clamp(py, DIM.ceiling + ph/2, DIM.h - ph/2);
+			this.y = py;
+		}
 		this.updateShape();
 
 		//update stuck balls
 		for (let [ball, offset] of this.stuckBalls){
 			let x = this.x + offset;
-			let y = this.y - 8 - ball.shape.radius;
+			let y = this.y - ph/2 - ball.shape.radius;
 			ball.moveTo(x, y);
 		}
 		
@@ -304,90 +330,5 @@ class Paddle extends Sprite{
 			comp.update?.(delta);
 
 		//calling super.update() is unecessary
-	}
-
-	//Returns the x position of where the paddle needs to be
-	//in order to hit the ball towards the closest brick.
-	//Will also cause the paddle to move towards powerups
-	//if there is time to spare.
-	autopilot(ignore_powerups, smart_keyboard){
-		//find the ball that will reach the paddle's height
-		//in the least amount of time (based on speed and distance)
-		let base = this.y;
-		let ball = null;
-		let stody = Infinity; //stored dy
-		for (let b of game.get("balls")){
-			let dy = base - 8 - b.shape.radius - b.y;
-			//exclude balls that are not moving downward
-			//or are moving too horizontally
-			if (b.vy < 0.01)
-				continue;
-			if (ball == null || (dy / b.vy < stody / ball.vy)){
-				ball = b;
-				stody = dy;
-			}
-		}
-
-		if (ball == null)
-			return this.x;
-
-		//find out the x position of the ball when it reaches
-		//the paddle's y position
-		let r = ball.shape.radius;
-		let dy = stody;
-		let dt = dy / ball.vy;
-		let dx = ball.vx * dt;
-		let bl = DIM.lwallx + r; //left border
-		let br = DIM.rwallx - r; //right border
-		let db = br - bl;
-		let mirror = false;
-		//simulate bounces against the walls
-		let x = ball.x + dx;
-		while (x > br){
-			x -= db;
-			mirror = !mirror;
-		}
-		while (x < bl){
-			x += db;
-			mirror = !mirror;
-		}
-		if (mirror)
-			x = br - (x - bl);
-
-		//find the closest brick that can be damaged by the ball
-		//TODO: use raycasting to see if the brick is hiding
-		//		behind an indestructible brick;
-		let target = null;
-		let storedDist = Infinity;
-		let vec = null;
-		for (let br of game.get("bricks")){
-			if (ball.strength < br.armor)
-				continue;
-			let dx = br.x - x;
-			let dy = br.y - (this.y - 8 - r);
-			if (dy > 0)
-				continue;
-			let dist = dx*dx + dy*dy;
-			if (dist < storedDist){
-				target = br;
-				storedDist = dist;
-				vec = [dx, dy];
-			}
-		}
-
-		if (target == null)
-			return x;
-
-		//calculate the paddle offset needed for the ball to hit
-		//the targeted brick
-		[dx, dy] = vec;
-		let rad = Math.atan2(dy, dx);
-		let deg = rad * 180 / Math.PI;
-		deg += 90;
-		let mag = deg / 60;
-		mag = Math.max(-1, Math.min(1, mag));
-
-		let off = mag * this.paddleWidth/2;
-		return x - off;
 	}
 }

@@ -84,7 +84,14 @@ class Game {
 		mouse.m2 = 0;
 	}
 
-	//add and emplace will be used frequently
+	update(delta){
+		mouse.updatePos();
+		this.top.update(delta);
+		mouse.updateButton();
+		keyboard.update();
+	}
+
+	//expose frequently used methods from the underlying states
 	add(name, obj){
 		this.top.add(name, obj);
 	}
@@ -97,16 +104,14 @@ class Game {
 		this.top.incrementScore?.(score);
 	}
 
-	get(name){
-		return this.top.get(name);
+	createMonitor(...args){
+		return this.top.createMonitor(...args);
 	}
 
-	update(delta){
-		mouse.updatePos();
-		this.top.update(delta);
-		mouse.updateButton();
-		keyboard.update();
+	get(name, includeNew){
+		return this.top.get(name, includeNew);
 	}
+	
 }
 
 //custom mask class that takes in account of the window offset
@@ -351,9 +356,13 @@ function boundCheck(i, j){
 	);
 }
 
+function clamp(value, min, max){
+	return Math.max(min, Math.min(max, value));
+}
+
 function clampGridPos(i, j){
-	let i2 = Math.max(0, Math.min(32-1, i));
-	let j2 = Math.max(0, Math.min(13-1, j));
+	let i2 = clamp(i, 0, 32-1);
+	let j2 = clamp(j, 0, 13-1);
 	return [i2, j2];
 }
 

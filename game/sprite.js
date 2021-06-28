@@ -1,3 +1,17 @@
+/**
+ * Stores constructor args into object so that object can clone itself
+ * using Sprite.clone()
+ * @param {Sprite} obj - instance of Sprite or Sprite Subclasses
+ * @param {function} currentClass - pass the current class here
+ * @param {any[]} args - pass the arguments here
+ */
+function setConstructorInfo(obj, currentClass, args){
+	obj._constructorInfo = {
+		class: currentClass, 
+		args: Array.from(args)
+	};
+}
+
 class Sprite extends PIXI.Sprite{
 	//create a Sprite using keyword args instead
 	static fromArgs(args){
@@ -67,6 +81,19 @@ class Sprite extends PIXI.Sprite{
 
 	destructor(){
 		
+	}
+
+	/**
+	 * You must call setConstructorInfo in the constructor of the Subclass
+	 * in order to be able to clone the object
+	 */
+	clone(){
+		let info = this._constructorInfo;
+		if (!info)
+			console.error("you need to call setConstructorInfo() in constructor first!");
+		if (this.constructor !== info.class)
+			console.error("constructors do not match! Please make sure the actual subclass calls setConstructorInfo()");
+		return new this.constructor(...info.args);
 	}
 
 	onDeath(){
@@ -277,13 +304,8 @@ class Sprite extends PIXI.Sprite{
 		if (!spriteOnly && this.shape)
 			return this.shape.getAABB();
 
-		let r = this.getBounds();
-		let rx = r.x;
-		let ry = r.y;
-		let rw = r.width;
-		let rh = r.height;
-
-		return [rx, ry, rx+rw, ry+rh];
+		let {x, y, width: w, height: h} = this.getBounds();
+		return [x, y, x+w, y+h];
 	}
 
 	//returns [width, height] of the sprite
@@ -321,15 +343,16 @@ class Sprite extends PIXI.Sprite{
 		return this.shape.collide(other.shape);
 	}
 
-	//used for projectile sprites onto recieveing sprite
+	//used for projectile sprites onto receiving sprite
 	canHit(sprite){
-		if (this.intangible)
-			return false;
 		return true;
 	}
 
 	//returns [bool, norm, mag]
 	checkSpriteHit(obj){
+		//intangible objects cannot collide
+		if (this.intangible || obj.intangible)
+			return [false];
 		//check if bounding boxes overlap
 		if (!this.checkOverlap(obj))
 			return [false];

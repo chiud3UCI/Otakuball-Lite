@@ -41,10 +41,7 @@ class Projectile extends Sprite{
 	onDeath(){}
 
 	canHit(obj){
-		return (
-			!this.intangible && 
-			this.colFlag[obj.gameType]
-		);
+		return this.colFlag[obj.gameType];
 	}
 
 	onSpriteHit(obj, norm, mag){
@@ -127,6 +124,7 @@ class BallProjectile extends Projectile{
 	}
 
 	onSpriteHit(obj, norm, mag){
+		//TODO: differentiate between strong and weak pierce
 		if (this.pierce)
 			return;
 		if (this.bounce === false){

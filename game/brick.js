@@ -30,6 +30,8 @@ class Brick extends Sprite{
 		this.armor = 0;
 		this.score = 20;
 		this.essential = true;
+
+		//disable certain brick abilities if true
 		this.suppress = false;
 
 		this.hitSound = "brick_armor";
@@ -429,6 +431,8 @@ class Brick extends Sprite{
 class NullBrick extends Brick{
 	constructor(x, y){
 		super("brick_invis", x, y);
+		this.health = 9999;
+		this.armor = 999;
 		this.essential = false;
 		this.brickType = "null";
 	}
@@ -445,8 +449,8 @@ class NullBrick extends Brick{
 class ForbiddenBrick extends Brick{
 	constructor(x, y){
 		super("brick_invis", x, y);
-		this.health = 1000;
-		this.armor = 10;
+		this.health = 9999;
+		this.armor = 999;
 		this.score = 0;
 		this.essential = false;
 		this.brickType = "forbidden";
@@ -495,6 +499,10 @@ class NormalBrick extends Brick{
 			[i, j] = NormalBrick.randomColor();
 		let tex = "brick_main_" + i + "_" + j;
 		super(tex, x, y);
+		//arguments won't work because i and j can be
+		//procedurally generated
+		setConstructorInfo(this, NormalBrick, [x, y, i, j]);
+		// setConstructorInfo(this, NormalBrick, arguments);
 		this.normalInfo = [i, j];
 
 		this.brickType = "normal";
@@ -525,7 +533,7 @@ class MetalBrick extends Brick{
 
 		this.level = level;
 		this.health = (level + 1) * 10;
-		this.points = 100 + (level - 1) * 20;
+		this.score = 100 + (level - 1) * 20;
 
 		this.brickType = "metal";
 	}
@@ -627,7 +635,7 @@ class GoldBrick extends Brick{
 		this.plated = plated;
 		this.health = 100;
 		this.armor = 1;
-		this.points = 500;
+		this.score = 500;
 		this.essential = false;
 
 		this.addAnim("shine", "brick_shine_3", 0.25);
@@ -657,7 +665,7 @@ class PlatinumBrick extends Brick{
 		super("brick_main_6_10", x, y);
 		this.health = 100;
 		this.armor = 2;
-		this.points = 500;
+		this.score = 500;
 		this.essential = false;
 
 		this.addAnim("shine", "brick_shine_13", 0.25);
@@ -681,7 +689,7 @@ class SpeedBrick extends Brick{
 		if (gold){
 			this.health = 100;
 			this.armor = 1;
-			this.points = 500;
+			this.score = 500;
 			this.essential = false;
 			let j = fast ? 11 : 12;
 			let anistr = "brick_shine_" + j;
@@ -717,7 +725,7 @@ class CopperBrick extends Brick{
 
 		this.health = 100;
 		this.armor = 1;
-		this.points = 500;
+		this.score = 500;
 		this.essential = false;
 
 		this.addAnim("shine", "brick_shine_14", 0.25);
@@ -899,6 +907,7 @@ class FunkyBrick extends Brick{
 		super(tex, x, y);
 		this.health = (level + 2) * 10;
 		this.storedHealth = this.health;
+		this.funkyLevel = level;
 		this.essential = false;
 
 		this.storedTexture = tex;
@@ -917,7 +926,11 @@ class FunkyBrick extends Brick{
 		this.brickType = "funky";
 	}
 
-	//Funky Brick never dies
+	shouldBeRemoved(){
+		return this.suppress && this.isRegenerating;
+	}
+
+	//set brick.suppress to true to kill it for good
 	isDead(){
 		return false;
 	}
@@ -973,7 +986,7 @@ class ShooterBrick extends FunkyBrick{
 		this.setTexture(tex);
 		this.health = 100;
 		this.armor = 2;
-		this.points = 500;
+		this.score = 500;
 		this.essential = false;
 		this.storedHealth = this.health;
 		this.level = level;
@@ -1031,6 +1044,7 @@ class DetonatorBrick extends Brick{
 		//base texture wont' mater because
 		//this brick will always be animating
 		super("brick_main_7_3", x, y);
+		setConstructorInfo(this, DetonatorBrick, arguments);
 
 		let i = DetonatorBrick.data[detType];
 		
@@ -1041,6 +1055,10 @@ class DetonatorBrick extends Brick{
 
 		this.detType = detType;
 		this.brickType = "detonator";
+	}
+
+	static from(other){
+		return new DetonatorBrick(this.x, this.y, this.detType);
 	}
 
 	//other powerups might call this
@@ -1445,6 +1463,8 @@ class CometBrick extends Brick{
 		let col = CometBrick.data[dir];
 		let tex = `brick_idle_0_${col}`;
 		super(tex, x, y);
+		setConstructorInfo(this, CometBrick, arguments);
+		
 		this.cometDir = dir;
 
 		let anistr = `brick_glow_${col}`;
@@ -1544,7 +1564,7 @@ class LaserEyeBrick extends Brick{
 			"lasereye_laser", this.x, this.y, vec.x, vec.y);
 		laser.colFlag = {paddle: true};
 		laser.onPaddleHit = function(paddle){
-			paddle.stun = {x: 0.5, timer: 1000};
+			paddle.stun = {x: 0.25, timer: 1000};
 			this.kill();
 		};
 		game.emplace("projectiles", laser);
@@ -1572,6 +1592,8 @@ class BoulderBrick extends Brick{
 
 	onDeath(){
 		super.onDeath();
+		if (this.suppress)
+			return;
 		for (let i = 0; i < 5; i++){
 			let index = randRange(5);
 			let rad = Math.random() * 2 * Math.PI;
@@ -1582,7 +1604,7 @@ class BoulderBrick extends Brick{
 			b.createShape(true);
 			b.colFlag = {paddle: true};
 			b.onPaddleHit = function(paddle){
-				paddle.stun = {x: 0.5, timer: 1000};
+				paddle.stun = {x: 0.25, timer: 1000};
 				this.colFlag.paddle = false;
 				this.vy = -this.vy * 0.4;
 			}
@@ -1625,7 +1647,7 @@ class TikiBrick extends Brick{
 		laser.tint = 0xFFFF00;
 		laser.colFlag = {paddle: true};
 		laser.onPaddleHit = function(paddle){
-			console.log("Implement Paddle Shrinkage");
+			paddle.incrementSize(-1);
 			this.kill();
 		};
 		game.emplace("projectiles", laser);
@@ -2461,12 +2483,6 @@ class SplitBrick extends Brick{
 			blue.intangible = true;
 			game.emplace("bricks", blue);
 		}
-	}
-
-	checkSpriteHit(obj){
-		if (this.intangible)
-			return [false];
-		return super.checkSpriteHit(obj);
 	}
 }
 

@@ -406,32 +406,32 @@ class PlayState{
 
 		let buttonOrder = [
 			["Ball Addition", [
-				 21,  33,  68, 70,  72,  88, 109, 111,  
+				21, 33, 68, 70, 72, 88, 109, 111,  
 			]],
 			["Ball Modify", [
-				  0,   1,   3,   9,  10,  17,  18,  22,  25,  26,
-				 29,  31,  35,  37,  39,  42,  45,  50,  55,  56, 
-				 58,  61,  65,  73,  74,  80,  83,  96,  97, 101, 
-				102,  120, 121, 123, 126, 129, 131, 133, 
+				0, 1, 3, 9, 10, 17, 18, 22, 25, 26,
+				29, 31, 35, 37, 39, 42, 45, 50, 55, 56, 
+				58, 61, 65, 73, 74, 80, 83, 96, 97, 101, 
+				102, 120, 121, 123, 126, 129, 131, 133, 
 			]],
 			["Paddle Weapon", [
-				  5,   8,  10,  19,  23,  27,  41,  49, 51,  59,  
-				  60, 66,  81,  89,  95,  99, 108, 127,
+				5, 8, 19, 23, 27, 41, 49, 51, 59,  
+				60, 66, 81, 89, 95, 99, 108, 127,
 			]],
 			["Paddle Modify", [
-				  4,  13,  14,  15,  28,  30,  36,  38,  40,
-				 44,  46,  48,  64,  75,  76,  79,  84,
-				 85,  90,  91,  92,  98, 110, 118, 124, 130, 134
+				4, 13, 14, 15, 28, 30, 36, 38, 40,
+				44, 46, 48, 64, 75, 76, 79, 84,
+				85, 90, 91, 92, 98, 110, 118, 124, 130, 134
 			]],
 			["Brick-Related", [
-				  2, 11,  16,  20,  24,  34,  43,  47,  62,  77,  78,
-				  87,  86, 104, 106, 112, 113, 115, 116, 117, 119, 
-				 125, 128, 132,
+				2, 11, 16, 20, 24, 34, 43, 47, 62, 77, 78,
+				87, 86, 104, 106, 112, 113, 115, 116, 117, 119, 
+				125, 128, 132,
 			]],
 			["Other", [
-				 6,   7,  12,  32,  52,  53,  54,  57,   63,  
-				 67,  69,  71,  82,  93,  94, 100, 103,  105, 
-				 107, 114, 122
+				6, 7, 12, 32, 48, 52, 53, 54, 57, 63,  
+				67, 69, 71, 82, 93, 94, 100, 103, 105, 
+				107, 114, 122
 			]],
 		];
 
@@ -649,63 +649,32 @@ class PlayState{
 	}
 
 	//retrieves the list of objects based on layer name
-	get(name){
-		return this[name].children;
+	//if includeNew is true, also go through new objects
+	get(name, includeNew=false){
+		let objects = this[name].children;
+		if (!includeNew)
+			return objects;
+
+		//create an generator that iterates through
+		//objects and newObjects sequentially
+		let newObjects = this.newObjects[name];
+		let generator = function*(){
+			for (let obj of objects)
+				yield obj;
+			for (let obj of newObjects)
+				yield obj;
+		};
+		return generator();
+
 	}
 
-	//monitors' lifespans should be handled
-	//by another game object
-
-	//isPaddle is a boolean that represents paddles or balls
-	//example ("Autopilot", "paddles", "autopilot", "timer")
-	//  ==> paddle.components.autopilot.timer
-	static Monitor = class extends PIXI.Container{
-		constructor(name, contName, compName, varName, format="seconds"){
-			super();
-			Object.assign(this, {
-				name, contName, compName, varName, format
-			});
-			this.text = printText("", "windows", 0x000000, 1, 0, 0);
-			this.addChild(this.text);
-			this.dead = false;
-		}
-
-		isDead(){
-			return this.dead;
-		}
-
-		update(){
-			let values = [];
-			for (let obj of game.get(this.contName)){
-				let comp = obj.components[this.compName];
-				if (comp)
-					values.push(comp[this.varName]);
-			}
-			if (values.length == 0){
-				this.dead = true;
-				return;
-			}
-			let value = Math.max(...values);
-			if (value <= 0){
-				this.dead = true;
-				return;
-			}
-			this.setValue(value);
-		}
-
-		setValue(value){
-			if (this.format == "seconds")
-				value = (value/1000).toFixed(2);
-			this.text.text = `${this.name}: ${value}`;
-		}
-	};
-
-	createMonitor(name, contName, compName, varName, format="seconds"){
+	//See Monitor class for info on parameters
+	createMonitor(name, containerName, ...properties){
 		//prevent duplicate monitors
 		if (this.searchMonitor(name))
-			return;
+			return null;
 
-		let monitor = new PlayState.Monitor(...arguments);
+		let monitor = new Monitor(...arguments);
 
 		//its recommended to create the monitors after
 		//setting the powerup components so the monitor
@@ -714,6 +683,8 @@ class PlayState{
 
 		this.monitors.addChild(monitor);
 		this.repositionMonitors();
+
+		return monitor;
 	}
 
 	repositionMonitors(monitor){
@@ -724,9 +695,17 @@ class PlayState{
 	searchMonitor(name){
 		for (let m of this.monitors.children){
 			if (m.name == name)
-				return true;
+				return m;
 		}
-		return false;
+		return null;
+	}
+
+	//delete monitors that matches all arguments
+	killMonitor(contName, compName){
+		for (let m of this.monitors.children){
+			if (m.contName == contName && m.compName == compName)
+				m.kill();
+		}
 	}
 
 	//callbacks have a special add method
@@ -1616,6 +1595,89 @@ class Gate extends Sprite{
 	}
 }
 
+class Monitor extends PIXI.Container{
+	//returns the value from property chaining
+	//	will return null if one of the properties is missing
+	static getPropertyChain(obj, properties){
+		let val = obj;
+		for (let prop of properties){
+			val = val[prop];
+			if (val === null || val === undefined)
+				return null;
+		}
+		return val;
+	}
+
+	/**
+	 * Alternate properties param: [string[], class]
+	 * in order to include an optional class checking. <br>
+	 * If doing class checking, make sure the penultimate property
+	 * is the object you want to do the class check on
+	 * TODO: Use generic functions instead of class checking?
+	 * 
+	 * @param {string} name - Name of monitor to be displayed
+	 * @param {string} containerName - Name of object group such as "balls" or "paddles"
+	 * @param {...string} properties - Property chain (example: ["x", "y", "z"] = obj.x.y.z)
+	 */
+	constructor(name, containerName, ...properties){
+		super();
+
+		this.name = name;
+		this.containerName = containerName;
+		if (Array.isArray(properties[0])){
+			this.properties = properties[0].slice();
+			this.filterFunc = properties[1];
+		}
+		else{
+			this.properties = properties.slice();
+			this.filterFunc = null;
+		}
+
+		this.dead = false;
+
+		this.text = printText("", "windows", 0x000000, 1, 0, 0);
+		this.addChild(this.text);
+	}
+
+	isDead(){
+		return this.dead;
+	}
+
+	kill(){
+		this.dead = true;
+	}
+
+	update(){
+		let values = [];
+		for (let obj of game.get(this.containerName, true)){
+			let val = Monitor.getPropertyChain(obj, this.properties);
+
+			if (val === null)
+				continue;
+
+			if (this.filterFunc && !this.filterFunc(obj))
+				continue;
+
+			values.push(val);
+		}
+		if (values.length == 0){
+			this.kill();
+			return;
+		}
+		let value = Math.max(...values);
+		// if (value <= 0){
+		// 	this.kill();
+		// 	return;
+		// }
+		this.setValue(value);
+	}
+
+	setValue(value){
+		value = (value/1000).toFixed(2);
+		this.text.text = `${this.name}: ${value}`;
+	}
+}
+
 class Callback{
 	constructor(time, func, name=""){
 		this.timer = time;
@@ -1775,6 +1837,7 @@ class PowerupButton extends PlayButton{
 		let paddle = state.paddles.children[0];
 		let x = paddle.x;
 		let y = paddle.y - 100;
+		// let y = DIM.ceiling + 100;
 		if (cheats.instant_powerups)
 			y = paddle.y;
 		state.emplace("powerups", new Powerup(x, y, this.id));
@@ -1783,7 +1846,7 @@ class PowerupButton extends PlayButton{
 	pointerOver(e){
 		let tooltip = this.parentState.tooltip;
 		if (tooltip.powId === null){
-			tooltip.text = powerupNames[this.id];
+			tooltip.text = `${this.id} ${powerupNames[this.id]}`;
 			tooltip.powId = this.id;
 		}
 	}

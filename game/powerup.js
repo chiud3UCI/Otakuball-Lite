@@ -23,9 +23,7 @@ var badPowerups = [
 	7, 11, 15, 29, 30, 36, 38, 39, 43, 47, 50, 52, 74, 75, 76, 84, 90,
 	93, 94, 97, 98, 105, 106, 116, 123, 124, 126, 129, 130, 133
 ];
-var badPowerupsLookup = {};
-for (let id of badPowerups)
-	badPowerupsLookup[id] = true;
+var badPowerupsLookup = generateLookup(badPowerups);
 
 /*
 	Components with reference to ball
@@ -87,12 +85,14 @@ class PowerupSpawner{
 }
 
 class Powerup extends Sprite{
+	static baseSpeed = 0.1;
+
 	constructor(x, y, id){
 		if (id === null || id === undefined)
 			console.error("Invalid Powerup ID");
 		
 		let tex = "powerup_default_" + id;
-		super(tex, x, y, 0, 0.1);
+		super(tex, x, y, 0, Powerup.baseSpeed);
 		//powerup needs a shape or else the paddle will collide
 		//against the powerup's label
 		this.createShape();
@@ -156,31 +156,47 @@ class Powerup extends Sprite{
 		else
 			label.x = -10 - label.textWidth/2;
 	}
+
+	//if two powerups overlap, make the upper powerup
+	//move slower
+	updateSeparation(){
+		const w = 32;
+		const h = 16;
+		for (let other of game.get("powerups")){
+			if (this === other)
+				continue;
+			let dx = Math.abs(this.x - other.x);
+			let dy = Math.abs(this.y - other.y);
+			if (dx > w || dy > h)
+				continue;
+			if (this.y < other.y){
+				this.vy = Powerup.baseSpeed * 0.5;
+				return;
+			}
+		}
+		this.vy = Powerup.baseSpeed;
+	}
+
 	update(delta){
+		this.updateSeparation();
 		super.update(delta);
 		this.updateLabel();
 	}
-
-	// update(delta){
-	// 	super.update(delta);
-	// 	this.drawHitbox();
-	// }
 }
 
-//Powerup Ordering:
-//	Although most will be ordered alphabetically, 
-//  Similar ones will be grouped together
 
-//Catagories:
-//	Ball Addition
-//	Ball Modifier
-//  Paddle Modifier
-//  Brick Modifier
 var powerupFunc = {};
 
-{ //Put all of these powerup component classes in a block just to be safe
-
 let f = powerupFunc; //alias
+
+/** Categories:
+ * 1. Ball Addition
+ * 2. Ball Modify
+ * 3. Paddle Weapon
+ * 4. Paddle Modify
+ * 5. Brick-Related
+ * 6. Other
+ */
 
 /*****************
  * Ball Addition *
@@ -267,7 +283,7 @@ f[111] = function(){
  * Ball Modify *
  ***************/
 
-//Speed-related subcategory
+/*==== Speed-Related Subcategory ====*/
 
 //Fast
 f[29] = function(){
@@ -290,7 +306,159 @@ f[133] = function(){
 		ball.setSpeed2(ball.getSpeed() + 0.15*4);
 }
 
-//Ball modification
+/*==== Bomber Subcategory ====*/
+
+//General Bomber Component
+class Bomber{
+	constructor(ball, explosionFunc){
+		this.ball = ball;
+		this.explosionFunc = explosionFunc;
+		this.fuse = new PIXI.Container();
+		ball.addChild(this.fuse);
+		playSound("bomber_fuse", true);
+	}
+	destructor(){
+		this.ball.removeChild(this.fuse);
+		stopSound("bomber_fuse");
+	}
+	//return array of any extra args after ball
+	getArgs(){
+		return [this.explosionFunc];
+	}
+	preUpdate(delta){
+		let fuse = this.fuse;
+
+		updateAndRemove(fuse, delta);
+
+		this.timer -= delta;
+		if (this.timer > 0)
+			return;
+		this.timer = 100;
+		let [vx, vy] = Vector.rotate(
+			0,
+			randRange(25, 50) / 1000,
+			(0.75 + 0.5 * Math.random()) * Math.PI
+		);
+		let spark = new Particle(
+			"white_pixel",
+			0, 
+			-this.ball.shape.radius/2,
+			vx, vy, 0, 1, 1);
+		let r = 255;
+		let g = randRange(256);
+		let b = randRange(g+1);
+		spark.tint = 
+			0x010000 * r +
+			0x000100 * g +
+			0x000001 * b;
+		spark.timer = 150;
+		fuse.addChild(spark);
+	}
+	onSpriteHit(obj, norm, mag){
+		if (obj.gameType != "brick")
+			return;
+		this.ball.normal(); //will call destructor
+		let [i0, j0] = getGridPos(...obj.getPos());
+		if (!boundCheck(i0, j0))
+			return;
+		playSound("bomber_explode");
+		this.explosionFunc(i0, j0);
+	}
+}
+function bomberNormal(i0, j0){
+	let cells = [];
+	let abs = Math.abs;
+	for (let di = -3; di <= 3; di++){
+		for (let dj = -3; dj <= 3; dj++){
+			if (abs(di) + abs(dj) > 3)
+				continue;
+			let i = i0 + di;
+			let j = j0 + dj;
+			if (!boundCheck(i, j))
+				continue;
+			cells.push([i, j]);
+		}
+	}
+	for (let [i, j] of cells){
+		let [x, y] = getGridPosInv(i, j);
+		let p = new Particle("white_pixel",
+			x, y, 0, 0, 0, 32, 16);
+		p.setGrowth(-0.005, 0, 0, true);
+		game.emplace("particles", p);
+
+		let e = new Explosion(x, y, 32-1, 16-1);
+		game.emplace("projectiles", e);
+	}
+}
+function bomberColumn(i0, j0){
+	let [x, y] = getGridPosInv(i0, j0);
+	y = DIM.ceiling + DIM.boardh/2;
+	let w = 32;
+	let h = DIM.boardh;
+	let p = new Particle("white_pixel",
+		x, y, 0, 0, 0, w, h);
+	p.update = function(delta){
+		this.scale.x -= 0.2 * delta;
+		if (this.scale.x <= 0)
+			this.kill();
+	};
+	game.emplace("particles", p);
+
+	let e = new Explosion(x, y, w-1, h-1);
+	game.emplace("projectiles", e);
+}
+function bomberRow(i0, j0){
+	let [x, y] = getGridPosInv(i0, j0);
+	x = DIM.lwallx + DIM.boardw/2;
+	let w = DIM.boardw;
+	let h = 16;
+	let p = new Particle("white_pixel",
+		x, y, 0, 0, 0, w, h);
+	p.update = function(delta){
+		this.scale.y -= 0.2 * delta / 2;
+		if (this.scale.y <= 0)
+			this.kill();
+	};
+	game.emplace("particles", p);
+
+	let e = new Explosion(x, y, w-1, h-1);
+	game.emplace("projectiles", e);
+}
+
+//Bomber
+f[10] = function(){
+	playSound("bomber_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_1_0");
+		ball.components.bomber =
+			new Bomber(ball, bomberNormal);
+	}
+};
+
+//Column Bomber
+f[17] = function(){
+	playSound("bomber_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_1_0");
+		ball.components.bomber =
+			new Bomber(ball, bomberColumn);
+	}
+};
+ 
+//Row Bomber
+f[96] = function(){
+	playSound("bomber_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.setTexture("ball_main_1_0");
+		ball.components.bomber =
+			new Bomber(ball, bomberRow);
+	}
+};
+
+/*==== Miscellaneous ====*/
 
 //Acid
 f[0] = function(){
@@ -329,30 +497,8 @@ f[1] = function(){
 		ball.components.antigravity = new Antigravity(ball);
 	}
 
-	game.top.createMonitor(
-		"Antigravity", "balls", "antigravity", "timer");
-};
-
-//Gravity
-class Gravity{
-	constructor(ball){
-		this.ball = ball;
-		this.timer = 10000;
-	}
-	update(delta){
-		this.ball.setSteer(0, 1, 0.005);
-		this.timer -= delta;
-		if (this.timer <= 0)
-			this.ball.normal();
-	}
-}
-f[39] = function(){
-	for (let ball of game.get("balls")){
-		ball.normal();
-		ball.components.gravity = new Gravity(ball);
-	}
-	game.top.createMonitor(
-		"Gravity", "balls", "gravity", "timer");
+	game.createMonitor(
+		"Antigravity", "balls", "components", "antigravity", "timer");
 };
 
 //Attract
@@ -381,8 +527,7 @@ class Attract{
 		let [tx, ty] = Vector.normalize(dx, dy);
 		ball.setSteer(tx, ty, this.strength);
 	}
-};
-
+}
 f[3] = function(){
 	// playSound("generic_collected");
 	for (let ball of game.get("balls")){
@@ -444,7 +589,6 @@ class Blossom{
 		}
 	}
 }
-
 f[9] = function(){
 	const n = 24; //# of pellets
 	
@@ -454,166 +598,6 @@ f[9] = function(){
 		ball.setTexture("ball_main_2_0");
 		ball.components.blossom = new Blossom(ball);
 	};
-};
-
-//General Bomber Component
-class Bomber{
-	constructor(ball, explosionFunc){
-		this.ball = ball;
-		this.explosionFunc = explosionFunc;
-		this.fuse = new PIXI.Container();
-		ball.addChild(this.fuse);
-		playSound("bomber_fuse", true);
-	}
-	destructor(){
-		this.ball.removeChild(this.fuse);
-		stopSound("bomber_fuse");
-	}
-	//return array of any extra args after ball
-	getArgs(){
-		return [this.explosionFunc];
-	}
-	preUpdate(delta){
-		let fuse = this.fuse;
-		// let dead = [];
-		// for (let spark of fuse.children){
-		// 	spark.update(delta);
-		// 	if (spark.isDead())
-		// 		dead.push(spark);
-		// }
-		// for (let spark of dead)
-		// 	fuse.removeChild(spark);
-		updateAndRemove(fuse, delta);
-
-		this.timer -= delta;
-		if (this.timer > 0)
-			return;
-		this.timer = 100;
-		let [vx, vy] = Vector.rotate(
-			0,
-			randRange(25, 50) / 1000,
-			(0.75 + 0.5 * Math.random()) * Math.PI
-		);
-		let spark = new Particle(
-			"white_pixel",
-			0, 
-			-this.ball.shape.radius/2,
-			vx, vy, 0, 1, 1);
-		let r = 255;
-		let g = randRange(256);
-		let b = randRange(g+1);
-		spark.tint = 
-			0x010000 * r +
-			0x000100 * g +
-			0x000001 * b;
-		spark.timer = 150;
-		fuse.addChild(spark);
-	}
-	onSpriteHit(obj, norm, mag){
-		if (obj.gameType != "brick")
-			return;
-		this.ball.normal(); //will call destructor
-		let [i0, j0] = getGridPos(...obj.getPos());
-		if (!boundCheck(i0, j0))
-			return;
-		playSound("bomber_explode");
-		this.explosionFunc(i0, j0);
-	}
-}
-
-function bomberNormal(i0, j0){
-	let cells = [];
-	let abs = Math.abs;
-	for (let di = -3; di <= 3; di++){
-		for (let dj = -3; dj <= 3; dj++){
-			if (abs(di) + abs(dj) > 3)
-				continue;
-			let i = i0 + di;
-			let j = j0 + dj;
-			if (!boundCheck(i, j))
-				continue;
-			cells.push([i, j]);
-		}
-	}
-	for (let [i, j] of cells){
-		let [x, y] = getGridPosInv(i, j);
-		let p = new Particle("white_pixel",
-			x, y, 0, 0, 0, 32, 16);
-		p.setGrowth(-0.005, 0, 0, true);
-		game.emplace("particles", p);
-
-		let e = new Explosion(x, y, 32-1, 16-1);
-		game.emplace("projectiles", e);
-	}
-}
-
-function bomberColumn(i0, j0){
-	let [x, y] = getGridPosInv(i0, j0);
-	y = DIM.ceiling + DIM.boardh/2;
-	let w = 32;
-	let h = DIM.boardh;
-	let p = new Particle("white_pixel",
-		x, y, 0, 0, 0, w, h);
-	p.update = function(delta){
-		this.scale.x -= 0.2 * delta;
-		if (this.scale.x <= 0)
-			this.kill();
-	};
-	game.emplace("particles", p);
-
-	let e = new Explosion(x, y, w-1, h-1);
-	game.emplace("projectiles", e);
-}
-
-function bomberRow(i0, j0){
-	let [x, y] = getGridPosInv(i0, j0);
-	x = DIM.lwallx + DIM.boardw/2;
-	let w = DIM.boardw;
-	let h = 16;
-	let p = new Particle("white_pixel",
-		x, y, 0, 0, 0, w, h);
-	p.update = function(delta){
-		this.scale.y -= 0.2 * delta / 2;
-		if (this.scale.y <= 0)
-			this.kill();
-	};
-	game.emplace("particles", p);
-
-	let e = new Explosion(x, y, w-1, h-1);
-	game.emplace("projectiles", e);
-}
-
-//Bomber
-f[10] = function(){
-	playSound("bomber_collected");
-	for (let ball of game.get("balls")){
-		ball.normal();
-		ball.setTexture("ball_main_1_0");
-		ball.components.bomber =
-			new Bomber(ball, bomberNormal);
-	}
-};
-
-//Column Bomber
-f[17] = function(){
-	playSound("bomber_collected");
-	for (let ball of game.get("balls")){
-		ball.normal();
-		ball.setTexture("ball_main_1_0");
-		ball.components.bomber =
-			new Bomber(ball, bomberColumn);
-	}
-};
- 
-//Row Bomber
-f[96] = function(){
-	playSound("bomber_collected");
-	for (let ball of game.get("balls")){
-		ball.normal();
-		ball.setTexture("ball_main_1_0");
-		ball.components.bomber =
-			new Bomber(ball, bomberRow);
-	}
 };
 
 //Combo
@@ -710,7 +694,6 @@ class Combo{
 			this.comboEnd();
 	}
 }
-
 f[18] = function(){
 	playSound("combo_collected");
 
@@ -806,7 +789,6 @@ class Domino{
 		this.ready = true;
 	}
 }
-
 f[22] = function(){
 	playSound("domino_collected");
 	for (let ball of game.get("balls")){
@@ -851,7 +833,6 @@ class Emp{
 		this.armed = true;
 	}
 }
-
 f[25] = function(){
 	for (let ball of game.get("balls")){
 		ball.normal();
@@ -937,6 +918,7 @@ class Energy{
 			return;
 		for (let e of this.balls){
 			e.intangible = false;
+			e.timer = 10000;
 		}
 		this.balls = [];
 	}
@@ -1114,6 +1096,28 @@ f[37] = function(){
 		}
 	}
 	playSound("giga_collected");
+};
+
+//Gravity
+class Gravity{
+	constructor(ball){
+		this.ball = ball;
+		this.timer = 10000;
+	}
+	update(delta){
+		this.ball.setSteer(0, 1, 0.005);
+		this.timer -= delta;
+		if (this.timer <= 0)
+			this.ball.normal();
+	}
+}
+f[39] = function(){
+	for (let ball of game.get("balls")){
+		ball.normal();
+		ball.components.gravity = new Gravity(ball);
+	}
+	game.createMonitor(
+		"Gravity", "balls", "components", "gravity", "timer");
 };
 
 //Halo
@@ -1979,7 +1983,7 @@ f[123] = function(){
 		ball.setTexture("ball_main_3_1");
 		ball.components.weak = new Weak(ball);
 	}
-	game.top.createMonitor("Weak", "balls", "weak", "timer");
+	game.createMonitor("Weak", "balls", "components", "weak", "timer");
 };
 
 //Whiskey or Whisky if you're Canadian
@@ -2028,6 +2032,7 @@ f[126] = function(){
 		ball.components.whiskey = new Whiskey(ball);
 	}
 };
+
 //YoYo
 class Yoyo{
 	constructor(ball){
@@ -2083,7 +2088,7 @@ f[131] = function(){
 * Paddle Weapons *
 ******************/
 
-//Gun Weapon subcategory
+/*==== Primary Weapon Subcategory ====*/
 
 //NOTE: Need to copy extra arguments too
 class PaddleWeapon{
@@ -2318,6 +2323,7 @@ class Beamer{
 	}
 }
 f[8] = function(){
+	//"generic_collected" is actually Beam's official powerup sound
 	playSound("generic_collected");
 	let paddle = game.get("paddles")[0];
 	if (paddle.components.weapon?.name == "beamer"){
@@ -2508,6 +2514,60 @@ f[23] = function(){
 	paddle.setComponent("weapon", new DrillMissile(paddle));
 };
 
+//Erratic Missile
+class ErraticMissile extends PaddleWeapon{
+	constructor(paddle){
+		super(paddle, "erraticmissile", 4);
+	}
+	onClick(mouseVal){
+		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
+			return;
+		playSound("missile_erratic_fire");
+		let paddle = this.paddle;
+		let off = paddle.paddleWidth/2 - 17;
+		for (let dx of [-off, off]){
+			let p = new Projectile("missile_1_0", 0, 0, 0, -0.6);
+			p.scale.set(1);
+			p.createShape();
+			p.addAnim("spin", "missile_erratic", 0.25, true, true);
+			this.setHoming(p);
+			this.fireProjectile(p, dx);
+		}
+	}
+	//TODO: Add raycasting to to prevent missiles from targeting
+	//		bricks hidden behind indestructible bricks
+	setHoming(p){
+		let updateSteer = Ball.prototype.updateSteer;
+		p.update = function(delta){
+			let closest = {br: null, dist: Infinity};
+			for (let br of game.get("bricks")){
+				if (br.armor > 0)
+					continue;
+				let dist = (br.x-this.x)**2 + (br.y-this.y)**2;
+				if (dist < closest.dist){
+					closest.br = br;
+					closest.dist = dist;
+				}
+			}
+			if (closest.br){
+				let br = closest.br;
+				let steer = [br.x-this.x, br.y-this.y, 0.01, 0.01];
+				updateSteer.call(this, steer, delta);
+				let rad = Math.atan2(this.vy, this.vx);
+				this.setRotation(rad+Math.PI/2);
+			}
+			Projectile.prototype.update.call(this, delta);
+		}
+	}
+}
+f[27] = function(){
+	playSound("missile_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_24_1");
+	paddle.setComponent("weapon", new ErraticMissile(paddle));
+};
+
 //Hacker
 class Hacker{
 	static hackableBricks = generateLookup([
@@ -2609,7 +2669,6 @@ class Hacker{
 		}
 	}
 }
-
 f[41] = function(){
 	playSound("hacker_collected");
 	let paddle = game.get("paddles")[0];
@@ -2618,7 +2677,7 @@ f[41] = function(){
 	paddle.setComponent("weapon", new Hacker(paddle));
 }
 
-
+//Invert
 class Invert{
 	constructor(paddle){
 		this.paddle = paddle;
@@ -2632,6 +2691,7 @@ class Invert{
 		if (this.cd > 0)
 			return;
 		this.cd = this.cdMax;
+		playSound("invert_fire");
 
 		for (let ball of game.get("balls")){
 			ball.vy *= -1;
@@ -2655,9 +2715,8 @@ f[49] = function(){
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_29_1");
 	paddle.setComponent("weapon", new Invert(paddle));
-}
+};
 
-//Laser and Laser Plus
 class Laser extends PaddleWeapon{
 	constructor(paddle, plus=false){
 		super(paddle, "laser", plus ? 6 : 4);
@@ -2684,8 +2743,7 @@ class Laser extends PaddleWeapon{
 		}
 	}
 }
-
-//laser
+//Laser
 f[59] = function(){
 	playSound("laser_collected");
 	let paddle = game.get("paddles")[0];
@@ -2699,7 +2757,6 @@ f[59] = function(){
 			paddle, false));
 	}
 };
-
 //Laser Plus
 f[60] = function(){
 	playSound("laser_collected");
@@ -2716,6 +2773,39 @@ f[60] = function(){
 		paddle.setComponent("weapon", new Laser(
 			paddle, true));
 	}
+};
+
+//Missile
+class Missile extends PaddleWeapon{
+	constructor(paddle){
+		super(paddle, "missile", 4);
+	}
+	onClick(mouseVal){
+		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
+			return;
+		playSound("missile_fire");
+		let paddle = this.paddle;
+		let off = paddle.paddleWidth/2 - 17;
+		for (let dx of [-off, off]){
+			let p = new Projectile("missile_0_0", 0, 0, 0, -0.1);
+			p.ay = -0.002;
+			p.scale.set(1);
+			p.createShape();
+			p.addAnim("spin", "missile_normal", 0.25, true, true);
+			p.onSpriteHit = function(obj, norm, mag){
+				this.kill();
+				DetonatorBrick.explode(obj);
+			};
+			this.fireProjectile(p, dx);
+		}
+	}
+}
+f[66] = function(){
+	playSound("missile_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_23_1");
+	paddle.setComponent("weapon", new Missile(paddle));
 };
 
 //Pause
@@ -2875,93 +2965,6 @@ f[99] = function(){
 	paddle.setComponent("weapon", new Shotgun(paddle));
 };
 
-//Missile
-class Missile extends PaddleWeapon{
-	constructor(paddle){
-		super(paddle, "missile", 4);
-	}
-	onClick(mouseVal){
-		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
-			return;
-		playSound("missile_fire");
-		let paddle = this.paddle;
-		let off = paddle.paddleWidth/2 - 17;
-		for (let dx of [-off, off]){
-			let p = new Projectile("missile_0_0", 0, 0, 0, -0.1);
-			p.ay = -0.002;
-			p.scale.set(1);
-			p.createShape();
-			p.addAnim("spin", "missile_normal", 0.25, true, true);
-			p.onSpriteHit = function(obj, norm, mag){
-				this.kill();
-				DetonatorBrick.explode(obj);
-			};
-			this.fireProjectile(p, dx);
-		}
-	}
-}
-f[66] = function(){
-	playSound("missile_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_23_1");
-	paddle.setComponent("weapon", new Missile(paddle));
-};
-
-//Erratic Missile
-class ErraticMissile extends PaddleWeapon{
-	constructor(paddle){
-		super(paddle, "erraticmissile", 4);
-	}
-	onClick(mouseVal){
-		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
-			return;
-		playSound("missile_erratic_fire");
-		let paddle = this.paddle;
-		let off = paddle.paddleWidth/2 - 17;
-		for (let dx of [-off, off]){
-			let p = new Projectile("missile_1_0", 0, 0, 0, -0.6);
-			p.scale.set(1);
-			p.createShape();
-			p.addAnim("spin", "missile_erratic", 0.25, true, true);
-			this.setHoming(p);
-			this.fireProjectile(p, dx);
-		}
-	}
-	//TODO: Add raycasting to to prevent missiles from targeting
-	//		bricks hidden behind indestructible bricks
-	setHoming(p){
-		let updateSteer = Ball.prototype.updateSteer;
-		p.update = function(delta){
-			let closest = {br: null, dist: Infinity};
-			for (let br of game.get("bricks")){
-				if (br.armor > 0)
-					continue;
-				let dist = (br.x-this.x)**2 + (br.y-this.y)**2;
-				if (dist < closest.dist){
-					closest.br = br;
-					closest.dist = dist;
-				}
-			}
-			if (closest.br){
-				let br = closest.br;
-				let steer = [br.x-this.x, br.y-this.y, 0.01, 0.01];
-				updateSteer.call(this, steer, delta);
-				let rad = Math.atan2(this.vy, this.vx);
-				this.setRotation(rad+Math.PI/2);
-			}
-			Projectile.prototype.update.call(this, delta);
-		}
-	}
-}
-f[27] = function(){
-	playSound("missile_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_24_1");
-	paddle.setComponent("weapon", new ErraticMissile(paddle));
-};
-
 //Transform
 var transformableBricks = generateLookup([
 	"metal",
@@ -2979,11 +2982,9 @@ var transformableBricks = generateLookup([
 	"sequence",
 	"split"
 ]);
-
 function canBeTransformed(brick){
 	return !!transformableBricks[brick.brickType];
 }
-
 //kill brick and replace it with a Normal Brick
 function transformBrick(brick, ci=0, cj=0){
 	//make sure to check if brick can be transformed first
@@ -2995,7 +2996,6 @@ function transformBrick(brick, ci=0, cj=0){
 	let newBrick = new NormalBrick(x, y, ci, cj);
 	game.emplace("bricks", newBrick);
 }
-
 class Transform{
 	constructor(paddle){
 		this.paddle = paddle;
@@ -3092,7 +3092,6 @@ class Transform{
 
 	}
 }
-
 f[108] = function(){
 	let paddle = game.get("paddles")[0];
 	if (paddle.components.weapon?.name != "transform"){
@@ -3102,7 +3101,7 @@ f[108] = function(){
 	}
 }
 
-//Paddle Subweapon Subcategory
+/*==== Sub-Weapon Subcategory ====*/
 
 //Javelin
 class Javelin{
@@ -3217,9 +3216,21 @@ f[51] = function(){
 };
 
 //Rocket
+class RocketMovement{
+	constructor(){
+		this.activated = false;
+	}
+	//temporarily disable manual paddle movement
+	updateMovement(){
+		return this.activated ? 
+			[mouse.x, null] : 
+			[mouse.x, Paddle.baseLine];
+	}
+}
 class Rocket{
-	constructor(paddle){
+	constructor(paddle, rocketMovComp){
 		this.paddle = paddle;
+		this.rocketMovComp = rocketMovComp;
 
 		this.rocketSpeed = 1;
 		this.state = "ready";
@@ -3239,6 +3250,7 @@ class Rocket{
 
 		this.state = "active";
 		this.attachProjectile();
+		this.rocketMovComp.activated = true;
 		playSound("rocket_launch");
 	}
 
@@ -3274,7 +3286,9 @@ f[95] = function(){
 	playSound("rocket_collected");
 	let paddle = game.get("paddles")[0];
 	paddle.clearPowerups();
-	paddle.setComponent("weapon", new Rocket(paddle));
+	let rocketMov = new RocketMovement(paddle);
+	paddle.setComponent("weapon", new Rocket(paddle, rocketMov));
+	paddle.setComponent("movement", rocketMov);
 
 }
 
@@ -3413,13 +3427,174 @@ f[127] = function(){
 /****************
 * Paddle Modify *
 *****************/
+
+/*==== Catch Subcategory ====*/
+
+//Catch
+class Catch{
+	constructor(paddle){
+		this.paddle = paddle;
+		this.name = "catch";
+	}
+	onBallHit(ball){
+		this.paddle.attachBall(ball);
+		stopSound(this.paddle.paddleHitSound);
+		playSound("paddle_catch");
+	}
+}
+f[14] = function(){
+	playSound("catch_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_10_2");
+	paddle.setComponent("catch", new Catch(paddle));
+};
+
+//Hold Once
+class HoldOnce extends Catch{
+	constructor(paddle){
+		super(paddle);
+		this.name = "holdonce";
+	}
+	onBallHit(ball){
+		super.onBallHit(ball);
+		this.paddle.clearPowerups();
+	}
+}
+f[40] = function(){
+	playSound("catch_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_30_1");
+	paddle.setComponent("catch", new HoldOnce(paddle));
+};
+
+//Glue
+class Glue extends Catch{
+	constructor(paddle){
+		super(paddle);
+		this.timer = 5000;
+		this.name = "glue";
+	}
+	update(delta){
+		this.timer -= delta;
+		if (this.timer <= 0){
+			this.paddle.clearPowerups();
+		}
+	}
+}
+f[38] = function(){
+	playSound("glue_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_18_3");
+	paddle.setComponent("catch", new Glue(paddle));
+	game.createMonitor("Glue", "paddles", "components", "catch", "timer");
+};
+
+/**
+ * Returns the x position of where the paddle needs to be
+ * in order to hit the ball towards the closest brick.
+ * Will also cause the paddle to move towards powerups
+ * if there is time to spare.
+ * @param {Paddle} paddle
+ * @param {boolean} ignore_powerups
+ * @param {boolean} smart_keyboard
+ */
+function autopilot(paddle, ignore_powerups, smart_keyboard){
+	//find the ball that will reach the paddle's height
+	//in the least amount of time (based on speed and distance)
+	let base = paddle.y;
+	let ball = null;
+	let stody = Infinity; //stored dy
+	for (let b of game.get("balls")){
+		let dy = base - 8 - b.shape.radius - b.y;
+		//exclude balls that are moving upwards
+		//or are moving too horizontally
+		if (b.vy < 0.01)
+			continue;
+		if (ball == null || (dy / b.vy < stody / ball.vy)){
+			ball = b;
+			stody = dy;
+		}
+	}
+
+	if (ball == null)
+		return paddle.x;
+
+	//find out the x position of the ball when it reaches
+	//the paddle's y position
+	let r = ball.shape.radius;
+	let dy = stody;
+	let dt = dy / ball.vy;
+	let dx = ball.vx * dt;
+	let bl = DIM.lwallx + r; //left border
+	let br = DIM.rwallx - r; //right border
+	let db = br - bl;
+	let mirror = false;
+	//simulate bounces against the walls
+	let x = ball.x + dx;
+	while (x > br){
+		x -= db;
+		mirror = !mirror;
+	}
+	while (x < bl){
+		x += db;
+		mirror = !mirror;
+	}
+	if (mirror)
+		x = br - (x - bl);
+
+	//find the closest brick that can be damaged by the ball
+	//TODO: use raycasting to see if the brick is hiding
+	//		behind an indestructible brick;
+	let target = null;
+	let storedDist = Infinity;
+	let vec = null;
+	for (let br of game.get("bricks")){
+		if (ball.strength < br.armor)
+			continue;
+		let dx = br.x - x;
+		let dy = br.y - (paddle.y - 8 - r);
+		if (dy > 0)
+			continue;
+		let dist = dx*dx + dy*dy;
+		if (dist < storedDist){
+			target = br;
+			storedDist = dist;
+			vec = [dx, dy];
+		}
+	}
+
+	if (target == null)
+		return x;
+
+	//calculate the paddle offset needed for the ball to hit
+	//the targeted brick
+	[dx, dy] = vec;
+	let rad = Math.atan2(dy, dx);
+	let deg = rad * 180 / Math.PI;
+	deg += 90;
+	let mag = deg / 60;
+	mag = Math.max(-1, Math.min(1, mag));
+
+	let off = mag * paddle.paddleWidth/2;
+	return x - off;
+}
+
+/*==== Miscellaneous ====*/
+
 //Autopilot
 class Autopilot{
-	//Implmentation of Autopilot is done in Paddle.autopilot
-	//This component only keeps track of the timer
 	constructor(paddle){
 		this.paddle = paddle;
 		this.timer = 10000;
+		this.isAutopilot = true;
+	}
+
+	updateMovement(){
+		let mx = autopilot(this.paddle);
+		return [mx, Paddle.baseLine];
 	}
 
 	update(delta){
@@ -3430,15 +3605,19 @@ class Autopilot{
 }
 f[4] = function(){
 	let paddle = game.get("paddles")[0];
-	let auto = paddle.components.autopilot;
-	if (auto){
-		auto.timer += 10000;
+	let move = paddle.components.movement;
+	if (move?.isAutopilot){
+		move.timer += 10000;
 		return;
 	}
 	paddle.clearPowerups();
-	paddle.setComponent("autopilot", new Autopilot(paddle));
-	game.top.createMonitor(
-		"Autopilot", "paddles", "autopilot", "timer");
+	paddle.setComponent("movement", new Autopilot(paddle));
+	game.createMonitor(
+		"Autopilot",
+		"paddles",
+		["components", "movement", "timer"],
+		obj => obj.components.movement instanceof Autopilot
+	);
 };
 
 //Cannon
@@ -3532,62 +3711,20 @@ f[13] = function(){
 	}
 };
 
-//Catch
-class Catch{
+//Change
+class Change{
 	constructor(paddle){
 		this.paddle = paddle;
-		this.name = "catch";
 	}
-	onBallHit(ball){
-		this.paddle.attachBall(ball);
-	}
-}
-f[14] = function(){
-	playSound("catch_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_10_2");
-	paddle.setComponent("catch", new Catch(paddle));
-};
 
-//Hold Once
-class HoldOnce extends Catch{
-	constructor(paddle){
-		super(paddle);
-		this.name = "holdonce";
-	}
-	onBallHit(ball){
-		super.onBallHit(ball);
-		this.paddle.clearPowerups();
+	updateMovement(){
+		return [DIM.w - mouse.x, Paddle.baseLine];
 	}
 }
-f[40] = function(){
-	playSound("catch_collected");
+f[15] = function(){
+	playSound("change_collected");
 	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_30_1");
-	paddle.setComponent("catch", new HoldOnce(paddle));
-};
-
-//Glue
-class Glue extends Catch{
-	constructor(paddle){
-		super(paddle);
-		this.timer = 5000;
-		this.name = "glue";
-	}
-	update(delta){
-		this.timer -= delta;
-		if (this.timer <= 0){
-			this.paddle.clearPowerups();
-		}
-	}
-}
-f[38] = function(){
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_18_3");
-	paddle.setComponent("catch", new Glue(paddle));
+	paddle.setComponent("movement", new Change(paddle));
 };
 
 //Extend
@@ -3597,6 +3734,183 @@ f[28] = function(){
 	paddle.incrementSize(1);
 };
 
+//Freeze
+class Freeze{
+	constructor(paddle){
+		this.paddle = paddle;
+		//make use of the mysterious NineSlicePlane
+		let ice = new PIXI.NineSlicePlane(
+			media.textures["frozen_paddle"],
+			24, //left width
+			0,  //top height
+			24, //right width
+			0   //bottom height
+		);
+		let {width: w, height: h} = ice.getLocalBounds();
+		w += (paddle.paddleWidth - paddle.widthInfo.base)/2;
+		ice.width = w;
+		ice.position.set(-w/2, -h/2);
+		ice.alpha = 0.5;
+		paddle.addChild(ice);
+		this.ice = ice;
+
+		this.paddle.setSpeedLimit(0, 0);
+
+		this.timer = 2000;
+	}
+
+	destructor(){
+		this.paddle.removeChild(this.ice);
+		this.paddle.setSpeedLimit();
+	}
+
+	update(delta){
+		this.timer -= delta;
+		if (this.timer <= 0)
+			this.paddle.removeComponent("freeze");
+	}
+}
+f[30] = function(){
+	playSound("freeze_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.setComponent("freeze", new Freeze(paddle));
+};
+
+//Ghost
+class Ghost{
+	constructor(paddle){
+		this.paddle = paddle;
+
+		this.range = {low: 0, high: 3};
+
+		//maybe I can use a scalar value instead of array
+		const bufferSize = 50;
+		let buffer = [];
+		for (let i = 0; i < bufferSize; i++)
+			buffer.push(this.range.high);
+		this.buffer = buffer;
+
+		this.prevPaddlePos = {x: paddle.x, y: paddle.y};
+
+		this.timer = 20000;
+
+		// this.text = new PIXI.Text("ghost", {fill: 0xFFFFFF});
+		// this.text.position.set(DIM.w/2 - 100, DIM.h/2);
+		// game.top.hud.addChild(this.text);
+	}
+
+	destructor(){
+		this.paddle.alpha = 1;
+		this.paddle.intangible = false;
+		if (this.text)
+			game.top.hud.removeChild(this.text);
+	}
+
+	update(delta){
+		let paddle = this.paddle;
+		let buffer = this.buffer;
+		let {low, high} = this.range;
+
+		let prevPos = this.prevPaddlePos;
+		let dx = paddle.x - prevPos.x;
+		prevPos.x = paddle.x;
+		dx = Math.min(5, Math.abs(dx));
+
+		let sum = buffer.reduce((acc, curr) => acc + curr, 0);
+		let average = sum / buffer.length;
+
+		buffer.shift();
+		buffer.push(Math.max(dx, average - 1));
+
+		let val = (average - low) / (high - low);
+		val = clamp(val, 0, 1);
+
+		paddle.alpha = val;
+		paddle.intangible = val <= 0.1;
+
+		this.timer -= delta;
+		if (this.timer <= 0)
+			paddle.clearPowerups();
+
+		if (this.text)
+			this.text.text = `ghost ${average.toFixed(3)} ${val.toFixed(3)}`;
+	}
+}
+f[36] = function(){
+	playSound("ghost_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setComponent("ghost", new Ghost(paddle));
+	game.createMonitor(
+		"Ghost", "paddles", "components", "ghost", "timer");
+};
+
+//Heaven
+class Heaven{
+	constructor(paddle){
+		this.paddle = paddle;
+		let heaven = new Paddle();
+		heaven.setTexture("paddle_1_0");
+		heaven.paddleHitSound = "heaven_hit";
+		heaven.setPos(...paddle.getPos());
+
+		//heaven paddle will fade after main paddle's
+		//	powerups are cleared
+		heaven.fade = false;
+		heaven.fadeTimerMax = 2000;
+		heaven.fadeTimer = heaven.fadeTimerMax;
+		heaven.update = function(delta){
+			if (this.fade){
+				this.fadeTimer -= delta;
+				if (this.fadeTimer <= 0)
+					this.kill();
+				this.alpha = Math.max(
+					0, this.fadeTimer / this.fadeTimerMax);
+			}
+			Sprite.prototype.update.call(this, delta);
+		}
+
+		//heaven paddle rise
+		this.targetHeight = 96;
+		this.height = 0;
+		this.riseSpeed = 0.1;
+
+		
+		game.emplace("specials2", heaven);
+		this.heaven = heaven;
+	}
+
+	destructor(){
+		this.heaven.fade = true;
+	}
+
+	update(delta){
+		let paddle = this.paddle;
+		let heaven = this.heaven;
+
+		if (this.height < this.targetHeight){
+			this.height += this.riseSpeed * delta;
+			this.height = Math.min(this.targetHeight, this.height);
+		}
+		let [x, y] = paddle.getPos();
+		heaven.setPos(x, y - this.height);
+
+		for (let ball of game.top.activeBalls(true)){
+			if (ball.canHit(heaven)){
+				let resp = heaven.checkSpriteHit(ball);
+				if (resp[0])
+					heaven.onSpriteHit(ball, resp[1], resp[2]);
+			}
+		}
+	}
+}
+f[44] = function(){
+	playSound("halo_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setComponent("heaven", new Heaven(paddle));
+};
+
 //Normal Ship
 f[75] = function(){
 	playSound("normal_collected");
@@ -3604,11 +3918,285 @@ f[75] = function(){
 	paddle.normal();
 };
 
+//Nervous
+class Nervous{
+	constructor(paddle){
+		this.paddle = paddle;
+		this.timer = 20000;
+		this.timer2 = 0;
+		this.isNervous = true;
+	}
+
+	updateMovement(){
+		const spd = 3;
+		const mag = 32;
+		let mx = mouse.x;
+		mx += Math.sin(spd * this.timer2 / 1000) * mag;
+		return [mx, Paddle.baseLine];
+	}
+
+	update(delta){
+		this.timer2 += delta;
+		this.timer -= delta;
+		if (this.timer <= 0)
+			this.paddle.clearPowerups();
+	}
+}
+f[76] = function(){
+	playSound("nervous_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_3_3");
+	paddle.setComponent("movement", new Nervous(paddle));
+	game.createMonitor(
+		"Nervous", 
+		"paddles", 
+		["components", "movement", "timer"],
+		obj => obj.components.movement instanceof Nervous
+	);
+};
+
+//Poison
+class Poison{
+	constructor(paddle){
+		this.paddle = paddle;
+		paddle.intangible = true;
+		paddle.alpha = 0.5;
+		this.timer = 4000;
+	}
+
+	update(delta){
+		this.timer -= delta;
+		if (this.timer <= 0){
+			this.paddle.clearPowerups();
+		}
+	}
+}
+f[84] = function(){
+	playSound("poison_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_3_3");
+	paddle.setComponent("poison", new Poison(paddle));
+	game.createMonitor(
+		"Poison", "paddles", "components", "poison", "timer");
+};
+
 //Restrict
 f[90] = function(){
 	playSound("restrict_collected");
 	let paddle = game.get("paddles")[0];
 	paddle.incrementSize(-1);
+};
+
+//Regenerate
+class Regenerate{
+	constructor(paddle){
+		this.paddle = paddle;
+		this.maxTimer = 5000;
+		this.timer = this.maxTimer;
+	}
+
+	update(delta){
+		this.timer -= delta;
+		if (this.timer <= 0){
+			this.timer = this.maxTimer;
+
+			playSound("reserve_collected");
+			let ball = new Ball(0, 0, 0.4, 0);
+			this.paddle.attachBall(ball, true);
+			game.emplace("balls", ball);
+		}
+	}
+}
+f[91] = function(){
+	playSound("generic_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setComponent("regenerate", new Regenerate(paddle));
+	game.createMonitor(
+		"Regenerate", "paddles", "components", "regenerate", "timer");
+};
+
+//Re-Serve (Reserve)
+f[92] = function(){
+	playSound("reserve_collected");
+	let paddle = game.get("paddles")[0];
+	for (let ball of game.get("balls")){
+		if (ball.isActive())
+			paddle.attachBall(ball, true);
+	}
+};
+
+//Shadow
+class Shadow{
+	constructor(paddle){
+		this.paddle = paddle;
+		this.timer = 20000;
+	}
+
+	update(delta){
+		this.timer -= delta;
+		if (this.timer <= 0){
+			this.paddle.clearPowerups();
+		}
+	}
+}
+//Blue Menacer will also call this
+function activateShadowPaddle(paddle){
+	if (paddle.components.shadow){
+		paddle.components.shadow.timer = 20000;
+		return;
+	}
+	playSound("shadow_collected");
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_2_0");
+	paddle.alpha = 0.5;
+	paddle.setComponent("shadow", new Shadow(paddle));
+	game.createMonitor(
+		"Shadow", "paddles", "components", "shadow", "timer");
+}
+f[98] = function(){
+	//sound manager will prevent duplicate sounds
+	playSound("shadow_collected");
+	let paddle = game.get("paddles")[0];
+	activateShadowPaddle(paddle);
+};
+
+//Vector
+//NOTE: Vector is already a another class
+class VectorComponent{
+	constructor(paddle){
+		this.paddle = paddle;
+		paddle.setSpeedLimit(4, 0.5);
+		this.launching = true;
+
+		this.timer = 10000;
+
+		this.isVector = true;
+	}
+
+	destructor(){
+		this.paddle.setSpeedLimit();
+	}
+
+	updateMovement(){
+		return [mouse.x, mouse.y];
+	}
+
+	update(delta){
+		this.timer -= delta;
+		if (this.timer <= 0){
+			this.paddle.clearPowerups();
+		}
+
+		if (!this.launching)
+			return;
+
+		let dy = Math.abs(this.paddle.y - mouse.y);
+		if (dy < 1){
+			this.launching = false;
+			this.paddle.setSpeedLimit();
+		}
+	}
+}
+f[118] = function(){
+	playSound("vector_collected");
+	let paddle = game.get("paddles")[0];
+	if (paddle.components.movement?.isVector){
+		paddle.components.movement.timer += 10000;
+	}
+	else{
+		paddle.clearPowerups();
+		paddle.setTexture("paddle_31_1");
+		paddle.setComponent("movement", new VectorComponent(paddle));
+		game.createMonitor(
+			"Vector", 
+			"paddles", 
+			["components", "movement", "timer"],
+			obj => obj.components.movement instanceof VectorComponent
+		);
+	}
+};
+
+//Weight
+f[124] = function(){
+	playSound("weight_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_31_3");
+	paddle.setSpeedLimit(0.5, null);
+};
+
+//Yoga
+class Yoga{
+	constructor(paddle){
+		this.paddle = paddle;
+	}
+
+	updateMovement(){
+		const scale = 3;
+		const mid = DIM.w/2;
+		let mx = mouse.x;
+		mx = mid + (mx - mid) * scale;
+		return [mx, Paddle.baseLine];
+	}
+}
+f[130] = function(){
+	playSound("yoyoga_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_20_3");
+	paddle.setComponent("movement", new Yoga(paddle));
+};
+
+//Zen Shove
+class ZenShove{
+	constructor(paddle){
+		this.paddle = paddle;
+	}
+
+	onBallHit(ball){
+		let grid = game.top.brickGrid;
+		let zenBricks = new Set();
+
+		function canMove(br){
+			return br.armor < 1 && !br.gridDat.move;
+		}
+
+		function isBlocking(br){
+			return br.armor >= 1 || !zenBricks.has(br);
+		}
+
+		for (let j = 0; j < 13; j++){
+			for (let i = 32-10; i >= 0; i--){
+				for (let top of grid.get(i, j)){
+					if (!canMove(top))
+						continue;
+					let obstacle = false;
+					for (let bottom of grid.get(i+1, j)){
+						if (isBlocking(bottom)){
+							obstacle = true;
+							break;
+						}
+					}
+					if (!obstacle){
+						let [x, y] = getGridPosInv(i+1, j);
+						top.setTravel(x, y, "time", 200);
+						zenBricks.add(top);
+					}
+					break;
+				}
+			}
+		}
+	}
+}
+f[134] = function(){
+	playSound("zenshove_collected");
+	let paddle = game.get("paddles")[0];
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_0_1");
+	paddle.setComponent("zenshove", new ZenShove(paddle));
 };
 
 /****************
@@ -3625,7 +4213,7 @@ function bulkNormal(br){
 		br.preBulkTex = br.texture;
 	br.setTexture(bulkTex);
 	br.health = 20;
-	br.points *= 2; 
+	br.score = 40;
 
 	br.takeDamage = function(damage, strength){
 		NormalBrick.prototype.takeDamage.call(this, damage, strength);
@@ -3641,7 +4229,7 @@ function bulkMetal(br){
 	br.addAnim("shine", anistr, 0.25);
 	br.level = level;
 	br.health = (level + 1) * 10;
-	br.points = 100 + (level - 1) * 20;
+	br.score = 100 + (level - 1) * 20;
 }
 f[11] = function(){
 	playSound("bulk_collected");
@@ -3652,6 +4240,100 @@ f[11] = function(){
 			bulkMetal(br);
 	}
 };
+
+//Chaos
+f[16] = function(){
+	playSound("generic_collected");
+	let chaosLookup = generateLookup([
+		"detonator", 
+		"comet", 
+		"triggerdetonator", 
+		"shovedetonator"
+	]);
+	for (let br of game.get("bricks")){
+		if (chaosLookup[br.brickType]){
+			br.kill();
+		}
+	}
+}
+
+//Disarm
+function getDisarmIndex(br){
+	//returns null if br is not disarmable
+	switch (br.brickType){
+		case "funky":
+			switch (br.funkyLevel){
+				case 0: return [0, 11];
+				case 1: return [0, 9];
+				case 2: return [0, 0];
+			}
+			break;
+		case "switch":
+		case "trigger":
+			switch (br.switchId){
+				case 0: return [1, 1];
+				case 1: return [1, 8];
+				case 2: return [1, 14];
+				case 3: return [1, 15];
+				case 4: return [1, 2];
+			}
+			break;
+		case "factory":
+			return [5, 14];
+		case "alien":
+			switch (randRange(4)){
+				case 0: return [1, 6];
+				case 1: return [1, 8];
+				case 2: return [1, 13];
+				case 3: return [0, 19];
+			}
+			break;
+		case "lasereye":
+			return [0, 14];
+		case "boulder":
+			return [0, 4];
+		case "tiki":
+			return [5, 4];
+		case "jumper":
+			return [1, 5];
+	}
+	return null;
+}
+f[20] = function(){
+	playSound("disarm_collected");
+	for (let br of game.get("bricks")){
+		let index = getDisarmIndex(br);
+		if (index === null)
+			continue;
+
+		br.suppress = true;
+		br.kill();
+		let normal = new NormalBrick(br.x, br.y, ...index);
+		game.emplace("bricks", normal);
+	}
+}
+
+//Drop
+f[24] = function(){
+	playSound("drop_collected");
+
+	let bricks = Array.from(game.get("bricks"));
+	bricks = bricks.filter(br => br.brickType == "normal");
+	let count = randRange(3, 6+1);
+
+	for (let n = 0; n < count; n++){
+		if (bricks.length == 0)
+			break;
+		let i = randRange(bricks.length);
+		let br = bricks[i];
+		bricks.splice(i, 1);
+
+		let id = game.top.powerupSpawner.getId();
+		let pow = new Powerup(br.x, br.y, id);
+		game.emplace("powerups", pow);
+		br.suppress = true;
+	}
+}
 
 //HaHa
 f[43] = function(powerup){
@@ -3711,7 +4393,8 @@ f[47] = function(){
 			if (!grid.isEmpty(i, j, true))
 				continue;
 			let [x, y] = getGridPosInv(i, j);
-			let br2 = new NormalBrick(x0, y0, ...br.normalInfo);
+			let br2 = br.clone();
+			br2.setPos(x0, y0);
 			br2.setTravel(x, y, "time", 200);
 			game.emplace("bricks", br2);
 			grid.reserve(i, j);
@@ -3719,46 +4402,63 @@ f[47] = function(){
 	}
 };
 
-//Terraform
-//	See Transform for info on which bricks to convert
-f[104] = function(){
-	playSound("terraform_collected");
-	for (let br of game.get("bricks")){
-		if (canBeTransformed(br)){
-			let i = randRange(1, 5);
-			let j = randRange(7, 9);
-			transformBrick(br, i, j);
-		}
-	}
-}
+//Open
+f[78] = function(){
+	//move all non platinum-strength bricks left or right.
+	//After moving, make sure to kill any gold-strength bricks
+	//	that are touching a wall or platinum-stength bricks
+	//	in all eight directions
 
-//Trail
-class Trail{
-	constructor(ball){
-		this.ball = ball;
-		this.count = 10;
-	}
-	update(delta){
-		let grid = game.top.brickGrid;
-		let [i, j] = getGridPos(...this.ball.getPos());
-		if (grid.isEmpty(i, j)){
-			let [x, y] = getGridPosInv(i, j);
-			let br = new NormalBrick(x, y);
-			br.overlap.set(this.ball, 1);
-			game.emplace("bricks", br);
+	//TODO: Deal with Powerups spawning inside of walls
 
-			this.count--;
-			if (this.count == 0)
-				delete this.ball.components.trail;
-		}
+	playSound("open_collected");
+
+	let grid = game.top.brickGrid;
+
+	function canMove(br){
+		return br.armor < 2 && !br.gridDat.move;
 	}
-}
-f[106] = function(){
-	for (let ball of game.get("balls")){
-		if (ball.components.trail)
-			ball.components.trail.count += 10;
-		else
-			ball.components.trail = new Trail(ball);
+
+	function shouldDie(br){
+		if (br.armor < 1)
+			return false;
+		let [i0, j0] = getGridPos(br.x, br.y);
+		for (let i = i0-1; i <= i0+1; i++){
+			for (let j = j0-1; j <= j0+1; j++){
+				if (i == i0 && j == j0)
+					continue;
+				if (!boundCheck(i, j))
+					return true;
+				for (let br2 of grid.get(i, j))
+					if (br2.armor >= 2)
+						return true;
+			}
+		}
+		return false;
+	}
+
+	function customComplete(br){
+		br.zIndex = 0;
+		Brick.travelComplete.default(br);
+		if (!br.isDead() && shouldDie(br))
+			br.kill();
+	}
+
+	for (let i = 0; i < 32; i++){
+		for (let j = 0; j < 13; j++){
+			for (let br of grid.get(i, j)){
+				if (!canMove(br))
+					continue;
+				let dj;
+				if (j == 6)
+					dj = (i % 2 == 0) ? -1 : 1;
+				else
+					dj = (j < 6) ? -1 : 1;
+				let [x, y] = getGridPosInv(i, j+dj);
+				br.setTravel(x, y, "time", 300, customComplete);
+				br.zIndex = -1;
+			}
+		}
 	}
 };
 
@@ -3843,6 +4543,72 @@ f[87] = function(){
 	game.emplace("specials1", new Quasar());
 };
 
+//Terraform
+//	See Transform for info on which bricks to convert
+f[104] = function(){
+	playSound("terraform_collected");
+	for (let br of game.get("bricks")){
+		if (canBeTransformed(br)){
+			let i = randRange(1, 5);
+			let j = randRange(7, 9);
+			transformBrick(br, i, j);
+		}
+	}
+};
+
+//Trail
+class Trail{
+	constructor(ball){
+		this.ball = ball;
+		this.count = 10;
+	}
+	update(delta){
+		let grid = game.top.brickGrid;
+		let [i, j] = getGridPos(...this.ball.getPos());
+		if (grid.isEmpty(i, j)){
+			let [x, y] = getGridPosInv(i, j);
+			let br = new NormalBrick(x, y);
+			br.overlap.set(this.ball, 1);
+			game.emplace("bricks", br);
+
+			this.count--;
+			if (this.count == 0)
+				delete this.ball.components.trail;
+		}
+	}
+}
+f[106] = function(){
+	for (let ball of game.get("balls")){
+		if (ball.components.trail)
+			ball.components.trail.count += 10;
+		else
+			ball.components.trail = new Trail(ball);
+	}
+};
+
+//Unification
+function unifyNormal(br){
+	let [i, j] = br.normalInfo;
+	let col;
+	if (j <= 18)
+		col = j;
+	else if (j == 19)
+		col = 20 + Math.min(3, i);
+	else //j == 20
+		col = 19;
+
+	br.setTexture(`brick_unification_${col}`);
+	br.score = 250;
+}
+f[113] = function(){
+	playSound("unification_collected");
+	for (let br of game.get("bricks")){
+		if (br.brickType == "normal"){
+			unifyNormal(br);
+		}
+	}
+}
+
 //Vendetta
 f[117] = function(){
 	let gr = game.top.brickGrid;
@@ -3888,6 +4654,98 @@ f[117] = function(){
 	playSound("drill_fire");
 };
 
+//Venom
+f[119] = function(){
+	playSound("generic_collected");
+
+	let grid = game.top.brickGrid;
+	const off = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+
+	function validExplosive(br){
+		return br.brickType == "detonator" || br.brickType == "comet";
+	}
+
+	function canSpreadTo(i, j){
+		for (let br of grid.get(i, j)){
+			if (validExplosive(br))
+				return false;
+			if (br.armor >= 1)
+				return false;
+		}
+		return true;
+	}
+
+	for (let br of game.get("bricks")){
+		if (!validExplosive(br))
+			continue;
+		if (br.isMoving())
+			continue;
+		let [x0, y0] = br.getPos();
+		let [i0, j0] = getGridPos(x0, y0);
+		
+		for (let [di, dj] of off){
+			let [i, j] = [i0 + di, j0 + dj];
+			if (i >= 32-8)
+				continue;
+			if (!boundCheck(i, j))
+				continue;
+			if (!canSpreadTo(i, j))
+				continue;
+
+			let [x, y] = getGridPosInv(i, j);
+			let br2 = br.clone();
+			br2.setPos(x0, y0);
+			br2.setTravel(x, y, "time", 200, "kill");
+			game.emplace("bricks", br2);
+			grid.reserve(i, j);
+		}
+	}
+}
+
+//Buzzer
+class Buzzer extends BallProjectile{
+	constructor(){
+		super("buzzer_0", DIM.w/2, DIM.h + 48, 0, 0);
+		this.setBounce(true);
+		this.pierce = "strong";
+		this.floorCheck = false;
+		this.damage = 100;
+		this.strength = 1;
+
+		let deg = randRangeFloat(30, 60);
+		let [vx, vy] = Vector.rotate(-0.5, 0, deg * Math.PI / 180);
+		if (Math.random() < 0.5)
+			vx = -vx;
+		this.setVel(vx, vy);
+
+		this.spin = true;
+		this.spinTimer = 0;
+		this.spinTimerMax = 250;
+
+		playSound("buzzer_collected", false, this);
+	}
+
+	destructor(){
+		stopSound("buzzer_collected", false, this);
+	}
+
+	update(delta){
+		if (this.vy > 0 && this.y > DIM.h + 48)
+			this.kill();
+		this.spinTimer += delta;
+		if (this.spinTimer >= this.spinTimerMax){
+			this.spinTimer -= this.spinTimerMax;
+			this.spin = !this.spin;
+			this.setTexture(this.spin ? "buzzer_0" : "buzzer_1");
+		}
+		super.update(delta);
+	}
+}
+f[132] = function(){
+	let buzz = new Buzzer();
+	game.emplace("projectiles", buzz);
+};
+
 /********
 * Other *
 *********/
@@ -3923,4 +4781,59 @@ f[7] = function(){
 	playSound("blackout_collected");
 };
 
-} //End block
+//Intelligent Shadow
+class IntelligentShadow extends Paddle{
+	constructor(paddle){
+		super();
+		this.setTexture("paddle_28_3");
+		this.setPos(paddle.x, paddle.y+16);
+		this.timer = 10000;
+		this.isIntelligentShadow = true;
+	}
+
+	update(delta){
+		const spd = 1;
+		let mx = autopilot(this, false, false);
+		let pw = this.paddleWidth;
+		let px = clamp(mx, DIM.lwallx + pw/2, DIM.rwallx - pw/2);
+		let dx = px - this.x;
+		let sign = dx > 0 ? 1 : -1;
+		dx = sign * Math.min(spd * delta, Math.abs(dx));
+		px = this.x + dx;
+		this.setPos(px, this.y);
+
+		for (let ball of game.get("balls")){
+			if (ball.vy > 0){
+				let resp = this.checkSpriteHit(ball);
+				if (resp[0]){
+					this.onBallHit(ball);
+				}
+			}
+		}
+
+		Sprite.prototype.update.call(this, delta);
+		this.intShadowTimer = this.timer;
+	}
+}
+f[48] = function(){
+	playSound("int_shadow_collected");
+
+	//check for existing intelligent shadows first
+	for (let obj of game.get("specials2")){
+		if (obj.isIntelligentShadow){
+			obj.timer += 10000;
+			return;
+		}
+	}
+
+	let paddle = game.get("paddles")[0];
+	let shadow = new IntelligentShadow(paddle);
+
+	game.emplace("specials2", shadow);
+	game.createMonitor(
+		"I. Shadow", 
+		"specials2", 
+		["timer"],
+		obj => obj instanceof IntelligentShadow
+	);
+};

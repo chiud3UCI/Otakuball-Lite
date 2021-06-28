@@ -275,8 +275,7 @@ class Menacer extends Ball{
 
 	onPaddleHit(paddle){
 		if (this.menacerId == 2){
-			paddle.setTexture("paddle_2_0");
-			paddle.alpha = 0.5;
+			activateShadowPaddle(paddle);
 		}
 	}
 }

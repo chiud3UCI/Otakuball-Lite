@@ -5,6 +5,112 @@ function enemy_log(message){
 		console.log(message);
 }
 
+class EnemySpawner{
+	//there should be at least 1 enemy enabled in enemyArgs
+	//otherwise, just set playstate.spawner to null
+	constructor(playstate, enemyArgs, timeArgs=[2000, 2000, 8000]){
+		this.playstate = playstate;
+
+		this.timer = timeArgs[0];
+		this.minDelay = timeArgs[1];
+		this.maxDelay = timeArgs[2];
+
+		//can't make this static because classes may
+		//not be defined yet
+		const map = [
+			["dropper_0", [Dropper, 0]], //red menacer
+			["dropper_1", [Dropper, 1]], //green menacer
+			["dropper_2", [Dropper, 2]], //blue menacer
+			["dropper_3", [Dropper, 3]], //bronze menacer
+			["dropper_4", [Dropper, 4]], //silver menacer
+			["dropper_5", [Dropper, 5]], //pewter menacer
+			["dizzy", [Dizzy]],
+			["cubic", [Cubic]],
+			["gumballtrio", [GumballTrio]],
+			["walkblock", [WalkBlock]],
+		];
+
+		//enemyInfo is just a list of pairs
+		this.enemyInfo = [];
+		//the first enemy arg represents both red and green droppers
+		for (let [i, v] of enemyArgs.entries()){
+			if (v){
+				if (i == 0)
+					this.enemyInfo.push(map[0], map[1]);
+				else
+					this.enemyInfo.push(map[i+1]);
+			}
+		}
+	}
+
+	update(delta){
+		this.timer -= delta;
+		if (this.timer > 0)
+			return;
+
+		this.timer = randRange(this.minDelay, this.maxDelay+1);
+
+		//count the number of each type of enemy
+		let count = {
+			get(key){
+				return this[key] ?? 0;
+			},
+			inc(key){
+				if (this[key] === undefined)
+					this[key] = 0;
+				this[key]++;
+			}
+		};
+		for (let e of game.get("enemies")){
+			let key = e.enemyType;
+			if (key == "dropper"){
+				key += "_" + e.menacerId;
+				if (e.hasDropped)
+					continue;
+			}
+			count.inc(key);
+		}
+		for (let m of game.get("menacers")){
+			let key = "dropper_" + m.menacerId;
+			count.inc(key);
+		}
+		let greenBrick = false;
+		for (let br of game.get("bricks")){
+			if (br.brickType == "greenmenacer"){
+				greenBrick = true;
+				break;
+			}
+		}
+		let paddle = game.get("paddles")[0];
+		let shadow = paddle.components.shadow !== undefined;
+
+		let choices = [];
+		for (let arr of this.enemyInfo){
+			let [key, build] = arr;
+			//disable certain droppers if they have no effect
+			if (key == "dropper_0" && !greenBrick)
+				continue;
+			else if (key == "dropper_2" && shadow)
+				continue;
+			//add to pool if there are less than 3 enemies
+			//of that type
+			if (count.get(key) < 3){
+				//push red droppers twice to increase spawn chance
+				if (key == "dropper_0")
+					choices.push(build, build);
+				else
+					choices.push(build);
+			}
+		}
+
+		if (choices.length > 0){
+			let build = choices[randRange(choices.length)];
+			//TODO: e_class needs dropper argument
+			this.playstate.spawnEnemy(new build[0](build[1]));
+		}
+	}
+}
+
 class Enemy extends Sprite{
 	constructor(texture, x, y, vx, vy){
 		super(texture, x, y, vx, vy);
@@ -46,7 +152,10 @@ class Enemy extends Sprite{
 	}
 
 	update(delta){
-		if (this.y - this.shapeHeight/2 > DIM.h)
+		if (this.disabled)
+			return;
+
+		if (this.y - this.h/2 > DIM.h)
 			this.kill();
 
 		if (this.state){
@@ -227,7 +336,7 @@ class Menacer extends Ball{
 	onBrickHit(brick){
 		let id = this.menacerId;
 		let type = brick.brickType;
-		let level = brick.level;
+		let level = brick.level ?? null;
 		let valid = ["normal", "metal", "greenmenacer"];
 		if (!valid.includes(type))
 			return;
@@ -247,9 +356,9 @@ class Menacer extends Ball{
 		}
 		if (id == 2)
 			return;
-		if (id == 3 && type == "metal" && level == 1)
+		if (id == 3 && type == "metal" && level === 0)
 			return;
-		if (id == 4 && type == "metal" && level == 2)
+		if (id == 4 && type == "metal" && level === 1)
 			return;
 		if (id == 5)
 			return;
@@ -259,9 +368,9 @@ class Menacer extends Ball{
 		if (id == 1)
 			newBrick = new GreenMenacerBrick(x, y);
 		else if (id == 3)
-			newBrick = new MetalBrick(x, y, 1);
+			newBrick = new MetalBrick(x, y, 0);
 		else if (id == 4)
-			newBrick = new MetalBrick(x, y, 2);
+			newBrick = new MetalBrick(x, y, 1);
 		MetalBrick.setCoating(newBrick, brick);
 		brick.kill();
 		game.emplace("bricks", newBrick);
@@ -277,6 +386,12 @@ class Menacer extends Ball{
 		if (this.menacerId == 2){
 			activateShadowPaddle(paddle);
 		}
+	}
+
+	update(delta){
+		if (this.disabled)
+			return;
+		super.update(delta);
 	}
 }
 
@@ -730,7 +845,7 @@ Enemy.states = {
 			this.vy = spd;
 		},
 		update(delta){
-			if (this.y - this.shapeHeight/2 > DIM.ceiling){
+			if (this.y - this.h/2 > DIM.ceiling){
 				if (this.scanBrickHit()[0])
 					this.advanceState({skip: true});
 				else
@@ -928,9 +1043,9 @@ Enemy.states = {
 			this.y = y0 + dy;
 			this.y0 += this.vy * delta;
 
-			if (this.x - this.shapeWidth/2 < DIM.lwallx)
+			if (this.x - this.w/2 < DIM.lwallx)
 				this.vx = Math.abs(this.vx);
-			else if (this.x + this.shapeWidth/2 > DIM.rwallx)
+			else if (this.x + this.w/2 > DIM.rwallx)
 				this.vx = -Math.abs(this.vx);
 		}
 	}

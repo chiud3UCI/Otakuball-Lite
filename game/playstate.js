@@ -23,6 +23,18 @@ var cheats = {
 	},
 }
 
+function printObjectCounts(){
+	let ps = game.top;
+	if (!(ps instanceof PlayState)){
+		console.log("Currently not in PlayState");
+		return;
+	}
+	for (let name of ps.activeLayers){
+		let cont = ps[name];
+		console.log(`${name}: ${cont.children.length}`);
+	}
+}
+
 //I chose to use a class approach instead of a singleton
 //because I want to make sure everything in this instance
 //is cleared when the player exits the playstate
@@ -162,6 +174,9 @@ class PlayState{
 
 		this.ballCount = 0;
 
+		//keep track of # of pit blockers
+		this.pit_blockers = 0;
+
 		//create powerup spawner
 		this.powerupSpawner = new PowerupSpawner(
 			GLOBAL_POWERUP_CHANCE,
@@ -208,6 +223,12 @@ class PlayState{
 		this.add("hud", scoreDisplay);
 		this.scoreDisplay = scoreDisplay;
 		this.setScore(0);
+		//score multiplier
+		let mult = printText(
+			"", "arcade", 0x000000, 1, 124, 8);
+		this.scoreDisplay.addChild(mult);
+		this.scoreDisplay.mult = mult;
+		this.setScoreMultiplier(0);
 
 		//lives display
 		//lives will decrement at the start of the death state
@@ -236,6 +257,7 @@ class PlayState{
 			cheats.enabled = this.prevCheatEnabled;
 		}
 		stopAllSounds();
+		game.setPos(0, 0);
 	}
 
 	//Either pops itself or replace itself with a new
@@ -349,6 +371,20 @@ class PlayState{
 				return this.grid[i][j];
 			},
 
+			/**
+			 * Returns a single non-moving brick at the grid position
+			 * or null if no bricks are found.
+			 * There should realisticly be at most one non-moving brick
+			 * occupying the grid position.
+			 */
+			getStatic(i, j){
+				for (let br of this.grid[i][j]){
+					if (!br.gridDat.move)
+						return br;
+				}
+				return null;
+			},
+
 			//checks if grid cell is empty
 			//if includeMoving if false, then it will
 			//ignore moving bricks
@@ -375,6 +411,7 @@ class PlayState{
 	}
 
 	initGates(){
+		//top gates
 		let gates = [];
 		let offsets = [48, 144, 272, 368];
 		for (let off of offsets){
@@ -385,6 +422,13 @@ class PlayState{
 			this.add("borders", gate);
 		}
 		this.gates = gates;
+
+		//side gates
+		let left = new Gate(DIM.lwallx, DIM.h - 80, "left");
+		let right = new Gate(DIM.rwallx, DIM.h - 80, "right");
+		this.add("borders", left);
+		this.add("borders", right);
+		this.sideGates = [left, right];
 	}
 
 	initPowerupButtons(){
@@ -411,7 +455,7 @@ class PlayState{
 			["Ball Modify", [
 				0, 1, 3, 9, 10, 17, 18, 22, 25, 26,
 				29, 31, 35, 37, 39, 42, 45, 50, 55, 56, 
-				58, 61, 65, 73, 74, 80, 83, 96, 97, 101, 
+				58, 61, 65, 73, 74, 80, 83, 96, 97, 101, 100,
 				102, 120, 121, 123, 126, 129, 131, 133, 
 			]],
 			["Paddle Weapon", [
@@ -420,20 +464,34 @@ class PlayState{
 			]],
 			["Paddle Modify", [
 				4, 13, 14, 15, 28, 30, 36, 38, 40,
-				44, 46, 48, 64, 75, 76, 79, 84,
-				85, 90, 91, 92, 98, 110, 118, 124, 130, 134
+				44, 46, 64, 75, 76, 79, 84,
+				85, 90, 91, 98, 110, 118, 124, 130, 134
 			]],
 			["Brick-Related", [
 				2, 11, 16, 20, 24, 34, 43, 47, 62, 77, 78,
-				87, 86, 104, 106, 112, 113, 115, 116, 117, 119, 
+				86, 87, 104, 106, 112, 113, 115, 116, 117, 119, 
 				125, 128, 132,
 			]],
 			["Other", [
 				6, 7, 12, 32, 48, 52, 53, 54, 57, 63,  
-				67, 69, 71, 82, 93, 94, 100, 103, 105, 
+				67, 69, 71, 82, 92, 93, 94, 103, 105, 
 				107, 114, 122
 			]],
 		];
+
+		//verify that all powerups are covered
+		let set = new Set();
+		for (let i = 0; i < 135; i++)
+			set.add(i);
+		for (let [name, arr] of buttonOrder){
+			for (let id of arr){
+				if (!set.has(id))
+					ALERT_ONCE("init powerup button: duplicate id " + id, "duplicate_id");
+				set.delete(id);
+			}
+		}
+		if (set.size > 0)
+			ALERT_ONCE("init powerup button: missing " + Array.from(set), "missing_id");
 
 		let wrap = 5;
 		let scale = 1.5;
@@ -568,12 +626,23 @@ class PlayState{
 		}
 	}
 
-	addScore(score){
+	incrementScore(score){
+	 	score = Math.floor(score * (2 ** this.scoreMultiplier));
 		this.setScore(this.score + score);
 	}
-	
-	incrementScore(score){
-		this.addScore(score);
+
+	/**
+	 * scoreMultiplier is actually the exponent to 2^x
+	 */
+	setScoreMultiplier(mult=0){
+		let disp = this.scoreDisplay.mult;
+		this.scoreMultiplier = mult;
+		if (mult == 1)
+			disp.text = "x2";
+		else if (mult == -1)
+			disp.text = "x0.5";
+		else
+			disp.text = "";
 	}
 
 	updateLivesDisplay(){
@@ -733,7 +802,7 @@ class PlayState{
 
 		if (gateIndex !== null){
 			if (gates[gateIndex].isVacant())
-				gates[gateIndex].addEnemy(enemy);
+				gates[gateIndex].emplaceSprite("enemies", enemy);
 			return;
 		}
 
@@ -746,7 +815,7 @@ class PlayState{
 		if (choices.length == 0)
 			return;
 		let i = randRange(choices.length);
-		choices[i].addEnemy(enemy);
+		choices[i].emplaceSprite("enemies", enemy);
 	}
 
 
@@ -868,6 +937,13 @@ class PlayState{
 				txt.text = String(spd.toFixed(3));
 				txt.x = ball.x + norm.x * -30;
 				txt.y = ball.y + norm.y * -30;
+
+				// if (mouse.m1 == 1){
+				// 	let ball2 = ball.clone();
+				// 	ball2.setVel(vel.x, vel.y);
+				// 	this.add("balls", ball2);
+				// 	console.log("launch?");
+				// }
 			}
 			else{
 				ball.vx = vel.x;
@@ -1098,6 +1174,12 @@ PlayState.states = {
 	playing: class{
 		constructor(ps){
 			this.ps = ps;
+			let paddle = ps.paddles.children[0];
+			//make sure paddle's position is synced with mouse
+			//position before starting the game
+			paddle.update(0);
+			paddle.setSpeedLimit();
+			paddle.isRespawning = false;
 		}
 		//handled in PlayState.update()
 		update(delta){
@@ -1146,6 +1228,10 @@ PlayState.states = {
 			ps.border.visible = false;
 			for (let gate of ps.gates)
 				gate.visible = false;
+
+			let paddle = ps.paddles.children[0];
+			paddle.setSpeedLimit(Infinity, Infinity);
+			paddle.isRespawning = true;
 		}
 		destructor(){
 			let ps = this.ps;
@@ -1210,6 +1296,7 @@ PlayState.states = {
 			this.ballRespawn = false;
 			ps.balls.visible = false;
 			let paddle = ps.paddles.children[0];
+
 			paddle.y = DIM.height + 8;
 			let wave = {
 				A: paddle.y - Paddle.baseLine, //Amplitude
@@ -1231,17 +1318,14 @@ PlayState.states = {
 			text.anchor.set(0.5, 0.5);
 			ps.hud.addChild(text);
 			this.text = text;
+
+			paddle.setSpeedLimit(Infinity, Infinity);
+			paddle.isRespawning = true;
 		}
 		destructor(){
 			let ps = this.ps;
 			let paddle = ps.paddles.children[0];
 			paddle.setPos(paddle.x, Paddle.baseLine);
-			//update stuck balls so they don't "teleport"
-			for (let [ball, offset] of paddle.stuckBalls){
-				let x = paddle.x + offset;
-				let y = paddle.y - 8 - ball.shape.radius;
-				ball.moveTo(x, y);
-			}
 			ps.balls.visible = true;
 			ps.particles.removeChild(this.spawnCircles);
 			ps.hud.removeChild(this.text);
@@ -1264,7 +1348,6 @@ PlayState.states = {
 				t += delta/1000;
 				let dy = A*exp(-t)*cos(PI+(F*t));
 				paddle.y = Paddle.baseLine - dy;
-				paddle.update(delta);
 				this.wave.t = t;
 
 				if (t >= T){
@@ -1291,6 +1374,21 @@ PlayState.states = {
 				if (d <= 0)
 					ps.setState("playing");
 			}
+
+			paddle.update(0);
+
+			//manually sync paddle's position to mouse
+			//because calling paddle.update() causes issues
+			// const mx = mouse.x;
+			// const pw = paddle.paddleWidth;
+			// const ph = 16;
+			// paddle.x = clamp(mx, DIM.lwallx + pw/2, DIM.rwallx - pw/2);
+
+			// for (let [ball, offset] of paddle.stuckBalls){
+			// 	let x = paddle.x + offset;
+			// 	let y = paddle.y - ph/2 - ball.r;
+			// 	ball.moveTo(x, y);
+			// }
 
 			return false;
 		}
@@ -1324,7 +1422,7 @@ PlayState.states = {
 				shakeDelay: 0
 			});
 
-			let glow = media.shaders.glow;
+			let glow = media.shaders.paddleGlow;
 			deathPaddle.filters = [glow];
 			glow.uniforms.color = [1, 1, 1];
 			glow.uniforms.mag = 0;
@@ -1491,33 +1589,33 @@ PlayState.states = {
 };
 
 class Gate extends Sprite{
-	constructor(x, y){
+	constructor(x, y, side="up"){
 		super(null, x, y);
 		this.scale.set(1);
 
-		let y_anchor = 1;
+		if (side == "left" || side == "right"){
+			this.scale.set(-1, 1);
+			this.rotation = -Math.PI/2;
+		}
+		if (side == "right")
+			this.x += 16;
+		this.side = side;
 
 		let left = makeSprite("gate_left");
-		left.anchor.set(1, y_anchor);
+		left.anchor.set(1, 1);
 		left.scale.set(2);
 		left.x = 0;
 		let right = makeSprite("gate_right");
-		right.anchor.set(0, y_anchor);
+		right.anchor.set(0, 1);
 		right.scale.set(2);
 		right.x = 0;
 		//middle is the "hole" that appears when
 		//the gates open
 		let middle = makeSprite("gate_slice");
-		middle.anchor.set(0.5, y_anchor);
+		middle.anchor.set(0.5, 1);
 		middle.scale.set(0, 2);
 		middle.x = 0;
 		middle.tint = 0x000000;
-
-		this.gateSpd = 0.05;
-		this.openTimer = null;
-		//open, closed, opening, closing
-		this.state = "closed";
-		this.enemy = null;
 
 		this.addChild(middle);
 		this.addChild(left);
@@ -1525,28 +1623,56 @@ class Gate extends Sprite{
 		this.left = left;
 		this.right = right;
 		this.middle = middle;
+
+		this.gateSpd = 0.05;
+		//open, closed, opening, closing
+		this.state = "closed";
+		this.object = null;
+		this.containerName = null;
 	}
 
 	isVacant(){
-		return (this.state == "closed");
+		return this.state == "closed";
 	}
 
-	addEnemy(enemy){
-		this.enemy = enemy;
-		enemy.x = this.x;
-		enemy.y = this.y - 16 - enemy.shapeHeight/2;
-		this.open(enemy.shapeWidth);
+	emplaceSprite(containerName, obj){
+		let side = this.side;
+		this.object = obj;
+		this.containerName = containerName;
+		if (this.side == "up"){
+			obj.x = this.x;
+			obj.y = DIM.ceiling - 16 - obj.h/2;
+			this.open(obj.w);
+		}
+		else{
+			obj.x = (side == "left") ?
+				DIM.lwallx - 16 - obj.w/2 :
+				DIM.rwallx + 16 + obj.w/2;
+			obj.y = this.y;
+			this.open(obj.h);
+		}
 	}
 
 	//make the enemy descend from the hole
-	deployEnemy(){
-		let enemy = this.enemy;
-		//start closing roughly 0.5 secs after the
-		//enemy exits the gate
-		this.openTimer = enemy.shapeHeight / enemy.vy + 500;
+	deploySprite(){
+		game.emplace(this.containerName, this.object);
+	}
 
-		game.emplace("enemies", enemy);
-		this.enemy = null;
+	canClose(){
+		let side = this.side;
+		let obj = this.object;
+
+		if (!obj)
+			return false;
+		if (obj.isDead())
+			return true;
+
+		if (side == "up")
+			return obj.y - obj.h/2 > DIM.ceiling + 2;
+		else if (side == "left")
+			return obj.x - obj.w/2 > DIM.lwallx + 2;
+		else //side == "right"
+			return obj.x + obj.w/2 < DIM.rwallx - 2;
 	}
 
 	open(width){
@@ -1556,6 +1682,8 @@ class Gate extends Sprite{
 
 	close(){
 		this.state = "closing";
+		this.object = null;
+		this.containerName = null;
 	}
 
 	update(delta){
@@ -1568,8 +1696,8 @@ class Gate extends Sprite{
 			if (right.x >= this.openWidth){
 				right.x = this.openWidth;
 				this.state = "open";
-				if (this.enemy)
-					this.deployEnemy();
+				if (this.object)
+					this.deploySprite();
 			}
 		}
 		else if (this.state == "closing"){
@@ -1580,13 +1708,8 @@ class Gate extends Sprite{
 			}
 		}
 		else if (this.state == "open"){
-			if (this.openTimer !== null){
-				this.openTimer -= delta;
-				if (this.openTimer <= 0){
-					this.openTimer = null;
-					this.close();
-				}
-			}
+			if (this.canClose())
+				this.close();
 		}
 
 
@@ -1609,11 +1732,11 @@ class Monitor extends PIXI.Container{
 	}
 
 	/**
-	 * Alternate properties param: [string[], class]
-	 * in order to include an optional class checking. <br>
-	 * If doing class checking, make sure the penultimate property
-	 * is the object you want to do the class check on
-	 * TODO: Use generic functions instead of class checking?
+	 * Alternate properties param: [string[], function, format]
+	 * If function is not null, Monitor will only check objects
+	 * that satisfy the function
+	 * 
+	 * Possible formats: "time"(default), "health"
 	 * 
 	 * @param {string} name - Name of monitor to be displayed
 	 * @param {string} containerName - Name of object group such as "balls" or "paddles"
@@ -1627,10 +1750,12 @@ class Monitor extends PIXI.Container{
 		if (Array.isArray(properties[0])){
 			this.properties = properties[0].slice();
 			this.filterFunc = properties[1];
+			this.format = properties[2] ?? "time";
 		}
 		else{
 			this.properties = properties.slice();
 			this.filterFunc = null;
+			this.format = "time";
 		}
 
 		this.dead = false;
@@ -1665,16 +1790,19 @@ class Monitor extends PIXI.Container{
 			return;
 		}
 		let value = Math.max(...values);
-		// if (value <= 0){
-		// 	this.kill();
-		// 	return;
-		// }
 		this.setValue(value);
 	}
 
 	setValue(value){
-		value = (value/1000).toFixed(2);
-		this.text.text = `${this.name}: ${value}`;
+		let text = `${this.name}: `;
+		if (this.format == "time"){
+			value = (value/1000).toFixed(2);
+			text += `${value} s`;
+		}
+		else if (this.format == "health"){
+			text += `${value} hp`;
+		}
+		this.text.text = text;
 	}
 }
 
@@ -1695,109 +1823,6 @@ class Callback{
 
 	update(delta){
 		this.timer -= delta;
-	}
-}
-
-class EnemySpawner{
-	//there should be at least 1 enemy enabled in enemyArgs
-	//otherwise, just set playstate.spawner to null
-	constructor(playstate, enemyArgs, timeArgs=[2000, 2000, 8000]){
-		this.playstate = playstate;
-
-		this.timer = timeArgs[0];
-		this.minDelay = timeArgs[1];
-		this.maxDelay = timeArgs[2];
-
-		const map = [
-			["dropper_0", [Dropper, 0]],
-			["dropper_1", [Dropper, 1]],
-			["dropper_2", [Dropper, 2]],
-			["dropper_3", [Dropper, 3]],
-			["dropper_4", [Dropper, 4]],
-			["dropper_5", [Dropper, 5]],
-			["dizzy", [Dizzy]],
-			["cubic", [Cubic]],
-			["gumballtrio", [GumballTrio]],
-			["walkblock", [WalkBlock]],
-		];
-
-		this.enemyInfo = [];
-		//the first enemy arg represents both red and green droppers
-		for (let [i, v] of enemyArgs.entries()){
-			if (v){
-				if (i == 0)
-					this.enemyInfo.push(map[0], map[1]);
-				else
-					this.enemyInfo.push(map[i+1]);
-			}
-		}
-	}
-
-	update(delta){
-		this.timer -= delta;
-		if (this.timer > 0)
-			return;
-
-		this.timer = randRange(this.minDelay, this.maxDelay+1);
-
-		//count the number of each type of enemy
-		let count = {
-			get(key){
-				return this[key] ?? 0;
-			},
-			inc(key){
-				if (this[key] === undefined)
-					this[key] = 0;
-				this[key]++;
-			}
-		};
-		for (let e of game.get("enemies")){
-			let key = e.enemyType;
-			if (key == "dropper"){
-				key += "_" + e.menacerId;
-				if (e.hasDropped)
-					continue;
-			}
-			count.inc(key);
-		}
-		for (let m of game.get("menacers")){
-			let key = "dropper_" + m.menacerId;
-			count.inc(key);
-		}
-		let greenBrick = false;
-		for (let br of game.get("bricks")){
-			if (br.brickType == "greenmenacer"){
-				greenBrick = true;
-				break;
-			}
-		}
-		let paddle = game.get("paddles")[0];
-		let shadow = paddle.components.shadow !== undefined;
-
-		let choices = [];
-		for (let arr of this.enemyInfo){
-			let [key, build] = arr;
-			//disable certain droppers if they have no effect
-			if (key == "dropper_0" && !greenBrick)
-				continue;
-			else if (key == "dropper_2" && shadow)
-				continue;
-			//add to pool if there are less than 3 enemies
-			//of that type
-			if (count.get(key) < 3){
-				//push red droppers twice to increase spawn chance
-				if (key == "dropper_0")
-					choices.push(build, build);
-				else
-					choices.push(build);
-			}
-		}
-
-		if (choices.length > 0){
-			let build = choices[randRange(choices.length)];
-			//TODO: e_class needs dropper argument
-			this.playstate.spawnEnemy(new build[0](build[1]));
-		}
 	}
 }
 

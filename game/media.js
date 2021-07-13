@@ -197,6 +197,7 @@ let recursive_texture_names = [
 		"bulk",
 		"brick_regen_mask",
 		"unification",
+		"barrier_brick",
 	]],
 
 	["paddles/", [
@@ -221,6 +222,7 @@ let recursive_texture_names = [
 		"title_bg",
 		"no_bg",
 		"control_crosshair",
+		"assist",
 	]],
 
 	["enemy/", [
@@ -264,6 +266,8 @@ let recursive_texture_names = [
 		"rapid_bullets",
 		"probe",
 		"buzzer",
+		"raindrop",
+		"gelato",
 	]]
 ];
 
@@ -293,6 +297,7 @@ let recursive_sound_names = [
 		"rocket_launch",
 		"shotgun_fire",
 		"transform_brick",
+		"int_shadow_hit",
 	]],
 	["brick/", [
 		"alien_death",
@@ -309,6 +314,7 @@ let recursive_sound_names = [
 		"gate_enter_1",
 		"gate_enter_2",
 		"invisible_reveal",
+		"ultraviolet_pop",
 		
 	]],
 	["ball/", [
@@ -392,6 +398,25 @@ let recursive_sound_names = [
 		"open_collected",
 		"disarm_collected",
 		"drop_collected",
+		"quake_collected",
+		"barrier_collected",
+		"tractor_collected",
+		"undead_collected",
+		"junk_collected",
+		"jewel_collected",
+		"joker_collected",
+		"luck_collected",
+		"laceration_collected",
+		"invert_collected",
+		"undestructible_collected",
+		"player_collected",
+		"wet_storm_collected",
+		"gelato_collected",
+		"ultraviolet_collected",
+		"xray_collected",
+		"oldie_collected",
+		"lock_collected",
+		"assist_collected",
 	]],
 	["enemy/", [
 		"enemy_death",
@@ -445,7 +470,16 @@ media.load = function(callback){
 	}
 
 	//create shaders
-	let shaderText = `
+	this.createShaders();
+	
+	//will call callback once all assets are loaded
+	loader.load(callback);
+}
+
+media.createShaders = function(){
+	let shaderText;
+
+	shaderText = `
 		varying vec2 vTextureCoord;
 		uniform sampler2D uSampler;
 
@@ -466,12 +500,15 @@ media.load = function(callback){
 		    gl_FragColor = vec4(c.r, c.g, c.b, pixel.a);
 		}
 	`;
-	this.shaders.glow = new PIXI.Filter(null, shaderText, {
+	/**
+	 * TODO: Convert this into a generator/class
+	 * in order to support having multiple objects with the
+	 * glow effect
+	 */
+	this.shaders.paddleGlow = new PIXI.Filter(null, shaderText, {
 		color: [1.0, 1.0, 1.0],
 		mag: 1.0,
 	});
-	//will call callback once all assets are loaded
-	loader.load(callback);
 }
 
 media.makeTexture = function(texname, rx, ry, rw, rh){
@@ -708,6 +745,14 @@ media.processTextures = function(){
 		this.textures[name] = this.makeTexture("gate", ...rect);
 	}
 
+	//assist sprites
+	this.textures["assist_base"] = this.makeTexture(
+		"assist", 0, 0, 22, 22);
+	this.textures["assist_bullet"] = this.makeTexture(
+		"assist", 23, 0, 6, 8);
+	this.textures["assist_gun"] = this.makeTexture(
+		"assist", 23, 10, 6, 8);
+
 }
 
 media.processSounds = function(){
@@ -724,6 +769,8 @@ media.processSounds = function(){
 	setVol("laser_fire", 0.75);
 	setVol("transform_brick", 0.5);
 	setVol("heaven_hit", 0.5);
+	setVol("laceration_collected", 0.25);
+	setVol("boulder_break", 0.5);
 }
 
 //some animations may be created outside of this method
@@ -937,6 +984,7 @@ function shockify(gr, x0, y0, x1, y1, options={}){
 		maxSegment: 20,
 		deviation: 20,
 		amplitude: 30,
+		rectangle: false,
 	};
 	Object.assign(opt, options);
 
@@ -962,6 +1010,9 @@ function shockify(gr, x0, y0, x1, y1, options={}){
 	const deviation = opt.deviation;
 	//all points must be between 2 sine waves with this amplitude
 	const amplitude = opt.amplitude;
+	//if rectangle is true, then the sine wave will be replaced
+	//with a simple rectangular function
+	const rectangle = opt.rectangle;
 
 	let points = [start];
 	let prevHeight = 0;
@@ -970,12 +1021,17 @@ function shockify(gr, x0, y0, x1, y1, options={}){
 		let seg = segments[i];
 		let prevSeg = segments[i-1];
 
-		let sineBound = Math.sin(Math.PI * seg) * amplitude;
+		let bound;
+		if (rectangle)
+			bound = amplitude;
+		else
+			bound = Math.sin(Math.PI * seg) * amplitude;
+		
 		let minHeight = prevHeight - deviation;
 		let maxHeight = prevHeight + deviation;
 
-		minHeight = Math.max(-sineBound, minHeight);
-		maxHeight = Math.min(sineBound, maxHeight);
+		minHeight = Math.max(-bound, minHeight);
+		maxHeight = Math.min(bound, maxHeight);
 
 		let height = randRangeFloat(minHeight, maxHeight);
 		prevHeight = height;

@@ -22,6 +22,8 @@ class Paddle extends Sprite{
 		this.paddleRects = paddleRects;
 		this.addChild(paddleRects);
 
+		this.stuckBalls = [];
+
 		//paddle width info
 		this.widthInfo = {
 			base: 80,
@@ -42,8 +44,6 @@ class Paddle extends Sprite{
 		//stun will temporarily reduce speed limit
 		this.stun = null;
 
-		this.stuckBalls = [];
-
 		this.components = {};
 
 		//used to prevent automatic weapons from immedately firing
@@ -51,11 +51,7 @@ class Paddle extends Sprite{
 		//from the paddle
 		this.timeSinceRelease = 0;
 
-		//shader test
-		// let glow = media.shaders.glow;
-		// glow.uniforms.color = [1, 1, 1];
-		// glow.uniforms.mag = 0.5;
-		// this.filters = [glow];
+		this.isRespawning = false;
 
 		this.gameType = "paddle";
 	}
@@ -128,7 +124,12 @@ class Paddle extends Sprite{
 		this.createShape();
 
 		//width is already defined in PIXI.Sprite
+		let prevWidth = this.paddleWidth;
 		this.paddleWidth = width;
+
+		//reposition balls
+		for (let pair of this.stuckBalls)
+			pair[1] *= width / prevWidth;
 	}
 
 	//resize paddle using fixed increments
@@ -267,6 +268,9 @@ class Paddle extends Sprite{
 		let mx = mouse.x;
 		let my = Paddle.baseLine;
 
+		if (this.isRespawning)
+			my = null;
+
 		if (this.components.movement){
 			[mx, my] = this.components.movement.updateMovement();
 		}
@@ -289,8 +293,10 @@ class Paddle extends Sprite{
 
 		if (mx !== null){
 			let dx = mx - this.x;
-			let sign_x = (dx >= 0) ? 1 : -1;
-			dx = Math.min(Math.abs(dx), spd_x * delta) * sign_x;
+			if (isFinite(spd_x)){
+				let sign_x = (dx >= 0) ? 1 : -1;
+				dx = Math.min(Math.abs(dx), spd_x * delta) * sign_x;
+			}
 			//clamp paddle position 
 			let px = this.x + dx;
 			px = clamp(px, DIM.lwallx + pw/2, DIM.rwallx - pw/2);
@@ -298,8 +304,10 @@ class Paddle extends Sprite{
 		}
 		if (my !== null){
 			let dy = my - this.y;
-			let sign_y = (dy >= 0) ? 1 : -1;
-			dy = Math.min(Math.abs(dy), spd_y * delta) * sign_y;
+			if (isFinite(spd_y)){
+				let sign_y = (dy >= 0) ? 1 : -1;
+				dy = Math.min(Math.abs(dy), spd_y * delta) * sign_y;
+			}
 			//clamp paddle position
 			let py = this.y + dy;
 			py = clamp(py, DIM.ceiling + ph/2, DIM.h - ph/2);
@@ -310,11 +318,11 @@ class Paddle extends Sprite{
 		//update stuck balls
 		for (let [ball, offset] of this.stuckBalls){
 			let x = this.x + offset;
-			let y = this.y - ph/2 - ball.shape.radius;
+			let y = this.y - ph/2 - ball.r;
 			ball.moveTo(x, y);
 		}
 		
-		if (mouse.m1 && mouse.inBoard()){
+		if (!this.isRespawning && mouse.m1 && mouse.inBoard()){
 			//don't activate component click
 			//if there are balls to be released
 			let hasReleased = this.releaseBalls();

@@ -71,8 +71,14 @@ class Sprite extends PIXI.Sprite{
 		this.ax = 0;
 		this.ay = 0;
 
-		this.dead = false;
 		this.score = null;
+		this.dead = false;
+
+		//prevent movement if true
+		this.frozen = false;
+		//disabled's behavior will be implemented on a
+		//class-by-class basis
+		this.disabled = false;
 
 		this.showHitbox = false;
 
@@ -117,8 +123,6 @@ class Sprite extends PIXI.Sprite{
 			let r = this.getBounds();
 			this.setShape(new CircleShape(
 				this.x, this.y, r.width/2));
-			this.shapeWidth = r*2;
-			this.shapeHeight = r*2;
 		}
 		else{
 			let [x0, y0, x1, y1] = this.getAABB(true);
@@ -138,18 +142,12 @@ class Sprite extends PIXI.Sprite{
 		shape.sprite = this;
 		this.shape.moveTo(this.x, this.y);
 		this.shape.setRotation(this.rotation);
-		//calculate shape width and height
-		let [x0, y0, x1, y1] = shape.getAABB();
-		this.shapeWidth = x1-x0;
-		this.shapeHeight = y1-y0;
 	}
 
 	removeShape(){
 		if (this.shape){
 			delete this.shape.sprite;
 			delete this.shape;
-			delete this.shapeWidth;
-			delete this.shapeHeight;
 		}
 	}
 
@@ -309,6 +307,7 @@ class Sprite extends PIXI.Sprite{
 	}
 
 	//returns [width, height] of the sprite
+	//DEPRECIATED: Use this.w and this.h instead
 	getDim(spriteOnly){
 		if (!spriteOnly && this.shape){
 			let [x0, y0, x1, y1] = this.shape.getAABB();
@@ -318,21 +317,29 @@ class Sprite extends PIXI.Sprite{
 		return [r.width, r.height];
 	}
 
-	getDims(spriteOnly){
-		return getDim(spriteOnly);
+	//If sprite does not have shape, then get the bound width
+	get w(){
+		return this.shape?.w ?? this.width;
 	}
 
-	//check if 2 sprites' AABB overlap
-	checkOverlap(other){
-		let [ax0, ay0, ax1, ay1] = this.getAABB();
-		let [bx0, by0, bx1, by1] = other.getAABB();
-		return !(
-			ax0 > bx1 ||
-			ax1 < bx0 ||
-			ay0 > by1 ||
-			ay1 < by0
-		);
+	get h(){
+		return this.shape?.h ?? this.height;
 	}
+
+	//check if 2 sprites' AABBs overlap
+	checkOverlap(other){
+		return AABBOverlap(this.getAABB(), other.getAABB());
+	}
+	// checkOverlap(other){
+	// 	let [ax0, ay0, ax1, ay1] = this.getAABB();
+	// 	let [bx0, by0, bx1, by1] = other.getAABB();
+	// 	return !(
+	// 		ax0 > bx1 ||
+	// 		ax1 < bx0 ||
+	// 		ay0 > by1 ||
+	// 		ay1 < by0
+	// 	);
+	// }
 
 	//check if 2 sprites' shapes collide using SAT
 	//more expensive than checkOverlap
@@ -341,6 +348,10 @@ class Sprite extends PIXI.Sprite{
 		if (!this.shape || !other.shape)
 			throw new Error("One of the sprites doesn't have a shape!");
 		return this.shape.collide(other.shape);
+	}
+
+	raycast(x0, y0, dx, dy){
+		return this.shape.raycast(x0, y0, dx, dy);
 	}
 
 	//used for projectile sprites onto receiving sprite
@@ -405,7 +416,7 @@ class Sprite extends PIXI.Sprite{
 
 		//don't update movement if velocity/acceleration is 0
 		//might be more efficent?
-		if (this.vx || this.vy || this.ax || this.ay){
+		if (!this.frozen && (this.vx || this.vy || this.ax || this.ay)){
 			this.x += (this.vx * delta) + (0.5 * this.ax * delta * delta);
 			this.y += (this.vy * delta) + (0.5 * this.ay * delta * delta);
 			this.vx += (this.ax * delta);
@@ -421,7 +432,7 @@ class Sprite extends PIXI.Sprite{
 	}
 }
 
-//Specials are game objects that do not fit in any other catagories
+//Specials are game objects that do not fit in any other categories
 class Special extends Sprite{
 	constructor(...args){
 		super(...args);

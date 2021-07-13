@@ -2,6 +2,8 @@ class Particle extends Sprite{
 	constructor(texture, x, y, vx, vy, angle, sx, sy){
 		super(texture, x, y, vx, vy, angle, sx, sy);
 
+		this.floorCheck = true;
+
 		this.dieOnFade = false;
 		this.dieOnShrink = false;
 		this.dieOnAniFinish = false;

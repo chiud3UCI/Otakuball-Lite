@@ -74,6 +74,7 @@ class Vector{
 		return (this.x * this.x) + (this.y * this.y);
 	}
 
+	//in rads
 	getAngle(){
 		return Math.atan2(this.y, this.x);
 	}
@@ -85,6 +86,8 @@ class Vector{
 			this.x / len, this.y / len);
 	}
 
+	//this vector is rotated 90 degrees
+	//to get the other perpendicular vector, multiply by -1
 	perpendicular(){
 		return new Vector(-this.y, this.x);
 	}
@@ -130,11 +133,12 @@ class Polygon{
 		}
 
 		//center is based off the AABB of the polygon
-		let v = this.getAABB();
-		let [x0, y0, x1, y1] = v;
+		let [x0, y0, x1, y1] = this.getAABB();
 		let cx = (x0 + x1) / 2;
 		let cy = (y0 + y1) / 2;
 		this.center = new Vector(cx, cy);
+		this.w = x1 - x0;
+		this.h = y1 - y0;
 
 		this.rotation = 0;
 	}
@@ -196,9 +200,15 @@ class Polygon{
 				y: c.y + dy
 			});
 		}
+
+		//recalculate dimensions
+		let [x0, y0, x1, y1] = this.getAABB();
+		this.w = x1 - x0;
+		this.h = y1 - y0;
 	}
 
-	//this ray is more like a line segment
+	//checks if ray intersects with each line segment of the polygon
+	//	and returns an array of scalars
 	intersectionsWithRay(x, y, dx, dy){
 		function determinant(x0, y0, x1, y1){
 			return x0*y1 - x1*y0;
@@ -227,7 +237,7 @@ class Polygon{
 				let ry = v2.y - y;
 				let l = determinant(rx, ry, wx, wy) / det;
 				let m = determinant(dx, dy, rx, ry) / det;
-				if (m >= 0 && m <= 1)
+				if (m >= 0 && m <= 1 && l >= 0)
 					ts.push(l);
 			}
 		}
@@ -235,16 +245,18 @@ class Polygon{
 		return ts;
 	}
 
-	//check if ray intersects with shape and returns
-	//closest distance if true
+	//check if ray intersects with polygon and returns
+	//the closest intersection (scalar) if true
+	//returns null if there are no intersections
+	//NOTE: Will return negative values too
 	raycast(x, y, dx, dy){
 		let result = this.intersectionsWithRay(x, y, dx, dy);
 		if (result.length == 0)
-			return [false, null];
+			return null;
 		let min = result[0];
 		for (let mag of result)
 			min = Math.min(min, mag);
-		return [true, min];
+		return min;
 	}
 
 	//draw polygon to a PIXI.Graphics instance
@@ -262,6 +274,14 @@ class PolygonShape{
 	constructor(points){
 		this.polygon = new Polygon(points);
 		this.shapeType = "polygon";
+	}
+
+	get w(){
+		return this.polygon.w;
+	}
+
+	get h(){
+		return this.polygon.h;
 	}
 
 	getAABB(){
@@ -316,6 +336,8 @@ class CircleShape{
 	constructor(x, y, r){
 		this.center = new Vector(x, y);
 		this.radius = r;
+		this.w = r*2;
+		this.h = r*2;
 		this.shapeType = "circle";
 	}
 
@@ -389,12 +411,11 @@ class CircleShape{
 	raycast(x, y, dx, dy){
 		let result = this.intersectionsWithRay(x, y, dx, dy);
 		if (result.length == 0)
-			return [false, null];
+			return null;
 		let min = result[0];
-		
 		for (let mag of result)
 			min = Math.min(min, mag);
-		return [true, min];
+		return min;
 	}
 
 	//draw circle to a PIXI.Graphics instance

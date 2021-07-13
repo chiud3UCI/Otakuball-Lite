@@ -1,3 +1,4 @@
+//There are a total of 135 powerups
 var powerupNames = [ 
 	"Acid", "AntiGravity", "Assist", "Attract", "Autopilot", "Ball Cannon", "Barrier", "Blackout", "Beam", "Blossom",
 	"Bomber", "Bulk", "Bypass", "Cannon", "Catch", "Change", "Chaos", "Column Bomber", "Combo", "Control",
@@ -41,19 +42,16 @@ var badPowerupsLookup = generateLookup(badPowerups);
 		it is easier to treat them all like the complex ones
 */
 
-var DISABLE_INACTIVE = true;
-
 class PowerupSpawner{
 	constructor(globalRate, weights){
 		this.globalRate = globalRate;
 		//don't modify the original weights
 		weights = weights.slice();
 
-		if (DISABLE_INACTIVE){
-			for (let i = 0; i < weights.length; i++){
-				if (!powerupFunc[i])
-					weights[i] = 0;
-			}
+		//disable inactive/unimplemented powerups
+		for (let i = 0; i < weights.length; i++){
+			if (!powerupFunc[i])
+				weights[i] = 0;
 		}
 
 		this.sum = weights.reduce((a, b) => a + b, 0);
@@ -75,7 +73,7 @@ class PowerupSpawner{
 	getId(){
 		if (this.sum == 0)
 			return null;
-		let n = Math.random() * this.sum;
+		let n = randRange(this.sum);
 		for (let [i, w] of this.weights.entries()){
 			n -= w;
 			if (n <= 0)
@@ -86,13 +84,29 @@ class PowerupSpawner{
 
 class Powerup extends Sprite{
 	static baseSpeed = 0.1;
+	static indexLookup = {
+		100:   "0_0",
+		200:   "1_0",
+		400:   "2_0",
+		500:   "0_1",
+		1000:  "1_1",
+		2000:  "2_1",
+		4000:  "0_2",
+		5000:  "1_2",
+		"1up": "2_2",
+	};
 
 	constructor(x, y, id){
 		if (id === null || id === undefined)
 			console.error("Invalid Powerup ID");
+
+		//make sure powerup is in between the walls
+		x = clamp(x, DIM.lwallx + 16, DIM.rwallx - 16);
 		
 		let tex = "powerup_default_" + id;
 		super(tex, x, y, 0, Powerup.baseSpeed);
+
+		this.floorCheck = true;
 		//powerup needs a shape or else the paddle will collide
 		//against the powerup's label
 		this.createShape();
@@ -106,14 +120,21 @@ class Powerup extends Sprite{
 		this.score = this.isBad ? 2000 : 200;
 		this.dead = false;
 
+		//this will contain offsets, not absolute positions
+		this.storedAABB = null;
+
 		//add label to the left (or right) of it
 		let label = printText(powerupNames[id], "pokemon");
 		label.tint = 0xFFFFFF;
 		label.scale.set(0.5);
 		label.y = -5;
 		this.label = label;
+		this.rightLabel = false;
 		this.updateLabel();
 		this.addChild(label);
+
+		//update storedAABB after all children are added
+		this.updateHitbox();
 		
 		this.gameType = "powerup";
 	}
@@ -130,46 +151,74 @@ class Powerup extends Sprite{
 		this.dead = true;
 		let func = powerupFunc[this.id];
 		if (func)
-			func(this);
+			func.call(this);
 		else
 			console.log("powerup " + this.id + " not implemented");
 
-		let index = "0_0";
-		switch(this.score){
-			case 100:  index = "0_0"; break;
-			case 200:  index = "1_0"; break;
-			case 400:  index = "2_0"; break;
-			case 1000: index = "1_1"; break;
-			case 2000: index = "2_1"; break;
-			case 4000: index = "2_0"; break;
-		}
-		let score = new Particle(
+		let score = this.score * (2 ** game.top.scoreMultiplier);
+		let index = Powerup.indexLookup[score];
+		if (this.id == 82)
+			index = Powerup.indexLookup["1up"];
+		let scoreParticle = new Particle(
 			"score_"+index, this.x, this.y, 0, -0.1);
-		score.timer = 2000;
-		game.emplace("particles", score);
+		scoreParticle.timer = 2000;
+		game.emplace("particles", scoreParticle);
 	}
 
 	updateLabel(){
 		let label = this.label;
-		if (this.x - DIM.lwallx < label.textWidth + 40)
+		let oldRightLabel = this.rightLabel;
+		if (this.x - DIM.lwallx < label.textWidth + 40){
 			label.x = 10;
-		else
+			this.rightLabel = true;
+		}
+		else{
 			label.x = -10 - label.textWidth/2;
+			this.rightLabel = false;
+		}
+		if (oldRightLabel !== this.rightLabel){
+			this.updateHitbox();
+		}
 	}
 
-	//if two powerups overlap, make the upper powerup
-	//move slower
+	//This hitbox will include both the powerup sprite
+	//and the accompaning label text
+	updateHitbox(){
+		let {x: rx, y: ry, width: rw, height: rh} = this.getBounds();
+		let [x, y] = this.getPos();
+
+		this.storedAABB = [rx-x, ry-y, rx+rw-x, ry+rh-y];
+		// console.log("Stored AABB: " + this.storedAABB);
+	}
+	
+	getTransformedAABB(){
+		let box = this.storedAABB;
+		let [x, y] = this.getPos();
+		return [x + box[0], y + box[1], x + box[2], y + box[3]];
+	}
+	//if two powerups overlap, make the upper powerup move slower
 	updateSeparation(){
-		const w = 32;
-		const h = 16;
 		for (let other of game.get("powerups")){
 			if (this === other)
 				continue;
-			let dx = Math.abs(this.x - other.x);
-			let dy = Math.abs(this.y - other.y);
-			if (dx > w || dy > h)
+			let box1 = this.getTransformedAABB();
+			let box2 = other.getTransformedAABB();
+			if (!AABBOverlap(box1, box2))
 				continue;
-			if (this.y < other.y){
+			let dy = this.y - other.y;
+			//separate the powerups apart if they are
+			//too close vertically
+			if (Math.abs(dy) <= 0.5){
+				if (dy < 0){
+					this.y -= 0.5;
+					other.y += 0.5;
+				}
+				else{
+					this.y += 0.5;
+					other.y -= 0.5;
+				}
+			}
+			if (dy < 0){
 				this.vy = Powerup.baseSpeed * 0.5;
 				return;
 			}
@@ -204,18 +253,18 @@ let f = powerupFunc; //alias
  
 //Disrupt
 f[21] =  function(){
-	Ball.split(8);
 	playSound("split_med");
+	Ball.split(8);
 };
 //Frenzy
 f[33] =  function(){
-	Ball.split(24);
 	playSound("split_large");
+	Ball.split(24);
 };
 //Multiple
 f[68] =  function(){
-	Ball.split(3, true);
 	playSound("split_small");
+	Ball.split(3, true);
 };
 //Nano
 f[70] = function(){
@@ -248,6 +297,7 @@ f[70] = function(){
 };
 //New Ball
 f[72] =  function(){
+	playSound("reserve_collected");
 	let paddle = game.get("paddles")[0];
 	let ball = new Ball(0, 0, 0.4, 0);
 	game.emplace("balls", ball);
@@ -269,13 +319,13 @@ f[88] =  function(){
 };
 //Triple
 f[109] = function(){
-	Ball.split(3);
 	playSound("split_small");
+	Ball.split(3);
 };
 //Two
 f[111] = function(){
-	Ball.split(2, true);
 	playSound("split_small");
+	Ball.split(2, true);
 };
 
 
@@ -1352,6 +1402,7 @@ class LaserBall{
 
 		let laser = new Projectile("laser_2",
 			pos.x, pos.y, vel.x, vel.y, rad + Math.PI/2, 2, 2);
+		laser.isLaser = true;
 		game.emplace("projectiles", laser);
 		playSound("laser_fire");
 	}
@@ -1992,7 +2043,7 @@ class Whiskey{
 		this.ball = ball;
 		this.timer = 0;
 		this.emitterTimer = 0;
-		this.emitterDelay = 15;
+		this.emitterDelay = 20;
 	}
 
 	preUpdate(delta){
@@ -2711,6 +2762,7 @@ class Invert{
 	}
 }
 f[49] = function(){
+	playSound("invert_collected");
 	let paddle = game.get("paddles")[0];
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_29_1");
@@ -3118,7 +3170,7 @@ class Javelin{
 		playSound("javelin_charge");
 		this.clickPriority = -1;
 
-		let glow = media.shaders.glow;
+		let glow = media.shaders.paddleGlow;
 		paddle.filters = [glow];
 		glow.uniforms.color = [1, 1, 1];
 		glow.uniforms.mag = 0;
@@ -3438,8 +3490,11 @@ class Catch{
 	}
 	onBallHit(ball){
 		this.paddle.attachBall(ball);
-		stopSound(this.paddle.paddleHitSound);
-		playSound("paddle_catch");
+		//don't play both paddle hit sounds at the same time
+		if (!mouse.m1){
+			stopSound(this.paddle.paddleHitSound);
+			playSound("paddle_catch");
+		}
 	}
 }
 f[14] = function(){
@@ -3775,6 +3830,56 @@ f[30] = function(){
 	let paddle = game.get("paddles")[0];
 	paddle.setComponent("freeze", new Freeze(paddle));
 };
+
+//Gelato
+function chooseRow(gelato=false){
+	let grid = game.top.brickGrid;
+	let arr = [];
+	let maxCount = 0;
+	for (let i = 0; i < 32; i++){
+		let count = 0;
+		for (let j = 0; j < 13; j++){
+			let br = grid.getStatic(i, j);
+			if (br === null || br.armor >= 2)
+				continue;
+			if (!gelato || br.brickType != "ice")
+				count++;
+		}
+		arr.push(count);
+		maxCount = Math.max(maxCount, count);
+	}
+	let indices = [];
+	for (let [i, v] of arr.entries()){
+		if (v == maxCount)
+			indices.push(i);
+	}
+	return indices[randRange(indices.length)];
+}
+f[34] = function(){
+	playSound("gelato_collected");
+
+	let gelato = new Projectile("gelato", 0, 0, 0.5, 0);
+	let i = chooseRow(true);
+	let [x, y] = getGridPosInv(i, 0);
+	x = DIM.lwallx + gelato.w/2;
+	gelato.setPos(x, y);
+
+	gelato.damage = 100;
+	gelato.strength = 1;
+	gelato.pierce = "strong";
+	gelato.canHit  = function(obj){
+		if (obj instanceof IceBrick)
+			return false;
+		return Projectile.prototype.canHit.call(this, obj);
+	};
+	gelato.onSpriteHit = function(obj, norm, mag){
+		Projectile.prototype.onSpriteHit.call(this, obj, norm, mag);
+		if (obj.gameType == "brick" && obj.isDead())
+			freezeBrick(obj);
+	};
+
+	game.emplace("projectiles", gelato);
+}
 
 //Ghost
 class Ghost{
@@ -4203,6 +4308,192 @@ f[134] = function(){
 * Brick-Related *
 *****************/
 
+//Assist
+//Turret that only does shooting
+class AssistTurret extends Special{
+	constructor(){
+		super("assist_base");
+		let gun = new Sprite("assist_gun");
+		gun.scale.set(1);
+		this.addChild(gun);
+		this.gun = gun;
+
+		this.fireTimer = 0;
+		this.fireDelay = 100;
+		//queue of targets to shoot at
+		this.queue = [];
+	}
+
+	update(delta){
+		this.fireTimer = Math.max(0, this.fireTimer - delta);
+		if (this.queue.length > 0 && this.fireTimer == 0){
+			playSound("laser_fire");
+			this.fireTimer = this.fireDelay;
+			let br = this.queue.shift();
+
+			let p = new Projectile("assist_bullet", this.x, this.y);
+			p.damage = 10;
+			p.strength = 0;
+			p.isLaser = true;
+
+			let vel = new Vector(br.x - this.x, br.y - this.y);
+			vel = vel.normalized().scale(0.8);
+			p.vx = vel.x;
+			p.vy = vel.y;
+			let rad = vel.getAngle() + Math.PI/2;
+			p.setRotation(rad);
+
+			this.gun.rotation = rad;
+			game.emplace("projectiles", p);
+		}
+		super.update(delta);
+	}
+}
+//Controller is a single object that creates, controls 
+//and coordinates both turrets at the same time
+let AC; //shorter alias for class name
+class AssistController extends Special{
+	constructor(){
+		super(null);
+		let left = new AssistTurret("left");
+		let right = new AssistTurret("right");
+		const spd = 0.2;
+		left.vx = spd;
+		right.vx = -spd;
+		this.turrets = [left, right];
+
+		let sideGates = game.top.sideGates;
+		sideGates[0].emplaceSprite("specials2", left);
+		sideGates[1].emplaceSprite("specials2", right);
+		this.deploying = true;
+
+		this.burstTimer = 0;
+		this.burstInterval = 1000;
+		this.burstCount = 3;
+	}
+
+	//TODO: Deal with patch.shield
+	static isTargetable(br){
+		if (br.intangible)
+			return false;
+		if (br.patch.antilaser)
+			return false;
+		return br.armor < 1;
+	}
+
+	static isObstacle(br){
+		if (br.intangible)
+			return false;
+		if (br instanceof OneWayBrick)
+			return false;
+		if (br instanceof ForbiddenBrick)
+			return false;
+		if (br.patch.antilaser)
+			return true;
+		return br.armor >= 1;
+	}
+
+	//checks if turret can shoot at brick without being
+	//obstructed by indestructible bricks
+	static hasLineOfSight(turret, brick, obstacles){
+		const pw = 12; //width of assist bullet
+		const off = pw/2 + 1;
+
+		let pos = new Vector(turret.x, turret.y);
+		let vec = new Vector(brick.x - turret.x, brick.y - turret.y);
+		vec = vec.normalized();
+		let perp1 = vec.perpendicular();
+		let perp2 = perp1.scale(-1);
+		let pos1 = pos.add(perp1.scale(off));
+		let pos2 = pos.add(perp2.scale(off));
+
+		//we need to do two raycasts to take in account
+		//of the withd of the projectile
+		let rayArgs = [
+			[pos1.x, pos1.y, vec.x, vec.y],
+			[pos2.x, pos2.y, vec.x, vec.y]
+		];
+
+		for (let arg of rayArgs){
+			let baseMag = brick.raycast(...arg);
+			for (let br of obstacles){
+				let mag = br.raycast(...arg);
+				if (mag === null)
+					continue;
+				if (mag < baseMag)
+					return false;
+			}
+		}
+
+		return true;
+	}
+	static dist(obj1, obj2){
+		return (obj1.x-obj2.x)**2 + (obj1.y-obj2.y)**2;
+	}
+
+	//TODO: add raycasting to prevent turrets from targeting
+	//	bricks that are behind indestructible bricks
+	fireTurrets(){
+		let turrets = this.turrets;
+		//obtain list of targetable bricks and potential obstacles
+		let bricks = game.get("bricks");
+		let targetable = bricks.filter(br => AC.isTargetable(br));
+		let obstacles = bricks.filter(br => AC.isObstacle(br));
+
+		for (let turret of turrets){
+			let targets = targetable.slice();
+			targets.sort((br1, br2) =>
+				AC.dist(turret, br1) - AC.dist(turret, br2));
+
+			let queue = turret.queue;
+			const burstCount = this.burstCount;
+
+			for (let br of targets){
+				if (queue.length >= burstCount)
+					break;
+				if (AC.hasLineOfSight(turret, br, obstacles))
+					queue.push(br);
+			}
+			//if not enough targets, fill queue with the first target
+			if (queue.length > 0){
+				while (queue.length < burstCount)
+					queue.push(queue[0]);
+			}
+		}
+	}
+
+	update(delta){
+		let turrets = this.turrets;
+		const off = 40;
+		if (this.deploying){
+			if (turrets[0].x > DIM.lwallx + off){
+				turrets[0].x = DIM.lwallx + off;
+				turrets[1].x = DIM.rwallx - off;
+				turrets[0].vx = 0;
+				turrets[1].vx = 0;
+				this.deploying = false;
+			}
+		}
+		else{
+			this.burstTimer -= delta;
+			if (this.burstTimer <= 0){
+				this.burstTimer = this.burstInterval;
+				this.fireTurrets();
+			}
+		}
+	}
+}
+AC = AssistController;
+f[2] = function(){
+	playSound("assist_collected");
+	let obj = checkExistingInstance("specials2", AssistController);
+	if (obj){
+		obj.burstCount = Math.min(10, obj.burstCount+1);
+		return;
+	}
+	game.emplace("specials2", new AssistController());
+}
+
 //Bulk
 function bulkNormal(br){
 	let [i, j] = br.normalInfo;
@@ -4222,14 +4513,16 @@ function bulkNormal(br){
 	}
 }
 function bulkMetal(br){
-	let level = Math.min(6, br.level + 1);
-	let tex = `brick_main_6_${level}`;
-	let anistr = `brick_shine_${3+level}`;
+	if (br.level == 5)
+		return;
+	let level = br.level + 1;
+	let tex = `brick_main_6_${1+level}`;
+	let anistr = `brick_shine_${4+level}`;
 	br.setTexture(tex);
 	br.addAnim("shine", anistr, 0.25);
 	br.level = level;
-	br.health = (level + 1) * 10;
-	br.score = 100 + (level - 1) * 20;
+	br.health = (2 + level) * 10;
+	br.score = 100 + level * 20;
 }
 f[11] = function(){
 	playSound("bulk_collected");
@@ -4336,9 +4629,9 @@ f[24] = function(){
 }
 
 //HaHa
-f[43] = function(powerup){
+f[43] = function(){
 	playSound("haha_collected");
-	let [px, py] = powerup.getPos();
+	let [px, py] = this.getPos();
 	let grid = game.top.brickGrid;
 	//get all empty grid nodes
 	let choices = [];
@@ -4402,6 +4695,83 @@ f[47] = function(){
 	}
 };
 
+//Lock
+f[62] = function(){
+	playSound("lock_collected");
+	for (let br of game.get("bricks")){
+		if (br.patch.storedMove)
+			br.patch.storedMove = null;
+		else if (br.patch.move){
+			//move brick to its nearest grid pos
+			br.patch.move = null;
+			let [x, y] = getGridPosInv(...getGridPos(br.x, br.y));
+			br.setTravel(x, y, "time", 0.1, "default");
+		}
+	}
+}
+
+//Oldie
+class Oldie extends GraphicsSprite{
+	static barHeight = 32;
+
+	constructor(){
+		super(0, 0);
+		//register all valid bricks to a set
+		this.record = new Set(game.get("bricks").filter(
+			br => br instanceof NormalBrick ||
+				  br instanceof MetalBrick
+		));
+		//create horizontal white bar that moves up
+		let bar = new PIXI.Graphics();
+		bar.position.set(DIM.lwallx, DIM.h);
+		bar.beginFill(0xFFFFFF)
+			.drawRect(0, 0, DIM.boardw, Oldie.barHeight);
+		bar.vy = 0.8;
+		bar.mask = new Mask(
+			DIM.lwallx, DIM.ceiling, DIM.boardw, DIM.boardh);
+		this.addChild(bar);
+		this.bar = bar;
+	}
+
+	//kill normal bricks at a 90% chance
+	//or reduce metal bricks level by 1
+	processBrick(br){
+		if (br instanceof NormalBrick){
+			if (Math.random() < 0.9)
+				br.kill();
+		}
+		else if (br instanceof MetalBrick){
+			let level = br.level;
+			if (level > 0){
+				game.emplace("bricks", 
+					new MetalBrick(br.x, br.y, level-1));
+				br.score = 0;
+				br.suppress = true;
+				br.kill();
+			}
+		}
+	}
+
+	update(delta){
+		let bar = this.bar;
+		bar.y -= bar.vy * delta;
+		if (bar.y + Oldie.barHeight < DIM.ceiling)
+			this.kill();
+		for (let br of this.record){
+			if (br.y - br.h/2 > bar.y){
+				this.processBrick(br);
+				this.record.delete(br);
+			}
+		}
+	}
+}
+f[77] = function(){
+	if (checkExistingInstance("specials2", Oldie))
+		return;
+	playSound("oldie_collected");
+	game.emplace("specials2", new Oldie());
+}
+
 //Open
 f[78] = function(){
 	//move all non platinum-strength bricks left or right.
@@ -4461,6 +4831,153 @@ f[78] = function(){
 		}
 	}
 };
+
+//Quake
+class Quake extends Special{
+	constructor(){
+		super(null);
+		const scale = 0.25;
+
+		this.shakeTimer = 0;
+		this.shakeDelay = 1000 / (60 * scale);
+
+		this.action = 0;
+		this.actionTimer = 0;
+		this.actionDelay = 250;
+
+		this.name = "quake";
+	}
+
+	destructor(){
+		game.setPos(0, 0);
+	}
+
+	static getScreenShakeOffset(){
+		const width = 4;
+		const height = 2;
+		let dx = randRange(-width, width+1);
+		let dy = randRange(-height, height+1);
+		return [dx, dy];
+	}
+
+	static canMove(br){
+		return br.armor < 1;
+	}
+
+	//for each row, swap random pairs of adjacent bricks
+	//swap will be instant with no travel time
+	//version 2: swap brick <-> brick or empty <-> brick
+	static shuffleBricks(){
+		let grid = game.top.brickGrid;
+		for (let i = 0; i < 32; i++){
+			//used to look up brick based on column 
+			let row_lookup = new Map();
+			//each value refers to the left index of an adjacent pair
+			let pairs = [];
+
+			let prev = null;
+			//gather pairs of adjacent bricks
+			for (let j = 0; j < 13; j++){
+				let br = grid.getStatic(i, j);
+				if (br){
+					if (Quake.canMove(br))
+						row_lookup.set(j, br);
+					else
+						br = null;
+				}
+				//change to (prev && br) if you want to swap
+				//	between non-empty spaces only
+				if (j != 0 && (prev || br))
+					pairs.push(j-1);
+				prev = br;
+			}
+			//shuffle random pairs of bricks
+			let limit = 3;
+			while (pairs.length > 0){
+				let index = randRange(pairs.length);
+				let j = pairs[index];
+				remove_if(pairs, x => x >= j-1 && x <= j+1);
+
+				let left_pos = getGridPosInv(i, j);
+				let right_pos = getGridPosInv(i, j+1);
+				row_lookup.get(j)?.setPos(...right_pos);
+				row_lookup.get(j+1)?.setPos(...left_pos);
+
+				if (--limit == 0)
+					break;
+			}
+		}
+	}
+
+	//move bricks down (similar to Zen Shove)
+	//shift will be instant with no travel time
+	static shiftBricksDown(){
+		let grid = game.top.brickGrid;
+		let shiftedBricks = new Set();
+
+		function canMove(br){
+			return br.armor < 1;
+		}
+
+		function isBlocking(br){
+			return br.armor >= 1 || !shiftedBricks.has(br);
+		}
+
+		for (let j = 0; j < 13; j++){
+			for (let i = 32-10; i >= 0; i--){
+				let br = grid.getStatic(i, j);
+				if (!br || !canMove(br))
+					continue;
+				let obstacle = false;
+				for (let bottom of grid.get(i+1, j)){
+					if (isBlocking(bottom)){
+						obstacle = true;
+						break;
+					}
+				}
+				if (!obstacle)
+					shiftedBricks.add(br);
+			}
+		}
+
+		for (let br of shiftedBricks){
+			let [i, j] = getGridPos(br.x, br.y);
+			let [x, y] = getGridPosInv(i+1, j);
+			br.setPos(x, y);
+		}
+	}
+
+	update(delta){
+		this.shakeTimer -= delta;
+		if (this.shakeTimer <= 0){
+			this.shakeTimer += this.shakeDelay;
+			let [dx, dy] = Quake.getScreenShakeOffset();
+			game.setPos(dx, dy);
+		}
+
+		this.actionTimer -= delta;
+		if (this.actionTimer <= 0){
+			this.actionTimer += this.actionDelay;
+			let action = this.action++;
+			if (action % 2 == 0)
+				Quake.shuffleBricks();
+			else
+				Quake.shiftBricksDown();
+			if (action == 3)
+				this.kill();
+		}
+	}
+}
+
+f[86] = function(){
+	for (let obj of game.get("specials1")){
+		if (obj.name == "quake")
+			return;
+	}
+	playSound("quake_collected");
+	let quake = new Quake();
+	game.emplace("specials1", quake);
+}
 
 //Quasar
 class Quasar extends Special{
@@ -4543,6 +5060,8 @@ f[87] = function(){
 	game.emplace("specials1", new Quasar());
 };
 
+
+
 //Terraform
 //	See Transform for info on which bricks to convert
 f[104] = function(){
@@ -4586,6 +5105,127 @@ f[106] = function(){
 	}
 };
 
+//Ultraviolet
+class Ultraviolet extends GraphicsSprite{
+	static cachedTextures = {};
+
+	constructor(){
+		super(0, 0);
+		this.overlays = new Map();
+
+		this.count = 10;
+		this.fadeTime = 1000;
+		this.spawnDelay = 100;
+		this.spawnTimer = 0;
+	}
+
+	//picks a random normal brick and create a overlay
+	//that will grow increasingly transparent before
+	//killing the brick
+	spawnOverlay(){
+		let overlays = this.overlays;
+		let bricks = game.get("bricks").filter(
+			br => br instanceof NormalBrick && 
+			      !overlays.has(br) &&
+			      !br.shouldBeRemoved()
+		);
+		if (bricks.length == 0)
+			return false;
+
+		let br = bricks[randRange(bricks.length)];
+		let overlay = new PIXI.Graphics();
+		overlay.position.set(br.x, br.y);
+		let w = br.w;
+		let h = br.h;
+		overlay.beginFill(0x6600CC)
+			.drawRect(-w/2, -h/2, w, h);
+		overlay.alpha = 0;
+		overlay.timer = 0;
+
+		overlays.set(br, overlay);
+		this.addChild(overlay);
+
+		return true;
+	}
+
+	//spawn a bunch of brick particles
+	//TODO: created textures?
+	shatterBrick(br){
+		//a brick sprite is 16x8 pixels
+		//divide it into 8 4x4 sections
+		let basetex = br.texture;
+		let x0 = br.x - br.w/2;
+		let y0 = br.y - br.h/2;
+		for (let x = 0; x < 16; x += 4){
+			for (let y = 0; y < 8; y += 4){
+				let rect = new PIXI.Rectangle(x, y, 4, 4);
+				let tex = new PIXI.Texture(basetex, rect);
+				let p = new Particle(tex, x0 + x*2, y0 + y*2);
+
+				let rad = randRangeFloat(2 * Math.PI);
+				let mag = randRangeFloat(0.05, 0.20);
+				let [vx, vy] = Vector.rotate(0, mag, rad);
+				p.setVel(vx, vy);
+				p.ay = 0.001;
+
+				game.emplace("particles", p);
+			}
+		}
+	}
+
+	update(delta){
+		let overlays = this.overlays;
+		const fadeTime = this.fadeTime;
+		//remove overlays of dead bricks
+		//also update their position
+		for (let [br, overlay] of overlays.entries()){
+			if (br.shouldBeRemoved()){
+				overlays.delete(br);
+				this.removeChild(overlay);
+			}
+			else
+				overlay.position.set(...br.getPos());
+		}
+		//update overlays and kill brick
+		//if overlay is fully opaque
+		for (let [br, overlay] of overlays.entries()){
+			overlay.timer += delta;
+			if (overlay.timer >= fadeTime){
+				br.kill();
+				playSound("ultraviolet_pop");
+				this.shatterBrick(br);
+				overlays.delete(br);
+				this.removeChild(overlay);
+			}
+			else
+				overlay.alpha = overlay.timer / fadeTime;
+		}
+		//spawn new overlay at a fixed interval
+		if (this.count > 0){
+			this.spawnTimer -= delta;
+			if (this.spawnTimer <= 0){
+				this.spawnTimer += this.spawnDelay;
+				this.spawnOverlay();
+				this.count--;
+			}
+		}
+		else{
+			if (overlays.size == 0)
+				this.kill();
+		}
+	}
+}
+f[112] = function(){
+	playSound("ultraviolet_collected");
+	let obj = checkExistingInstance("specials2", Ultraviolet)
+	if (obj){
+		obj.count += 10;
+		obj.spawnDelay = 100 * 10 / obj.count;
+		return;
+	}
+	game.emplace("specials2", new Ultraviolet());
+}
+
 //Unification
 function unifyNormal(br){
 	let [i, j] = br.normalInfo;
@@ -4609,25 +5249,97 @@ f[113] = function(){
 	}
 }
 
-//Vendetta
-f[117] = function(){
-	let gr = game.top.brickGrid;
-	let target = {row: 0, count: 0};
-	for (let i = 0; i < 32; i++){
-		let count = 0;
-		for (let j = 0; j < 13; j++){
-			for (let br of gr.grid[i][j]){
-				if (br.armor < 2)
-					count++;
-			}
-		}
-		if (count > target.count){
-			target.row = i;
-			target.count = count;
-		}
+//Unlock
+f[115] = function(){
+	playSound("lock_collected");
+	for (let br of game.get("bricks")){
+		if (br.isMoving() || br.patch.storedMove)
+			continue;
+		let [i, j] = getGridPos(br.x, br.y);
+		if (i % 2 == 0)
+			br.initMovementPatch(7); //medium left
+		else
+			br.initMovementPatch(10); //medium right
+	}
+}
+
+//Undestructible
+class Undestructible extends Special{
+	constructor(){
+		super(null, 0, 0);
+		this.scale.set(1);
+		this.record = new Map();
+		this.overlay = new PIXI.Graphics();
+		this.addChild(this.overlay);
+
+		this.timer = 4000;
 	}
 
-	let [x, y] = getGridPosInv(target.row, 0);
+	destructor(){
+		for (let [br, oldArmor] of this.record.entries())
+			br.armor = oldArmor;
+	}
+
+	static isInvisible(br){
+		if (br.patch.invisible)
+			return true;
+		if (br instanceof ForbiddenBrick)
+			return true;
+		if (br instanceof NullBrick)
+			return true;
+		return false;
+	}
+
+	update(delta){
+		let record = this.record;
+		let overlay = this.overlay;
+
+		//remove any dead bricks
+		for (let br of record.keys()){
+			//don't need to revert armor of dead bricks
+			if (br.shouldBeRemoved())
+				record.delete(br);
+		}
+
+		//add new bricks
+		for (let br of game.get("bricks")){
+			if (record.has(br))
+				continue;
+			record.set(br, br.armor);
+			br.armor = 2;
+		}
+
+		//draw overlay over all bricks
+		overlay.clear().beginFill(0xFFC800, 0.5);
+		for (let br of game.get("bricks")){
+			if (!Undestructible.isInvisible(br))
+				overlay.drawRect(br.x-16, br.y-8, 32, 16);
+		}
+
+		super.update(delta);
+	}
+}
+f[116] = function(){
+	playSound("undestructible_collected");
+	let obj = checkExistingInstance("specials2", Undestructible);
+	if (obj){
+		obj.timer += 4000;
+		return;
+	}
+	game.emplace("specials2", new Undestructible());
+	game.createMonitor(
+		"Undestructible", 
+		"specials2", 
+		["timer"],
+		obj => obj instanceof Undestructible
+	);
+}
+
+//Vendetta
+f[117] = function(){
+	let i = chooseRow();
+	let [x, y] = getGridPosInv(i, 0);
+
 	let drill = new Projectile("drill_1_0", x, y, 0.3, 0);
 	drill.onDeath = function(){
 		Projectile.prototype.onDeath.call(this);
@@ -4702,6 +5414,85 @@ f[119] = function(){
 	}
 }
 
+//Wet Storm
+f[125] = function(){
+	function chooseColumn(){
+		let grid = game.top.brickGrid;
+		let arr = [];
+		let maxCount = 0;
+		for (let j = 0; j < 13; j++){
+			let count = 0;
+			for (let i = 0; i < 32; i++){
+				let br = grid.getStatic(i, j);
+				if (br && br.armor < 1)
+					count++;
+			}
+			arr.push(count);
+			maxCount = Math.max(maxCount, count);
+		}
+		let indices = [];
+		for (let [i, v] of arr.entries()){
+			if (v == maxCount)
+				indices.push(i);
+		}
+		return indices[randRange(indices.length)];
+	}
+
+	function spawnRainDrop(){
+		playSound("wet_storm_collected");
+		
+		let drop = new Projectile("raindrop", 0, 0, 0, 0.5);
+		let w = drop.w;
+		let h = drop.h;
+		// let x = randRange(DIM.lwallx + w/2, DIM.rwallx - w/2 + 1);
+		// let y = DIM.ceiling - h/2 - 16;
+		let j = chooseColumn();
+		let [x, y] = getGridPosInv(0, j);
+		y = DIM.ceiling - h/2 - 16; 
+		drop.setPos(x, y);
+		drop.damage = 100;
+		drop.strength = 0;
+		drop.wallCheck = false;
+		drop.canHit = function(obj){
+			if (Projectile.prototype.canHit.call(this, obj)){
+				if (obj.gameType == "brick"){
+					return obj.armor < 1;
+				}
+				return true;
+			}
+			return false;
+		};
+		game.emplace("projectiles", drop);
+	}
+
+	for (let i = 0; i < 20; i++){
+		game.top.emplaceCallback(500 * i, spawnRainDrop);
+	}
+}
+
+//X-Ray
+f[128] = function(){
+	playSound("xray_collected");
+
+	let bricks = game.get("bricks").filter(
+		br => br instanceof NormalBrick);
+	//convert 30% of normal bricks to Powerup Bricks
+	const count = Math.ceil(bricks.length * 0.3);
+	for (let n = 0; n < count; n++){
+		if (bricks.length == 0)
+			break;
+		let i = randRange(bricks.length);
+		let br = bricks[i];
+		bricks.splice(i, 1);
+
+		br.suppress = true;
+		br.kill();
+		let id = game.top.powerupSpawner.getId();
+		let pow = new PowerupBrick(br.x, br.y, id);
+		game.emplace("bricks", pow);
+	}
+}
+
 //Buzzer
 class Buzzer extends BallProjectile{
 	constructor(){
@@ -4750,6 +5541,254 @@ f[132] = function(){
 * Other *
 *********/
 
+function checkExistingInstance(name, checkClass){
+	for (let obj of game.get(name)){
+		if (obj instanceof checkClass){
+			return obj;
+		}
+	}
+	return null;
+}
+
+/*==== Enemy-Related Subcategory ====*/
+
+//Laceration
+f[57] = function(){
+	playSound("laceration_collected");
+
+	let flash = new Particle(null, DIM.lwallx, DIM.ceiling);
+	flash.scale.set(1);
+	flash.addChild(new PIXI.Graphics()
+		.beginFill(0x996633)
+		.drawRect(0, 0, DIM.boardw, DIM.boardh)
+	);
+	flash.setFade(0.002);
+	game.emplace("specials2", flash);
+
+	//kill all enemies
+	for (let enemy of game.get("enemies")){
+		if (enemy.gameType == "dropper" && enemy.menacerId == 0)
+			continue;
+		enemy.kill();
+	}
+	//kill all menacers (except for red menacers)
+	for (let menacer of game.get("menacers")){
+		if (menacer.menacerId == 0)
+			continue;
+		menacer.kill();
+	}
+	//prevent all enemies except for red droppers from spawning
+	let spawner = game.top.spawner;
+	if (spawner){
+		remove_if(spawner.enemyInfo, arr => {
+			return (arr[0] != "dropper_0");
+		});
+	}
+}
+
+//Mobility
+class Mobility extends Special{
+	constructor(){
+		super(null);
+		this.record = new Set();
+		this.timer = 20000;
+	}
+
+	destructor(){
+		for (let obj of this.record)
+			obj.disabled = false;
+	}
+
+	update(delta){
+		let record = this.record;
+		//remove dead objects
+		for (let obj of record){
+			//don't need to restore dead objects
+			if (obj.shouldBeRemoved())
+				record.delete(obj);
+		}
+
+		for (let name of ["enemies", "menacers"]){
+			for (let obj of game.get(name)){
+				if (this.record.has(obj))
+					continue;
+				if (obj.y - obj.h/2 <= DIM.ceiling)
+					continue;
+				record.add(obj);
+				//Should I give the objects the same treatment
+				//as Slug? What would happen if Slug and Mobility overlap?
+				obj.disabled = true;
+			}
+		}
+		super.update(delta);
+	}
+}
+f[67] = function(){
+	//missing sound
+	let obj = checkExistingInstance("specials1", Mobility);
+	if (obj){
+		obj.timer += 20000;
+		return;
+	}
+
+	game.emplace("specials1", new Mobility());
+	game.createMonitor(
+		"Mobility", 
+		"specials1", 
+		["timer"], 
+		obj => obj instanceof Mobility
+	);
+}
+
+//Slug
+class Slug extends Special{
+	//Slug permamently slows down all enemies and hostile projectiles
+
+	constructor(){
+		super(null);
+		this.record = new Set();
+
+		//[name, time multiplier]
+		this.containers = [
+			["enemies", 0.5],
+			["projectiles", 0.33],
+			["menacers", 0.5],
+		];
+	}
+
+	destructor(){
+		//TODO: Revert the slowdown effect if Slug destruction
+		//	is required
+	}
+
+	update(delta){
+		let record = this.record;
+		//remove dead objects
+		for (let obj of record){
+			//don't need to restore dead objects
+			if (obj.shouldBeRemoved())
+				record.delete(obj);
+		}
+
+		for (let [name, multiplier] of this.containers){
+			for (let obj of game.get(name)){
+				if (name == "projectiles" && !obj.hostile)
+					continue;
+				if (this.record.has(obj))
+					continue;
+				if (obj.y - obj.h/2 <= DIM.ceiling)
+					continue;
+				record.add(obj);
+
+				//literally make the object move in slow-motion
+				let update = obj.update;
+				obj.update = function(delta){
+					update.call(this, delta * multiplier);
+				};
+			}
+		}
+	}
+}
+f[103] = function(){
+	if (checkExistingInstance("specials1", Slug))
+		return;
+	game.emplace("specials1", new Slug());
+};
+
+/*==== Mystery Subcategory ====*/
+function getMysteryPowerup(risky=false){
+	//risky means choose from both good and bad powerups
+
+	let weights = DEFAULT_WEIGHTS.slice();
+	//disable both Mystery and Risky Mystery powerups
+	//to prevent infinite loops
+	weights[69] = 0;
+	weights[94] = 0;
+	//disable inactive/unimplemented powerups
+	for (let i = 0; i < weights.length; i++){
+		if (!powerupFunc[i])
+			weights[i] = 0;
+	}
+	//disable bad powerups if not risky
+	if (!risky){
+		for (let i = 0; i < weights.length; i++){
+			if (badPowerupsLookup[i])
+				weights[i] = 0;
+		}
+	}
+	//generate random id based on weighted chances
+	let sum = weights.reduce((a, b) => a + b, 0);
+	let n = randRange(sum);
+	for (let [i, w] of weights.entries()){
+		n -= w;
+		if (n <= 0)
+			return i;
+	}
+	//should never happen
+	alert("Mystery: all weights are zero!");
+	return null;
+}
+//Mystery
+f[69] = function(){
+	let id = getMysteryPowerup();
+	f[id].call(this);
+	// console.log("mystery " + id);
+}
+//Risky Mystery
+f[94] = function(){
+	let id = getMysteryPowerup(true);
+	f[id].call(this);
+	// console.log("risky mystery " + id);
+}
+
+/*==== Miscellaneous ====*/
+
+//Barrier
+class Barrier extends Special{
+	constructor(){
+		super(null, DIM.w/2, DIM.h - 24);
+		let tiles = new PIXI.TilingSprite(
+			media.textures["barrier_brick"], 
+			DIM.boardw/2, 
+			16/2
+		);
+		tiles.anchor.set(0.5);
+		this.addChild(tiles);
+
+		this.timer = 10000;
+
+		game.top.pit_blockers++;
+	}
+
+	destructor(){
+		game.top.pit_blockers--;
+	}
+
+	update(delta){
+		for (let ball of game.get("balls")){
+			if (ball.y + ball.r > this.y - 8)
+				ball.handleCollision(0, -1);
+		}
+		super.update(delta);
+	}
+}
+f[6] = function(){
+	playSound("barrier_collected");
+	for (let obj of game.get("specials2")){
+		if (obj instanceof Barrier){
+			obj.timer += 10000;
+			return;
+		}
+	}
+	game.emplace("specials2", new Barrier());
+	game.createMonitor(
+		"Barrier",
+		"specials2",
+		["timer"],
+		obj => obj instanceof Barrier
+	);
+}
+
 //Blackout
 f[7] = function(){
 	let black = new Special(PIXI.Texture.WHITE);
@@ -4781,6 +5820,44 @@ f[7] = function(){
 	playSound("blackout_collected");
 };
 
+//Forcefield
+class Forcefield extends Special{
+	constructor(){
+		const height = 16;
+		super(null, DIM.lwallx, DIM.h - 104);
+		this.scale.set(1);
+		this.addChild(new PIXI.Graphics()
+			.beginFill(0xE6E68A, 0.5)
+			.drawRect(0, -height/2, DIM.boardw, height)
+		);
+	}
+
+	update(delta){
+		let paddle = game.get("paddles")[0];
+		for (let ball of game.get("balls")){
+			if (
+				ball.vy > 0 && 
+				ball.y > this.y && 
+				ball.y + ball.r < paddle.y
+			)
+			{
+				ball.velOverride = {vx: 0, vy: 0.1};
+				//optionally redirect ball's real velocity downward
+				let spd = ball.getSpeed();
+				ball.setVel(0, spd);
+			}
+		}
+	}
+}
+f[32] = function(){
+	playSound("generic_collected");
+	for (let obj of game.get("specials2")){
+		if (obj instanceof Forcefield)
+			return;
+	}
+	game.emplace("specials2", new Forcefield());
+};
+
 //Intelligent Shadow
 class IntelligentShadow extends Paddle{
 	constructor(paddle){
@@ -4789,6 +5866,7 @@ class IntelligentShadow extends Paddle{
 		this.setPos(paddle.x, paddle.y+16);
 		this.timer = 10000;
 		this.isIntelligentShadow = true;
+		this.paddleHitSound = "int_shadow_hit";
 	}
 
 	update(delta){
@@ -4837,3 +5915,250 @@ f[48] = function(){
 		obj => obj instanceof IntelligentShadow
 	);
 };
+
+//Junk
+f[52] = function(){
+	playSound("junk_collected");
+	let mult = game.top.scoreMultiplier;
+	game.top.setScoreMultiplier(Math.max(mult-1, -1));
+};
+
+//Jewel
+f[53] = function(){
+	playSound("jewel_collected");
+	let mult = game.top.scoreMultiplier;
+	game.top.setScoreMultiplier(Math.min(mult+1, 1));
+};
+
+//Joker
+f[54] = function(){
+	playSound("joker_collected");
+
+	for (let pow of game.get("powerups")){
+		if (pow.id != 54)
+			pow.activate();
+	}
+};
+
+//Luck
+f[63] = function(){
+	playSound("luck_collected");
+
+	let spawner = game.top.powerupSpawner;
+	if (spawner.luckActivated)
+		return;
+	spawner.luckActivated = true;
+
+	let weights = spawner.weights;
+	for (let i = 0; i < weights.length; i++){
+		if (badPowerupsLookup[i])
+			weights[i] = 0;
+		else
+			weights[i] = weights[i] ? 1 : 0;
+	}
+	spawner.sum = weights.reduce((a, b) => a + b, 0);
+	spawner.globalRate *= 1.6;
+};
+
+//Nebula
+class Nebula extends GraphicsSprite{
+	constructor(){
+		super(DIM.w/2, DIM.ceiling + DIM.boardh/2);
+
+		this.timer = 10000;
+		this.ringTimer = 0;
+		this.ringDelay = 500;
+		this.ringRadius = 20 + Vector.dist(
+			DIM.lwallx, DIM.ceiling, this.x, this.y);
+	}
+
+	update(delta){
+		this.timer -= delta;
+		if (this.timer <= 0)
+			this.kill();
+		this.updateRings(delta);
+		this.pullBalls();
+	}
+
+	updateRings(delta){
+		//rings persist after Nebula expires, so it's better
+		//to create multiple independent ring particles
+		this.ringTimer -= delta;
+		if (this.ringTimer > 0)
+			return;
+		this.ringTimer += this.ringDelay;
+
+		let ring = new GraphicsSprite(this.x, this.y);
+		ring.radius = this.ringRadius;
+		ring.speed = 0.15;
+		ring.update = function(delta){
+			this.clear();
+			this.lineStyle(4, 0x00FFFF);
+			this.drawCircle(0, 0, this.radius);
+
+			this.radius -= this.speed * delta;
+			if (this.radius <= 0)
+				this.kill();
+		};
+		ring.update(0);
+
+		game.emplace("particles", ring);
+	}
+
+	pullBalls(){
+		let center = new Vector(this.x, this.y);
+		for (let ball of game.get("balls")){
+			let pos = new Vector(ball.x, ball.y);
+			//ball -> center vector
+			let normal = center.sub(pos);
+			normal = normal.normalized();
+			//check if ball should move clockwise or counter-clockwise
+			//based on ball's current velocity
+			let sign = Vector.angleSign(
+				normal.x, normal.y, ball.vx, ball.vy);
+			let perp = normal.perpendicular().scale(sign);
+			//make the ball gravitate slightly towards the center
+			//will 60fps change its behavior?
+			let steer = perp.add(normal.scale(0.2));
+			ball.setSteer(steer.x, steer.y, 0.025);
+		}
+	}
+}
+f[71] = function(){
+	playSound("control_collected");
+	let obj = checkExistingInstance("specials1", Nebula);
+	if (obj){
+		obj.timer += 10000;
+		return;
+	}
+	game.emplace("specials1", new Nebula());
+	game.createMonitor(
+		"Nebula",
+		"specials1",
+		["timer"],
+		obj => obj instanceof Nebula
+	);
+};
+
+//Player
+f[82] = function(){
+	playSound("player_collected");
+	let playstate = game.top;
+	playstate.lives++;
+	playstate.updateLivesDisplay();
+};
+
+//Reset
+f[93] = function(){
+	playSound("normal_collected");
+	for (let ball of game.get("balls")){
+		ball.normal();
+	}
+	let paddle = game.get("paddles")[0];
+	paddle.normal();
+};
+
+//Tractor
+class Tractor extends Special{
+	constructor(){
+		super(null, DIM.w/2, DIM.h - 16);
+		this.scale.set(1);
+
+		this.health = 3;
+
+		this.shock = new PIXI.Graphics();
+		this.addChild(this.shock);
+		this.shockTimer = 0;
+		this.shockDelay = 1000 / 30;
+
+		game.top.pit_blockers++;
+	}
+
+	destructor(){
+		game.top.pit_blockers--;
+	}
+
+	update(delta){
+		for (let ball of game.get("balls")){
+			if (ball.vy > 0 && ball.y + ball.r > this.y){
+				ball.handleCollision(0, -1);
+				this.health--;
+				if (this.health <= 0){
+					this.kill();
+					return;
+				}
+			}
+		}
+
+
+		const w = DIM.boardw;
+		this.shockTimer -= delta;
+		if (this.shockTimer <= 0){
+			this.shockTimer += this.shockDelay;
+			this.shock.clear();
+			let colors = [0x00FF00, 0xCCFFCC, 0xFFFF00];
+			for (let i = 0; i < this.health; i++){
+				let color = colors[i];
+				shockify(this.shock, -w/2, 0, w/2, 0, {
+					color: color,
+					amplitude: 16,
+					deviation: 12,
+					rectangle: true
+				});
+			}
+		}
+	}
+}
+f[107] = function(){
+	playSound("tractor_collected");
+	game.emplace("specials2", new Tractor());
+};
+
+//Undead
+class Undead extends Special{
+	constructor(){
+		const height = 20;
+		const width = DIM.boardw;
+
+		super(null, DIM.lwallx, DIM.h - height);
+		this.scale.set(1);
+
+		//create gradient effect
+		let rect = new PIXI.Graphics();
+		for (let i = 0; i < height; i++){
+			rect.beginFill(0xFFFFFF, (i+1)/height);
+			rect.drawRect(0, i, width, 1);
+		}
+		this.addChild(rect);
+
+		this.health = 1;
+
+		game.top.pit_blockers++;
+	}
+
+	destructor(){
+		game.top.pit_blockers--;
+	}
+
+	update(delta){
+		for (let ball of game.get("balls")){
+			if (ball.y - ball.r > DIM.h){
+				let paddle = game.get("paddles")[0];
+				paddle.attachBall(ball, true);
+				this.health--;
+				if (this.health <= 0)
+					this.kill();
+			}
+		}
+	}
+}
+f[114] = function(){
+	playSound("undead_collected");
+	for (let obj of game.get("specials2")){
+		if (obj instanceof Undead){
+			obj.health++;
+			return;
+		}
+	}
+	game.emplace("specials2", new Undead());
+}

@@ -16,6 +16,8 @@ class Projectile extends Sprite{
 		}
 		//pierce can be false, true, or "strong"
 		this.pierce = false;
+		//used for antilaser patch
+		this.isLaser = false;
 
 		this.wallCheck = true;
 		this.floorCheck = true;

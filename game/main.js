@@ -45,6 +45,12 @@ class Game {
 		this.top = null;
 		this.stage = new PIXI.Container();
 	}
+
+	//takes in account of border offset
+	//used for screen shake effect
+	setPos(x=0, y=0){
+		this.stage.position.set(DIM.offx + x, DIM.offy + y);
+	}
 	
 	getState(i){
 		if (i < 0)
@@ -193,9 +199,8 @@ function init(){
 		// console.log("pointer down " + e.data.button);
 		let butt = e.data.button;
 		if (butt == 0){
-			//its better to make m1 and m2 mutually exclusive
 			mouse.m1 = 1;
-			mouse.m2 = 0;
+			// mouse.m2 = 0; //why was this needed?
 		}
 		else if (butt == 2)
 			mouse.m2 = 1;
@@ -233,7 +238,7 @@ function setup(){
 		createOuterBorder(DIM.w + DIM.outerx, DIM.h + DIM.outery);
 	app.stage.addChild(box);
 	game.windowTitle = title;
-	game.stage.position.set(DIM.offx, DIM.offy);
+	game.setPos(0, 0);
 	//create a 800 x 600 mask
 	game.stage.mask = new Mask(0, 0, DIM.w, DIM.h);
 
@@ -441,4 +446,13 @@ function circleRectOverlap(ccx, ccy, cr, rcx, rcy, rw, rh){
 		(circleDistX - rw/2) ** 2 + 
 		(circleDistY - rh/2) ** 2;
 	return (cornerDist < cr ** 2);
+}
+
+function AABBOverlap(box1, box2){
+	return !(
+		box1[0] >= box2[2] ||
+		box1[2] <= box2[0] ||
+		box1[1] >= box2[3] ||
+		box1[3] <= box2[1]
+	);
 }

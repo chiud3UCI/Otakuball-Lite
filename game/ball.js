@@ -86,6 +86,10 @@ class Ball extends Sprite{
 		return this.shape.radius;
 	}
 
+	get r(){
+		return this.shape.radius;
+	}
+
 	//check to see if ball should freely move and collide with
 	//the other game objects
 	isActive(){
@@ -265,8 +269,14 @@ class Ball extends Sprite{
 		}
 
 		if (!this.disableBounce){
-			if (this.y - this.shape.radius > DIM.h && !cheats.disable_pit)
+			if (
+				this.y - this.shape.radius > DIM.h && 
+				!cheats.disable_pit &&
+				game.top.pit_blockers == 0
+			)
+			{
 				this.dead = true;
+			}
 
 			let [x0, y0, x1, y1] = this.shape.getAABB();
 			if (x0 < DIM.lwallx)
@@ -301,10 +311,10 @@ class Ball extends Sprite{
 		for (let [key, comp] of Object.entries(this.components))
 			comp.postUpdate?.(delta);
 	}
-
 	//Check if a ball with a certain velocity and radius
 	//will collide with a object's aabb
 	//pass debugGraphics to draw the hitbox
+	//Note this is different from Sprite.raycast
 	static raycastTo(obj, x0, y0, vx, vy, r, debugGraphics){
 		//Step 1: Create a rounded rectangular hitbox
 		//Composed of 2 rectangles and 4 circles
@@ -337,8 +347,8 @@ class Ball extends Sprite{
 		//Step 2: Find the closest raycast intersection
 		let min = Infinity;
 		for (let shape of shapes){
-			let [check, mag] = shape.raycast(x0, y0, vx, vy);
-			if (check && mag > 0 && mag < min)
+			let mag = shape.raycast(x0, y0, vx, vy);
+			if (mag !== null && mag < min)
 				min = mag;
 		}
 		if (Number.isFinite(min))

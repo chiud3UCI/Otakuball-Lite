@@ -1,5 +1,51 @@
-//NOTE: Rememember to add all the classes to brickClasses
-//		at the bottom of this file
+var brickClasses;
+
+//when this function is called at the bottom, all classes
+//will be already initialized so I can successfully assign
+//them to brickClasses
+function initBrickClasses(){
+	brickClasses = {
+		Brick,
+		ForbiddenBrick,
+		GhostBrick,
+		NormalBrick,
+		MetalBrick,
+		GoldBrick,
+		PlatinumBrick,
+		SpeedBrick,
+		CopperBrick,
+		JumperBrick,
+		OneWayBrick,
+		ConveyorBrick,
+		FunkyBrick,
+		ShooterBrick,
+		DetonatorBrick,
+		TriggerDetonatorBrick,
+		GlassBrick,
+		AlienBrick,
+		RainbowBrick,
+		GateBrick,
+		CometBrick,
+		LaserEyeBrick,
+		BoulderBrick,
+		TikiBrick,
+		TriggerBrick,
+		SwitchBrick,
+		FlipBrick,
+		StrongFlipBrick,
+		ShoveBrick,
+		FactoryBrick,
+		ShoveDetonatorBrick,
+		SequenceBrick,
+		OnixBrick,
+		SlotMachineBrick,
+		LauncherBrick,
+		TwinLauncherBrick,
+		ParachuteBrick,
+		SplitBrick,
+		PowerupBrick,
+	}
+}
 
 class Brick extends Sprite{
 	constructor(texture, x, y){
@@ -522,18 +568,17 @@ class NormalBrick extends Brick{
 }
 
 class MetalBrick extends Brick{
-	//level should be [1-6]
+	//level should be [0-5] inclusive
 	constructor(x, y, level){
-		let j = level;
-		let str = "brick_main_6_" + j;
+		let str = `brick_main_6_${1+level}`;
 		super(str, x, y);
 
-		let anistr = `brick_shine_${3+level}`;
+		let anistr = `brick_shine_${4+level}`;
 		this.addAnim("shine", anistr, 0.25);
 
 		this.level = level;
-		this.health = (level + 1) * 10;
-		this.score = 100 + (level - 1) * 20;
+		this.health = (2 + level) * 10;
+		this.score = 100 + level * 20;
 
 		this.brickType = "metal";
 	}
@@ -542,9 +587,9 @@ class MetalBrick extends Brick{
 	static setCoating(brick, oldBrick){
 		let coat = 2;
 		if (brick.brickType == "metal"){
-			if (brick.level == 1)
+			if (brick.level == 0)
 				coat = 0;
-			else if (brick.level == 2)
+			else if (brick.level == 1)
 				coat = 1;
 		}
 		//add the underlay texture
@@ -1563,6 +1608,7 @@ class LaserEyeBrick extends Brick{
 		let laser = new Projectile(
 			"lasereye_laser", this.x, this.y, vec.x, vec.y);
 		laser.colFlag = {paddle: true};
+		laser.hostile = true;
 		laser.onPaddleHit = function(paddle){
 			paddle.stun = {x: 0.25, timer: 1000};
 			this.kill();
@@ -1603,6 +1649,7 @@ class BoulderBrick extends Brick{
 			b.ay = 0.001;
 			b.createShape(true);
 			b.colFlag = {paddle: true};
+			b.hostile = true;
 			b.onPaddleHit = function(paddle){
 				paddle.stun = {x: 0.25, timer: 1000};
 				this.colFlag.paddle = false;
@@ -1646,6 +1693,7 @@ class TikiBrick extends Brick{
 		);
 		laser.tint = 0xFFFF00;
 		laser.colFlag = {paddle: true};
+		laser.hostile = true;
 		laser.onPaddleHit = function(paddle){
 			paddle.incrementSize(-1);
 			this.kill();
@@ -2505,44 +2553,5 @@ class PowerupBrick extends Brick{
 	}
 }
 
-var brickClasses = {
-	Brick,
-	ForbiddenBrick,
-	GhostBrick,
-	NormalBrick,
-	MetalBrick,
-	GoldBrick,
-	PlatinumBrick,
-	SpeedBrick,
-	CopperBrick,
-	JumperBrick,
-	OneWayBrick,
-	ConveyorBrick,
-	FunkyBrick,
-	ShooterBrick,
-	DetonatorBrick,
-	TriggerDetonatorBrick,
-	GlassBrick,
-	AlienBrick,
-	RainbowBrick,
-	GateBrick,
-	CometBrick,
-	LaserEyeBrick,
-	BoulderBrick,
-	TikiBrick,
-	TriggerBrick,
-	SwitchBrick,
-	FlipBrick,
-	StrongFlipBrick,
-	ShoveBrick,
-	FactoryBrick,
-	ShoveDetonatorBrick,
-	SequenceBrick,
-	OnixBrick,
-	SlotMachineBrick,
-	LauncherBrick,
-	TwinLauncherBrick,
-	ParachuteBrick,
-	SplitBrick,
-	PowerupBrick,
-}
+//call this after every brick class has been defined
+initBrickClasses();

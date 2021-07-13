@@ -80,12 +80,12 @@ var brickData = {
 		*************************************************/
 
 		let other = [
-			[6, 1, "MetalBrick", [1]],
-			[6, 2, "MetalBrick", [2]],
-			[6, 3, "MetalBrick", [3]],
-			[6, 4, "MetalBrick", [4]],
-			[6, 5, "MetalBrick", [5]],
-			[6, 6, "MetalBrick", [6]],
+			[6, 1, "MetalBrick", [0]],
+			[6, 2, "MetalBrick", [1]],
+			[6, 3, "MetalBrick", [2]],
+			[6, 4, "MetalBrick", [3]],
+			[6, 5, "MetalBrick", [4]],
+			[6, 6, "MetalBrick", [5]],
 			[6, 0, "GoldBrick", [false]],
 			[6, 7, "GoldBrick", [true]],
 			[6, 10, "PlatinumBrick", []],

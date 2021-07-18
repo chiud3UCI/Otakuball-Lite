@@ -204,6 +204,7 @@ let recursive_texture_names = [
 		"paddle",
 		"paddles",
 		"frozen_paddle",
+		"protect_outline",
 	]],
 
 	["balls/", [
@@ -298,6 +299,7 @@ let recursive_sound_names = [
 		"shotgun_fire",
 		"transform_brick",
 		"int_shadow_hit",
+		"illusion_hit",
 	]],
 	["brick/", [
 		"alien_death",
@@ -417,6 +419,19 @@ let recursive_sound_names = [
 		"oldie_collected",
 		"lock_collected",
 		"assist_collected",
+		"attract_collected",
+		"protect_collected",
+		"illusion_collected",
+		"orbit_collected",
+		"kamikaze_collected",
+		"antigravity_collected",
+		"gravity_collected",
+		"irritate_collected",
+		"sightlaser_collected",
+		"trail_collected",
+		"emp_collected",
+		"bypass_collected",
+		"bypass_exit",
 	]],
 	["enemy/", [
 		"enemy_death",
@@ -771,6 +786,7 @@ media.processSounds = function(){
 	setVol("heaven_hit", 0.5);
 	setVol("laceration_collected", 0.25);
 	setVol("boulder_break", 0.5);
+	setVol("illusion_collected", 0.75);
 }
 
 //some animations may be created outside of this method

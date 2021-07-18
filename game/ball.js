@@ -94,6 +94,8 @@ class Ball extends Sprite{
 	//the other game objects
 	isActive(){
 		if (this.justReleased){
+			//prevent certain powerups such as Blossom and Probe
+			//from activating immediately after leaving the paddle
 			this.justReleased = false;
 			return false;
 		}

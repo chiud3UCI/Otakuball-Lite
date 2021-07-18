@@ -81,6 +81,8 @@ class Vector{
 
 	//don't call it normal because that means perpendicular
 	normalized(){
+		if (this.x === 0 && this.y === 0)
+			return new Vector(0, 0);
 		let len = this.len();
 		return new Vector(
 			this.x / len, this.y / len);

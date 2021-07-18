@@ -222,8 +222,10 @@ class Sprite extends PIXI.Sprite{
 			else
 				textures2.push(tex);
 		}
-		let ani = new PIXI.AnimatedSprite(textures2);
-		ani.animationSpeed = spd;
+		let ani = new PIXI.AnimatedSprite(textures2, false);
+		// ani.autoUpdate = false;
+		// ani.animationSpeed = spd;
+		ani.deltaScale = 1/15 * spd; //why is it 1/15?
 		ani.anchor.set(0.5, 0.5);
 		ani.visible = false;
 		ani.loop = loop;
@@ -396,6 +398,11 @@ class Sprite extends PIXI.Sprite{
 	//Currently, PIXI.Sprite and all parents do not have an update() method.
 	//However, PIXI.AnimatedSprite does has an update() method.
 	update(delta){
+		for (let ani of Object.values(this.anim)){
+			//why do I have to divide delta by 15?
+			ani.update(delta * ani.deltaScale);
+		}
+
 		if (this.timer !== null){
 			this.timer -= delta;
 			if (this.timer <= 0)

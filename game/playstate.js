@@ -56,6 +56,9 @@ class PlayState{
 		if (mode == "test" || mode == "play")
 			level = arg;
 
+		this.timescale = 1;
+		this.timewarp = null;
+
 		//initialize object lists based on draw order
 		//you can initialize as many arbitrary layers as needed
 		let layerNames = [
@@ -414,7 +417,7 @@ class PlayState{
 		//top gates
 		let gates = [];
 		let offsets = [48, 144, 272, 368];
-		for (let off of offsets){
+		for (let off of offsets){1
 			let x = DIM.lwallx + off;
 			let y = DIM.ceiling;
 			let gate = new Gate(x, y);
@@ -429,6 +432,11 @@ class PlayState{
 		this.add("borders", left);
 		this.add("borders", right);
 		this.sideGates = [left, right];
+
+		//bypass gate
+		let bypass = new Bypass(this);
+		this.add("borders", bypass);
+		this.bypass = bypass;
 	}
 
 	initPowerupButtons(){
@@ -464,7 +472,7 @@ class PlayState{
 			]],
 			["Paddle Modify", [
 				4, 13, 14, 15, 28, 30, 36, 38, 40,
-				44, 46, 64, 75, 76, 79, 84,
+				44, 46, 75, 76, 79, 84,
 				85, 90, 91, 98, 110, 118, 124, 130, 134
 			]],
 			["Brick-Related", [
@@ -473,7 +481,7 @@ class PlayState{
 				125, 128, 132,
 			]],
 			["Other", [
-				6, 7, 12, 32, 48, 52, 53, 54, 57, 63,  
+				6, 7, 12, 32, 48, 52, 53, 54, 57, 63, 64,  
 				67, 69, 71, 82, 92, 93, 94, 103, 105, 
 				107, 114, 122
 			]],
@@ -1045,6 +1053,11 @@ class PlayState{
 
 		this.collide("powerups", "paddles");
 
+		//update TimeWarp object if it exists
+		this.timewarp?.update(delta);
+		//then scale delta with timescale
+		delta *= this.timescale;
+
 		//update all objects in the game layer
 		for (let name of this.activeLayers){
 			for (let obj of this[name].children){
@@ -1178,7 +1191,6 @@ PlayState.states = {
 			//make sure paddle's position is synced with mouse
 			//position before starting the game
 			paddle.update(0);
-			paddle.setSpeedLimit();
 			paddle.isRespawning = false;
 		}
 		//handled in PlayState.update()
@@ -1228,9 +1240,10 @@ PlayState.states = {
 			ps.border.visible = false;
 			for (let gate of ps.gates)
 				gate.visible = false;
+			for (let gate of ps.sideGates)
+				gate.visible = false;
 
 			let paddle = ps.paddles.children[0];
-			paddle.setSpeedLimit(Infinity, Infinity);
 			paddle.isRespawning = true;
 		}
 		destructor(){
@@ -1239,6 +1252,8 @@ PlayState.states = {
 			ps.balls.visible = true;
 			ps.border.visible = true;
 			for (let gate of ps.gates)
+				gate.visible = true;
+			for (let gate of ps.sideGates)
 				gate.visible = true;
 			ps.borders.removeChild(...this.introBorders);
 			ps.walls.removeChild(this.sweeper);
@@ -1319,7 +1334,6 @@ PlayState.states = {
 			ps.hud.addChild(text);
 			this.text = text;
 
-			paddle.setSpeedLimit(Infinity, Infinity);
 			paddle.isRespawning = true;
 		}
 		destructor(){
@@ -1568,6 +1582,12 @@ PlayState.states = {
 		}
 
 		update(delta){
+			if (this.ps.bypass.exitTriggered){
+				let paddle = this.ps.get("paddles")[0];
+				paddle.x += 0.1 * delta;
+				paddle.updateStuckBalls();
+			}
+
 			if (this.blackoutDelay > 0){
 				this.blackoutDelay -= delta;
 				return false;
@@ -1715,6 +1735,83 @@ class Gate extends Sprite{
 
 		left.x = -right.x;
 		middle.scale.x = right.x*2;
+	}
+}
+
+//Bypass is just a black rectangle that slowly
+//expands from the bottom of the right side border
+class Bypass extends Sprite{
+	constructor(playstate){
+		super(null, DIM.rwallx, DIM.h);
+		this.playstate = playstate;
+		this.scale.set(1);
+		this.rect = new PIXI.Graphics();
+		this.addChild(this.rect);
+		//height is already a property of PIXI.Sprite
+		this.openHeightMax = 60;
+		this.openHeight = 0;
+		this.openSpeed = 0.1;
+		this.mode = 1; //1 = bypass, 2 = warp
+		this.state = "closed"; //"closed", "opening", "open"
+
+		this.exitTimer = 0;
+		this.exitTimerMax = 1000;
+		let text = printText(String(this.exitTimerMax), 
+			"windows", 0xFFFFFF, 2, DIM.w/2, DIM.h/2);
+		text.visible = false;
+		text.anchor.set(0.5);
+		playstate.hud.addChild(text);
+		this.text = text;
+
+		this.exitTriggered = false;
+
+		// this.open(2);
+	}
+
+	redraw(){
+		this.rect.clear()
+			.beginFill(0x000000)
+			.drawRect(0, 0, 16, -this.openHeight);
+	}
+
+	//Bypass and Warp Powerup will call this
+	//Currently theres no close()
+	open(mode=1){
+		this.mode = Math.max(this.mode, mode);
+		if (this.state == "closed")
+			this.state = "opening";
+	}
+
+	update(delta){
+		if (this.state == "opening"){
+			this.openHeight += this.openSpeed * delta;
+			if (this.openHeight > this.openHeightMax){
+				this.openHeight = this.openHeightMax;
+				this.state = "open";
+				this.exitTimer = this.exitTimerMax;
+			}
+			this.redraw();
+		}
+		else if (this.state == "open"){
+			let paddle = game.get("paddles")[0];
+			let text = this.text;
+			if (paddle.x + paddle.paddleWidth/2 >= DIM.rwallx){
+				this.exitTimer = Math.max(0, this.exitTimer - delta);
+				text.visible = true;
+				text.position.set(paddle.x, paddle.y - 32);
+			}
+			else{
+				this.exitTimer = this.exitTimerMax;
+				text.visible = false;
+			}
+			this.text.text = String(Math.floor(this.exitTimer));
+			if (this.exitTimer == 0){
+				this.exitTriggered = true;
+				playSound("bypass_exit");
+				text.visible = false;
+				this.playstate.setState("victory");
+			}
+		}
 	}
 }
 

@@ -163,6 +163,10 @@ class Powerup extends Sprite{
 			"score_"+index, this.x, this.y, 0, -0.1);
 		scoreParticle.timer = 2000;
 		game.emplace("particles", scoreParticle);
+
+		//trigger twin syncComponent if it exists
+		let paddle = game.get("paddles")[0];
+		paddle.twinWrapper?.syncComponents();
 	}
 
 	updateLabel(){
@@ -233,6 +237,16 @@ class Powerup extends Sprite{
 	}
 }
 
+let twin_whitelist; //defined at the bottom of the file
+
+function getPaddles(powerup){
+	return [game.get("paddles")[0]];
+	// if (twin_whitelist[powerup.id])
+	// 	return game.get("paddles");
+	// else
+	// 	return [game.get("paddles")[0]];
+}
+
 
 var powerupFunc = {};
 
@@ -245,6 +259,7 @@ let f = powerupFunc; //alias
  * 4. Paddle Modify
  * 5. Brick-Related
  * 6. Other
+ * 7. Twin
  */
 
 /*****************
@@ -542,6 +557,7 @@ class Antigravity{
 	}
 }
 f[1] = function(){
+	playSound("antigravity_collected");
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.components.antigravity = new Antigravity(ball);
@@ -579,7 +595,7 @@ class Attract{
 	}
 }
 f[3] = function(){
-	// playSound("generic_collected");
+	playSound("attract_collected");
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.components.attract = new Attract(ball);
@@ -880,10 +896,13 @@ class Emp{
 		stopSound(obj.deathSound);
 	}
 	onPaddleHit(paddle, delta){
+		if (!this.armed)
+			playSound("emp_collected");
 		this.armed = true;
 	}
 }
 f[25] = function(){
+	playSound("emp_collected");
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.setTexture("ball_main_1_1");
@@ -1007,6 +1026,7 @@ class FireBall{
 	}
 }
 f[31] = function(){
+	playSound("fireball_collected");
 	for (let ball of game.get("balls")){
 		if (!ball.components.fireball){
 			ball.normal();
@@ -1162,6 +1182,7 @@ class Gravity{
 	}
 }
 f[39] = function(){
+	playSound("gravity_collected");
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.components.gravity = new Gravity(ball);
@@ -1294,6 +1315,7 @@ class Irritate{
 	}
 }
 f[50] = function(){
+	playSound("irritate_collected");
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.setTexture("ball_main_4_0");
@@ -1310,6 +1332,7 @@ class Kamikaze extends Attract{
 	}
 }
 f[55] = function(){
+	playSound("kamikaze_collected");
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.setTexture("ball_main_1_0");
@@ -1335,7 +1358,7 @@ class Knocker{
 
 		this.knocker = new Sprite(PIXI.Texture.EMPTY,
 			0, 0, 0, 0, 0, 1, 1);
-		this.knocker.addAnim("spin", "knocker_spin", 1/8, true, true);
+		this.knocker.addAnim("spin", "knocker_spin", 0.125, true, true);
 		this.ball.addChild(this.knocker);
 	}
 	destructor(){
@@ -1347,6 +1370,9 @@ class Knocker{
 	onPaddleHit(paddle){
 		this.count = this.knockerHealth;
 		this.updateAppearance();
+	}
+	update(delta){
+		this.knocker.update(delta);
 	}
 }
 f[56] = function(){
@@ -1822,7 +1848,7 @@ class SightLaser{
 	}
 }
 f[100] = function(){
-	playSound("generic_collected");
+	playSound("sightlaser_collected");
 	for (let ball of game.get("balls")){
 		if (!ball.components.sightlaser)
 			ball.components.sightlaser = new SightLaser(ball);
@@ -2181,6 +2207,11 @@ class BallCannon extends PaddleWeapon{
 	constructor(paddle){
 		super(paddle, "ballcannon", 8);
 	}
+
+	twinClone(twin){
+		return new BallCannon(twin);
+	}
+
 	onClick(mouseVal){
 		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
 			return;
@@ -2201,10 +2232,11 @@ class BallCannon extends PaddleWeapon{
 }
 f[5] = function(){
 	playSound("cannon_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_26_2");
-	paddle.setComponent("weapon", new BallCannon(paddle));
+	for (let paddle of getPaddles(this)){
+		paddle.clearPowerups();
+		paddle.setTexture("paddle_26_2");
+		paddle.setComponent("weapon", new BallCannon(paddle));
+	}
 };
 
 //Beam
@@ -2376,16 +2408,17 @@ class Beamer{
 f[8] = function(){
 	//"generic_collected" is actually Beam's official powerup sound
 	playSound("generic_collected");
-	let paddle = game.get("paddles")[0];
-	if (paddle.components.weapon?.name == "beamer"){
-		let beamer = paddle.components.weapon;
-		beamer.timerMax += 5000;
-		beamer.timer = beamer.timerMax;
-	}
-	else{
-		paddle.clearPowerups();
-		paddle.setTexture("paddle_20_1");
-		paddle.setComponent("weapon", new Beamer(paddle));
+	for (let paddle of getPaddles(this)){
+		if (paddle.components.weapon?.name == "beamer"){
+			let beamer = paddle.components.weapon;
+			beamer.timerMax += 5000;
+			beamer.timer = beamer.timerMax;
+		}
+		else{
+			paddle.clearPowerups();
+			paddle.setTexture("paddle_20_1");
+			paddle.setComponent("weapon", new Beamer(paddle));
+		}
 	}
 };
 
@@ -2512,23 +2545,37 @@ class Control{
 }
 f[19] = function(){
 	playSound("control_collected");
-	let paddle = game.get("paddles")[0];
-	if (paddle.components.weapon?.name != "control"){
-		paddle.clearPowerups();
-		paddle.setTexture("paddle_17_2");
-		paddle.setComponent("weapon", new Control(paddle));
+	for (let paddle of getPaddles(this)){
+		if (paddle.components.weapon?.name != "control"){
+			paddle.clearPowerups();
+			paddle.setTexture("paddle_17_2");
+			paddle.setComponent("weapon", new Control(paddle));
+		}
 	}
 };
 
 //Drill Missile
 class DrillMissile extends PaddleWeapon{
 	constructor(paddle){
-		super(paddle, "ballcannon", 1);
+		super(paddle, "drillmissile", 1);
 	}
+
+	twinClone(twin){
+		return new DrillMissile(twin);
+	}
+
 	onClick(mouseVal){
 		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
 			return;
 		let mx = mouse.x;
+
+		//copy this for all twin weapons that require mouse.x
+		let paddle = this.paddle;
+		if (paddle.twinWrapper){
+			mx = paddle.twinWrapper.modifyMouseXPos(
+				mx, paddle.isTwin, true);
+		}
+
 		let j = Math.floor((mx - DIM.lwallx) / 32);
 		j = Math.max(0, Math.min(13-1, j));
 		let x = DIM.lwallx + 16 + (32*j);
@@ -2559,10 +2606,11 @@ class DrillMissile extends PaddleWeapon{
 }
 f[23] = function(){
 	playSound("drill_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_24_1");
-	paddle.setComponent("weapon", new DrillMissile(paddle));
+	for (let paddle of getPaddles(this)){
+		paddle.clearPowerups();
+		paddle.setTexture("paddle_24_1");
+		paddle.setComponent("weapon", new DrillMissile(paddle));
+	}
 };
 
 //Erratic Missile
@@ -2570,6 +2618,11 @@ class ErraticMissile extends PaddleWeapon{
 	constructor(paddle){
 		super(paddle, "erraticmissile", 4);
 	}
+
+	twinClone(twin){
+		return new ErraticMissile(twin);
+	}
+
 	onClick(mouseVal){
 		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
 			return;
@@ -2613,10 +2666,11 @@ class ErraticMissile extends PaddleWeapon{
 }
 f[27] = function(){
 	playSound("missile_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_24_1");
-	paddle.setComponent("weapon", new ErraticMissile(paddle));
+	for (let paddle of getPaddles(this)){
+		paddle.clearPowerups();
+		paddle.setTexture("paddle_24_1");
+		paddle.setComponent("weapon", new ErraticMissile(paddle));
+	}
 };
 
 //Hacker
@@ -2722,10 +2776,11 @@ class Hacker{
 }
 f[41] = function(){
 	playSound("hacker_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_21_1");
-	paddle.setComponent("weapon", new Hacker(paddle));
+	for (let paddle of getPaddles(this)){
+		paddle.clearPowerups();
+		paddle.setTexture("paddle_21_1");
+		paddle.setComponent("weapon", new Hacker(paddle));
+	}
 }
 
 //Invert
@@ -2763,16 +2818,23 @@ class Invert{
 }
 f[49] = function(){
 	playSound("invert_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_29_1");
-	paddle.setComponent("weapon", new Invert(paddle));
+	for (let paddle of getPaddles(this)){
+		paddle.clearPowerups();
+		paddle.setTexture("paddle_29_1");
+		paddle.setComponent("weapon", new Invert(paddle));
+	}
 };
 
 class Laser extends PaddleWeapon{
 	constructor(paddle, plus=false){
 		super(paddle, "laser", plus ? 6 : 4);
 		this.isPlus = plus;
+	}
+
+	twinClone(twin){
+		let copy = new Laser(twin, this.isPlus);
+		copy.maxBullets = this.maxBullets;
+		return copy;
 	}
 
 	upgrade(plus){
@@ -2798,32 +2860,34 @@ class Laser extends PaddleWeapon{
 //Laser
 f[59] = function(){
 	playSound("laser_collected");
-	let paddle = game.get("paddles")[0];
-	let cmp = paddle.components.weapon;
-	if (cmp?.name == "laser")
-		cmp.upgrade(false);
-	else{
-		paddle.clearPowerups();
-		paddle.setTexture("paddle_27_1");
-		paddle.setComponent("weapon", new Laser(
-			paddle, false));
+	for (let paddle of getPaddles(this)){
+		let cmp = paddle.components.weapon;
+		if (cmp?.name == "laser")
+			cmp.upgrade(false);
+		else{
+			paddle.clearPowerups();
+			paddle.setTexture("paddle_27_1");
+			paddle.setComponent("weapon", new Laser(
+				paddle, false));
+		}
 	}
 };
 //Laser Plus
 f[60] = function(){
 	playSound("laser_collected");
-	let paddle = game.get("paddles")[0];
-	let extraBullets = 0;
-	let cmp = paddle.components.weapon;
-	if (cmp?.name == "laser"){
-		paddle.setTexture("paddle_27_2");
-		cmp.upgrade(true);
-	}
-	else{
-		paddle.clearPowerups();
-		paddle.setTexture("paddle_27_2");
-		paddle.setComponent("weapon", new Laser(
-			paddle, true));
+	for (let paddle of getPaddles(this)){
+		let extraBullets = 0;
+		let cmp = paddle.components.weapon;
+		if (cmp?.name == "laser"){
+			paddle.setTexture("paddle_27_2");
+			cmp.upgrade(true);
+		}
+		else{
+			paddle.clearPowerups();
+			paddle.setTexture("paddle_27_2");
+			paddle.setComponent("weapon", new Laser(
+				paddle, true));
+		}
 	}
 };
 
@@ -2832,6 +2896,11 @@ class Missile extends PaddleWeapon{
 	constructor(paddle){
 		super(paddle, "missile", 4);
 	}
+
+	twinClone(twin){
+		return new Missile(twin);
+	}
+
 	onClick(mouseVal){
 		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
 			return;
@@ -2854,10 +2923,11 @@ class Missile extends PaddleWeapon{
 }
 f[66] = function(){
 	playSound("missile_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_23_1");
-	paddle.setComponent("weapon", new Missile(paddle));
+	for (let paddle of getPaddles(this)){
+		paddle.clearPowerups();
+		paddle.setTexture("paddle_23_1");
+		paddle.setComponent("weapon", new Missile(paddle));
+	}
 };
 
 //Pause
@@ -2936,9 +3006,10 @@ class Pause{
 }
 f[81] = function(){
 	playSound("pause_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setComponent("weapon", new Pause(paddle));
+	for (let paddle of getPaddles(this)){
+		paddle.clearPowerups();
+		paddle.setComponent("weapon", new Pause(paddle));
+	}
 }
 
 //Rapidfire
@@ -2950,6 +3021,10 @@ class RapidFire extends PaddleWeapon{
 		this.maxFlipDelay = 1000;
 		this.flipDelay = this.maxFlipDelay;
 		this.flip = false;
+	}
+
+	twinClone(twin){
+		return new RapidFire(twin);
 	}
 
 	onClick(mouseVal){
@@ -2983,10 +3058,11 @@ class RapidFire extends PaddleWeapon{
 }
 f[89] = function(){
 	playSound("shotgun_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_4_1");
-	paddle.setComponent("weapon", new RapidFire(paddle));
+	for (let paddle of getPaddles(this)){
+		paddle.clearPowerups();
+		paddle.setTexture("paddle_4_1");
+		paddle.setComponent("weapon", new RapidFire(paddle));
+	}
 };
 
 //Shotgun
@@ -2994,6 +3070,11 @@ class Shotgun extends PaddleWeapon{
 	constructor(paddle){
 		super(paddle, "shotgun", 12);
 	}
+
+	twinClone(twin){
+		return new Shotgun(twin);
+	}
+
 	onClick(mouseVal){
 		if (mouseVal != 1 || this.bulletCount >= this.maxBullets)
 			return;
@@ -3011,10 +3092,11 @@ class Shotgun extends PaddleWeapon{
 }
 f[99] = function(){
 	playSound("shotgun_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	paddle.setTexture("paddle_26_1");
-	paddle.setComponent("weapon", new Shotgun(paddle));
+	for (let paddle of getPaddles(this)){
+		paddle.clearPowerups();
+		paddle.setTexture("paddle_26_1");
+		paddle.setComponent("weapon", new Shotgun(paddle));
+	}
 };
 
 //Transform
@@ -3145,11 +3227,12 @@ class Transform{
 	}
 }
 f[108] = function(){
-	let paddle = game.get("paddles")[0];
-	if (paddle.components.weapon?.name != "transform"){
-		paddle.clearPowerups();
-		paddle.setTexture("paddle_24_1");
-		paddle.setComponent("weapon", new Transform(paddle));
+	for (let paddle of getPaddles(this)){
+		if (paddle.components.weapon?.name != "transform"){
+			paddle.clearPowerups();
+			paddle.setTexture("paddle_24_1");
+			paddle.setComponent("weapon", new Transform(paddle));
+		}
 	}
 }
 
@@ -3176,11 +3259,18 @@ class Javelin{
 		glow.uniforms.mag = 0;
 		this.glowShader = glow;
 	}
+
 	destructor(){
 		stopSound("javelin_charge");
 		this.paddle.removeChild(this.energyParticles);
 		this.paddle.filters = null;
 	}
+
+	//TODO: Give each paddle an individual glow filter
+	twinClone(twin){
+		return new Javelin(twin);
+	}
+
 	fireJavelin(){
 		//prevent firing twice due to timeout + click
 		if (this.hasFired)
@@ -3191,8 +3281,15 @@ class Javelin{
 		let paddle = this.paddle;
 		paddle.removeComponent("subweapon");
 
-		let [px, py] = paddle.getPos();
 		let mx = mouse.x;
+
+		//copy this for all twin weapons that require mouse.x
+		if (paddle.twinWrapper){
+			mx = paddle.twinWrapper.modifyMouseXPos(
+				mx, paddle.isTwin, true);
+		}
+
+		let [px, py] = paddle.getPos();
 		let j = Math.floor((mx - DIM.lwallx) / 32);
 		j = Math.max(0, Math.min(13-1, j));
 		let x = DIM.lwallx + 16 + (32 * j);
@@ -3216,10 +3313,12 @@ class Javelin{
 
 		game.emplace("projectiles", p);
 	}
+
 	onClick(mouseVal){
 		if (mouseVal == 1)
 			this.fireJavelin();
 	}
+
 	update(delta){
 		this.timer -= delta;
 		if (this.timer <= 0)
@@ -3261,10 +3360,11 @@ class Javelin{
 	}
 }
 f[51] = function(){
-	let paddle = game.get("paddles")[0];
-	if (paddle.components.subweapon?.name == "javelin")
-		return;
-	paddle.setComponent("subweapon", new Javelin(paddle));
+	for (let paddle of getPaddles(this)){
+		if (paddle.components.subweapon?.name == "javelin")
+			return;
+		paddle.setComponent("subweapon", new Javelin(paddle));
+	}
 };
 
 //Rocket
@@ -3290,8 +3390,9 @@ class Rocket{
 	}
 
 	destructor(){
+		this.projectile?.kill();
 		this.paddle.y = Paddle.baseLine;
-		this.projectiles?.kill();
+		this.paddle.intangible = false;
 	}
 
 	onClick(mouseVal){
@@ -3303,6 +3404,7 @@ class Rocket{
 		this.state = "active";
 		this.attachProjectile();
 		this.rocketMovComp.activated = true;
+		this.paddle.intangible = true;
 		playSound("rocket_launch");
 	}
 
@@ -3336,16 +3438,17 @@ class Rocket{
 }
 f[95] = function(){
 	playSound("rocket_collected");
-	let paddle = game.get("paddles")[0];
-	paddle.clearPowerups();
-	let rocketMov = new RocketMovement(paddle);
-	paddle.setComponent("weapon", new Rocket(paddle, rocketMov));
-	paddle.setComponent("movement", rocketMov);
+	for (let paddle of getPaddles(this)){
+		paddle.clearPowerups();
+		let rocketMov = new RocketMovement(paddle);
+		paddle.setComponent("weapon", new Rocket(paddle, rocketMov));
+		paddle.setComponent("movement", rocketMov);
+	}
 
 }
 
 //X-Bomb (Xbomb)
-class Xbomb{
+class XBomb{
 	static travelTime = 1000;
 
 	constructor(paddle){
@@ -3422,20 +3525,26 @@ class Xbomb{
 		let superUpdate = xbomb.update;
 		xbomb.update = function(delta){
 			//approximate a parabolic trajectory
-			let time = Xbomb.travelTime;
+			let time = XBomb.travelTime;
 			let val = 1 + 2*Math.sin(this.timer * Math.PI / time);
 			this.scale.set(2*val);
 			superUpdate.call(this, delta);
 		}
 	}
+
 	destructor(){
 		this.paddle.removeChild(this.xbomb);
 		game.top.hud.removeChild(this.crosshair);
 	}
+
+	twinClone(twin){
+		return new XBomb(twin);
+	}
+
 	onClick(mouseVal){
 		let paddle = this.paddle;
 		let xbomb = this.xbomb;
-		let time = Xbomb.travelTime;
+		let time = XBomb.travelTime;
 
 		if (mouseVal != 1)
 			return;
@@ -3446,7 +3555,15 @@ class Xbomb{
 		let [x0, y0] = paddle.getPos();
 		xbomb.moveTo(x0, y0);
 
-		let [i, j] = getGridPos(mouse.x, mouse.y);
+		let mx = mouse.x;
+		let my = mouse.y;
+		//copy this for all twin weapons that require mouse.x
+		if (paddle.twinWrapper){
+			mx = paddle.twinWrapper.modifyMouseXPos(
+				mx, paddle.isTwin, true);
+		}
+
+		let [i, j] = getGridPos(mx, my);
 		let [x1, y1] = getGridPosInv(i, j);
 
 		let dx = x1 - x0;
@@ -3459,8 +3576,18 @@ class Xbomb{
 
 		game.emplace("particles", xbomb);
 	}
+
 	update(delta){
-		let [i, j] = getGridPos(mouse.x, mouse.y);
+		let paddle = this.paddle;
+		let mx = mouse.x;
+		let my = mouse.y;
+
+		if (paddle.twinWrapper){
+			mx = paddle.twinWrapper.modifyMouseXPos(
+				mx, paddle.isTwin, true);
+		}
+
+		let [i, j] = getGridPos(mx, my);
 		if (!boundCheck(i, j))
 			return false;
 		let [x, y] = getGridPosInv(i, j);
@@ -3469,11 +3596,12 @@ class Xbomb{
 }
 f[127] = function(){
 	playSound("xbomb_collected");
-	let paddle = game.get("paddles")[0];
-	if (paddle.components.subweapon?.name == "xbomb")
-		return;
+	for (let paddle of getPaddles(this)){
+		if (paddle.components.subweapon?.name == "xbomb")
+			return;
 
-	paddle.setComponent("subweapon", new Xbomb(paddle));
+		paddle.setComponent("subweapon", new XBomb(paddle));
+	}
 };
 
 /****************
@@ -3770,6 +3898,7 @@ f[13] = function(){
 class Change{
 	constructor(paddle){
 		this.paddle = paddle;
+		paddle.revertSpeedLimit();
 	}
 
 	updateMovement(){
@@ -3816,7 +3945,7 @@ class Freeze{
 
 	destructor(){
 		this.paddle.removeChild(this.ice);
-		this.paddle.setSpeedLimit();
+		this.paddle.revertSpeedLimit();
 	}
 
 	update(delta){
@@ -4016,6 +4145,100 @@ f[44] = function(){
 	paddle.setComponent("heaven", new Heaven(paddle));
 };
 
+//Illusion
+class Illusion{
+	constructor(paddle){
+		this.paddle = paddle;
+		this.marker = paddle.x;
+		this.mirages = [];
+		this.addIllusionPaddle();
+		this.addIllusionPaddle();
+		this.updateIllusionPaddles();
+	}
+
+	addIllusionPaddle(){
+		let mirage = new Paddle();
+		mirage._setWidth(this.paddle.paddleWidth);
+		mirage.setTexture("paddle_17_1");
+		mirage.alpha = 0.5;
+		mirage.update = Sprite.prototype.update;
+		this.mirages.push(mirage);
+		game.emplace("specials2", mirage);
+	}
+
+	destructor(){
+		for (let mirage of this.mirages)
+			mirage.kill();
+	}
+
+	onResize(width){
+		for (let mirage of this.mirages)
+			mirage._setWidth(width);
+		this.marker = this.paddle.x;
+		this.updateIllusionPaddles();
+	}
+
+	update(delta){
+		//update the marker's position
+		const spd = 0.15;
+		const mag = 0.5;
+
+		let paddle = this.paddle;
+		let mirages = this.mirages;
+		let maxDist = mag * mirages.length * paddle.paddleWidth;
+
+		let dx = this.marker - paddle.x;
+		let sign = (dx < 0) ? -1 : 1;
+		dx = Math.abs(dx);
+
+		dx = clamp(dx - spd * delta, 0, maxDist);
+		this.marker = paddle.x + dx * sign;
+
+		//update illusion paddles based on marker
+		this.updateIllusionPaddles();
+
+		//rebound balls that hit the illusion paddles
+		for (let ball of game.top.activeBalls(true)){
+			if (ball.vy < 0)
+				continue;
+			for (let mirage of mirages){
+				if (circleRectOverlap(
+					ball.x, ball.y, ball.r, 
+					mirage.x, mirage.y, mirage.w, mirage.h
+				))
+				{
+					playSound("illusion_hit");
+					ball.handleCollision(0, -1);
+					break;
+				}
+			}
+		}
+	}
+
+	updateIllusionPaddles(){
+		let mirages = this.mirages;
+		let [px, py] = this.paddle.getPos();
+		let dx = this.marker - px;
+		let n = mirages.length;
+		for (let [i, mirage] of mirages.entries()){
+			mirage.setPos(px + dx * (n-i)/n, py);
+		}
+	}
+}
+f[46] = function(){
+	playSound("illusion_collected");
+	let paddle = game.get("paddles")[0];
+	let comp = paddle.components.illusion;
+	if (comp){
+		comp.addIllusionPaddle();
+		comp.updateIllusionPaddles();
+		return;
+	}
+	paddle.clearPowerups();
+	paddle.setTexture("paddle_17_1");
+	paddle.setComponent("illusion", new Illusion(paddle));
+}
+
 //Normal Ship
 f[75] = function(){
 	playSound("normal_collected");
@@ -4061,6 +4284,107 @@ f[76] = function(){
 	);
 };
 
+//Orbit
+class Orbit{
+	constructor(paddle){
+		this.paddle = paddle;
+		this.radius = 0;
+		let ring = new PIXI.Graphics();
+		ring.y = 24; //real offset is 48 due to paddle's scale
+		ring.scale.set(0.5);
+		paddle.addChild(ring);
+		this.ring = ring;
+		this.onResize(paddle.paddleWidth);
+
+		this.orbitBalls = [];
+	}
+
+	destructor(){
+		this.paddle.removeChild(this.ring);
+	}
+
+	onResize(width){
+		this.radius = clamp(width+10, 80, 120);
+		let ring = this.ring;
+		ring.clear()
+			.lineStyle(2, 0xFFFFFF)
+			.drawCircle(0, 0, this.radius);
+	}
+
+	update(delta){
+		let angleBetween = Vector.angleBetween;
+		let angleSign = Vector.angleSign;
+
+		let ring = this.ring;
+		let orbitBalls = this.orbitBalls;
+
+		if (mouse.m1){
+			ring.alpha = 0.5;
+			for (let arr of orbitBalls)
+				arr[0].stuckToPaddle = false;
+			orbitBalls.length = 0;
+		}
+		else{
+			ring.alpha = 1;
+			let radius = this.radius;
+			let r2 = radius ** 2;
+			let [px, py] = this.paddle.getPos();
+			let cx = px + 2*ring.x;
+			let cy = py + 2*ring.y;
+			//any ball that enters the ring will be
+			//placed into orbit
+			for (let ball of game.top.activeBalls(true)){
+				let dx = cx - ball.x;
+				let dy = cy - ball.y;
+				if (dx ** 2 + dy ** 2 > r2)
+					continue;
+				let theta = angleBetween(
+					ball.vx, ball.vy, dx, dy);
+				if (theta < Math.PI/2){
+					let sign = angleSign(ball.vx, ball.vy, dx, dy);
+					let rad = angleBetween(-1, 0, -dx, dy);
+					orbitBalls.push([ball, rad, sign]);
+					ball.stuckToPaddle = true;
+				}
+			}
+			//update the positions of orbiting balls
+			const rotationSpeed = 0.0015;
+			for (let arr of orbitBalls){
+				let [ball, rad, sign] = arr;
+				rad += rotationSpeed * delta * sign;
+				arr[1] = rad;
+
+				let spd = ball.getSpeed();
+				let vec = new Vector(-1, 0).rotate(rad);
+				let off = vec.scale(radius);
+				let vel = vec.scale(spd);
+				//if ball reaches the bottom of the screen,
+				//teleport it to the other side of the orbit
+				if (cy + off.y > DIM.h){
+					//manually reposition balls then recalculate
+					//its angle
+					let dx = off.x;
+					let dy = off.y - (cy + off.y - DIM.h);
+					rad = angleBetween(-1, 0, -dx, dy);
+					arr[1] = rad;
+					vec = new Vector(-1, 0).rotate(rad);
+					off = vec.scale(radius);
+					vel = vec.scale(spd);
+				}
+				ball.setPos(cx + off.x, cy + off.y);
+				ball.setVel(vel.x, vel.y)
+			}
+		}
+	}
+}
+f[79] = function(){
+	playSound("orbit_collected");
+	let paddle = game.get("paddles")[0];
+	if (paddle.components.orbit)
+		return;
+	paddle.setComponent("orbit", new Orbit(paddle));
+}
+
 //Poison
 class Poison{
 	constructor(paddle){
@@ -4086,6 +4410,61 @@ f[84] = function(){
 	game.createMonitor(
 		"Poison", "paddles", "components", "poison", "timer");
 };
+
+//Protect
+class Protect{
+	constructor(paddle){
+		this.paddle = paddle;
+		this.hits = 3;
+		let outline = new PIXI.NineSlicePlane(
+			media.textures["protect_outline"], 4, 0, 4, 0);
+		outline.tint = 0xFFFF00;
+		paddle.addChild(outline);
+		this.outline = outline;
+		this.onResize(paddle.paddleWidth);
+	}
+
+	destructor(){
+		this.paddle.removeChild(this.outline);
+	}
+
+	onResize(width){
+		let outline = this.outline;
+		outline.width = width/2 + 4;
+		let {width: w, height: h} = outline.getLocalBounds();
+		outline.position.set(-w/2, -h/2);
+	}
+
+	updateAppearance(){
+		let color;
+		switch (this.hits){
+			case 1: color = 0xFF6400; break;
+			case 2: color = 0xFFB400; break;
+			default: color = 0xFFFF00;
+		}
+		this.outline.tint = color;
+	}
+
+	onProjectileHit(proj){
+		proj.kill();
+		this.hits--;
+		if (this.hits == 0)
+			this.paddle.removeComponent("protect");
+		else
+			this.updateAppearance();
+	}
+}
+f[85] = function(){
+	playSound("protect_collected");
+	let paddle = game.get("paddles")[0];
+	let comp = paddle.components.protect;
+	if (comp){
+		comp.hits++;
+		comp.updateAppearance();
+		return;
+	}
+	paddle.setComponent("protect", new Protect(paddle));
+}
 
 //Restrict
 f[90] = function(){
@@ -4173,7 +4552,7 @@ f[98] = function(){
 class VectorComponent{
 	constructor(paddle){
 		this.paddle = paddle;
-		paddle.setSpeedLimit(4, 0.5);
+		paddle.setSpeedLimit(Infinity, 0.5);
 		this.launching = true;
 
 		this.timer = 10000;
@@ -4182,7 +4561,7 @@ class VectorComponent{
 	}
 
 	destructor(){
-		this.paddle.setSpeedLimit();
+		this.paddle.revertSpeedLimit();
 	}
 
 	updateMovement(){
@@ -4231,12 +4610,18 @@ f[124] = function(){
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_31_3");
 	paddle.setSpeedLimit(0.5, null);
+	paddle.setComponent("weight", {
+		destructor(){
+			paddle.revertSpeedLimit();
+		}
+	});
 };
 
 //Yoga
 class Yoga{
 	constructor(paddle){
 		this.paddle = paddle;
+		paddle.revertSpeedLimit();
 	}
 
 	updateMovement(){
@@ -5060,8 +5445,6 @@ f[87] = function(){
 	game.emplace("specials1", new Quasar());
 };
 
-
-
 //Terraform
 //	See Transform for info on which bricks to convert
 f[104] = function(){
@@ -5097,6 +5480,7 @@ class Trail{
 	}
 }
 f[106] = function(){
+	playSound("trail_collected");
 	for (let ball of game.get("balls")){
 		if (ball.components.trail)
 			ball.components.trail.count += 10;
@@ -5416,26 +5800,50 @@ f[119] = function(){
 
 //Wet Storm
 f[125] = function(){
+	//old function that chooses the column with the
+	//most destructable bricks
+	// function chooseColumn(){
+	// 	let grid = game.top.brickGrid;
+	// 	let arr = [];
+	// 	let maxCount = 0;
+	// 	for (let j = 0; j < 13; j++){
+	// 		let count = 0;
+	// 		for (let i = 0; i < 32; i++){
+	// 			let br = grid.getStatic(i, j);
+	// 			if (br && br.armor < 1)
+	// 				count++;
+	// 		}
+	// 		arr.push(count);
+	// 		maxCount = Math.max(maxCount, count);
+	// 	}
+	// 	let indices = [];
+	// 	for (let [i, v] of arr.entries()){
+	// 		if (v == maxCount)
+	// 			indices.push(i);
+	// 	}
+	// 	return indices[randRange(indices.length)];
+	// }
+
+	//new function that just randomly choose columns
+	//that have at least 1 destructable brick
 	function chooseColumn(){
 		let grid = game.top.brickGrid;
-		let arr = [];
-		let maxCount = 0;
+		let indices = [];
 		for (let j = 0; j < 13; j++){
-			let count = 0;
 			for (let i = 0; i < 32; i++){
 				let br = grid.getStatic(i, j);
-				if (br && br.armor < 1)
-					count++;
+				if (br && br.armor < 1){
+					indices.push(j);
+					continue;
+				}
 			}
-			arr.push(count);
-			maxCount = Math.max(maxCount, count);
 		}
-		let indices = [];
-		for (let [i, v] of arr.entries()){
-			if (v == maxCount)
-				indices.push(i);
-		}
-		return indices[randRange(indices.length)];
+		if (indices.length > 0)
+			return indices[randRange(indices.length)];
+
+		//if there are no destructable bricks, just
+		//choose a random column
+		return randRange(0, 13);
 	}
 
 	function spawnRainDrop(){
@@ -5542,7 +5950,7 @@ f[132] = function(){
 *********/
 
 function checkExistingInstance(name, checkClass){
-	for (let obj of game.get(name)){
+	for (let obj of game.get(name, true)){
 		if (obj instanceof checkClass){
 			return obj;
 		}
@@ -5739,6 +6147,19 @@ f[94] = function(){
 	let id = getMysteryPowerup(true);
 	f[id].call(this);
 	// console.log("risky mystery " + id);
+}
+
+/*==== Bypass and Warp Subcategory ====*/
+//Bypass
+f[12] = function(){
+	playSound("bypass_collected");
+	game.top.bypass.open(1);
+}
+
+//Warp
+f[122] = function(){
+	playSound("bypass_collected");
+	game.top.bypass.open(2);
 }
 
 /*==== Miscellaneous ====*/
@@ -5960,6 +6381,29 @@ f[63] = function(){
 	spawner.globalRate *= 1.6;
 };
 
+//Magnet
+class Magnet extends Special{
+	constructor(){
+		super(null);
+	}
+
+	update(delta){
+		let paddle = game.get("paddles")[0];
+		for (let pow of game.get("powerups")){
+			if (badPowerupsLookup[pow.id])
+				continue;
+			let dx = paddle.x - pow.x;
+			pow.vx = dx / 500;
+		}
+	}
+}
+f[64] = function(){
+	playSound("attract_collected");
+	if (checkExistingInstance("specials1", Magnet))
+		return;
+	game.emplace("specials1", new Magnet());
+}
+
 //Nebula
 class Nebula extends GraphicsSprite{
 	constructor(){
@@ -6006,6 +6450,17 @@ class Nebula extends GraphicsSprite{
 	}
 
 	pullBalls(){
+		let cx = this.x;
+		let cy = this.y;
+		for (let ball of game.get("balls")){
+			let vec = new Vector(cx - ball.x, cy - ball.y);
+			vec = vec.normalized();
+			ball.setSteer(vec.x, vec.y, 0.01);
+		}
+	}
+
+	/* Old version that makes balls travel in a circle
+	pullBalls(){
 		let center = new Vector(this.x, this.y);
 		for (let ball of game.get("balls")){
 			let pos = new Vector(ball.x, ball.y);
@@ -6023,6 +6478,7 @@ class Nebula extends GraphicsSprite{
 			ball.setSteer(steer.x, steer.y, 0.025);
 		}
 	}
+	*/
 }
 f[71] = function(){
 	playSound("control_collected");
@@ -6057,6 +6513,60 @@ f[93] = function(){
 	let paddle = game.get("paddles")[0];
 	paddle.normal();
 };
+
+//Timewarp
+class TimeWarp{
+	constructor(playstate){
+		this.playstate = playstate;
+		this.timerMax = 15000;
+		this.timer = this.timerMax;
+	}
+
+	update(delta){
+		this.timer -= delta;
+		if (this.timer <= 0){
+			this.playstate.timescale = 1;
+			this.playstate.timewarp = null;
+			return;
+		}
+
+		let sin = Math.sin;
+		let PI = Math.PI;
+
+		const period = 12;
+		const min = -2.000; //log base 2 of 0.25
+		const max =  1.322; //log base 2 of 2.5
+		const range = max - min;
+
+		let t = (this.timerMax - this.timer) / 1000;
+		let exp = min + range * (1+sin(t*period/(2*PI)))/2;
+		// console.log(exp);
+
+		this.playstate.timescale = 2 ** exp;
+	}
+}
+f[105] = function(){
+	let playstate = game.top;
+	if (playstate.timewarp){
+		playstate.timewarp.timer += 15000;
+		playstate.timewarp.timerMax += 15000;
+		return;
+	}
+
+	let timewarp = new TimeWarp(playstate);
+	playstate.timewarp = timewarp;
+
+	let monitor = new Monitor("Time Warp", null, null, "time");
+	monitor.update = function(delta){
+		let value = timewarp.timer;
+		if (value < 0)
+			this.kill();
+		this.setValue(value);
+	};
+	playstate.monitors.addChild(monitor);
+	playstate.repositionMonitors();
+
+}
 
 //Tractor
 class Tractor extends Special{
@@ -6161,4 +6671,126 @@ f[114] = function(){
 		}
 	}
 	game.emplace("specials2", new Undead());
+}
+
+/********
+ * Twin *
+ ********/
+//Twin gets its own category due to its complexity
+//TODO: Use NineSlicePlane?
+
+/* THE PLAN
+	1. Create a new paddle and add it to playstate.paddles
+	2. Create a TwinComponent that contains the twin paddle
+	3. Set the TwinComponent to the original paddle
+	3a. Make sure TwinComponent is set to a separate twin property
+
+	(option B <- best option!)
+	modify Powerup.activate() such that it will call
+	TwinWrapper.syncComponents()
+
+	(option A)
+	4. modify Paddle.setComponent() such that if the paddle
+		has a twin component and the new component is
+		part of the Twin Whitelist, then set the component
+		to the twin paddle as well
+	5. modify Paddle.clearComponents() to ignore clearing
+		the twin component
+	6. give the twin a virtual mouse?
+*/
+
+/* NO OFFICIAL WHITELIST
+	Only components that have the twinClone() method defined
+	will be copied over to the twin paddle
+*/
+
+class TwinWrapper{
+	constructor(paddle){
+		this.gap = 32;
+
+		//paddle.twinWrapper is already set to this
+		paddle.isTwin = false;
+		this.basePaddle = paddle;
+
+		let twin = new Paddle();
+		twin.twinWrapper = this;
+		twin.isTwin = true;
+		game.emplace("paddles", twin);
+		this.twinPaddle = twin;
+
+		twin.resize(paddle.widthIndex);
+		this.syncComponents();
+	}
+
+	destructor(){
+		this.twinPaddle.kill();
+	}
+
+	/* 
+		Will copy each component of the base paddle that has
+		the twinClone() function.
+	*/
+	syncComponents(){
+		let base = this.basePaddle;
+		let twin = this.twinPaddle;
+		let pairs = [];
+
+		for (let [key, comp] of Object.entries(base.components)){
+			if (comp.twinClone)
+				pairs.push([key, comp]);
+		}
+
+		if (pairs.length > 0){
+			twin.clearPowerups();
+			twin.setTexture(base.storedTexstr);
+			for (let [key, comp] of pairs){
+				twin.setComponent(key, comp.twinClone(twin));
+			}
+		}
+	}
+
+	onResize(index, isTwin){
+		//resize will terminate early if the paddle is already
+		//at the size index
+		if (isTwin)
+			this.basePaddle.resize(index);
+		else
+			this.twinPaddle.resize(index);
+	}
+
+	//if clampPos is true, then clamp the xpos to
+	//within the paddle's bounds
+	modifyMouseXPos(mx, isTwin=false, clampPos=false){
+		let off = (this.basePaddle.paddleWidth + this.gap)/2;
+		let sign = isTwin ? 1 : -1;
+		let x = mx + sign * off;
+		if (clampPos){
+			let paddle = isTwin ? this.twinPaddle : this.basePaddle;
+			let px = paddle.x;
+			let pw = paddle.paddleWidth;
+			let left = px - pw/2;
+			let right = px + pw/2;
+			x = clamp(x, left, right);
+		}
+		return x;
+	}
+
+	//return left and right boundaries for both paddles
+	//	to compensate for the addition of a twin paddle
+	getXPosClamp(left, right, isTwin=false){
+		let off = this.basePaddle.paddleWidth + this.gap;
+		if (isTwin)
+			left += off;
+		else
+			right -= off;
+		return [left, right];
+	}
+}
+
+f[110] = function(){
+	//playstate.paddles.children[0] will always be main paddle
+	let paddle = game.get("paddles")[0];
+	if (paddle.twinWrapper)
+		return;
+	paddle.twinWrapper = new TwinWrapper(paddle);
 }

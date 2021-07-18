@@ -1,6 +1,7 @@
 class Paddle extends Sprite{
 	static baseLine = DIM.height - 16*2;
-	static defaultSpeedLimit = {x: 4, y: 4};
+	// static defaultSpeedLimit = {x: 4, y: 4};
+	static defaultSpeedLimit = {x: Infinity, y: Infinity};
 
 	constructor(){
 		//paddle is made out of 3 sections
@@ -22,6 +23,10 @@ class Paddle extends Sprite{
 		this.paddleRects = paddleRects;
 		this.addChild(paddleRects);
 
+		//replace with NineSlicePlane later
+		this.storedTexstr = "paddle_0_0";
+
+		this.components = {};
 		this.stuckBalls = [];
 
 		//paddle width info
@@ -37,14 +42,18 @@ class Paddle extends Sprite{
 		this.x = DIM.w/2;
 		this.y = Paddle.baseLine;
 
-		this.speedLimit = Object.assign({}, Paddle.defaultSpeedLimit);
+		let defaultLimit = Paddle.defaultSpeedLimit;
+		this.speedLimit = {
+			x: defaultLimit.x,
+			y: defaultLimit.y,
+			temp_x: false,
+			temp_y: false,
+		};
 
 		this.paddleHitSound = "paddle_hit";
 
 		//stun will temporarily reduce speed limit
 		this.stun = null;
-
-		this.components = {};
 
 		//used to prevent automatic weapons from immedately firing
 		//the frame after the player clicks and release the balls
@@ -52,6 +61,9 @@ class Paddle extends Sprite{
 		this.timeSinceRelease = 0;
 
 		this.isRespawning = false;
+
+		this.twinWrapper = null;
+		this.isTwin = false; //set to true if paddle IS the twin
 
 		this.gameType = "paddle";
 	}
@@ -70,6 +82,7 @@ class Paddle extends Sprite{
 		this.left.texture = left;
 		this.right.texture = left;
 		this.mid.texture  = mid;
+		this.storedTexstr = texstr;
 	}
 
 	//Ignore any other sprites that may be added to the paddle
@@ -103,7 +116,6 @@ class Paddle extends Sprite{
 	clearComponents(){
 		for (let [key, comp] of Object.entries(this.components)){
 			comp.destructor?.();
-			game.top.killMonitor("paddles", key);
 		}
 		this.components = {};
 	}
@@ -130,6 +142,9 @@ class Paddle extends Sprite{
 		//reposition balls
 		for (let pair of this.stuckBalls)
 			pair[1] *= width / prevWidth;
+
+		for (let comp of Object.values(this.components))
+			comp.onResize?.(width);
 	}
 
 	//resize paddle using fixed increments
@@ -137,9 +152,14 @@ class Paddle extends Sprite{
 	resize(index){
 		let info = this.widthInfo;
 		index = Math.max(info.minIndex, Math.min(info.maxIndex, index));
+		if (index == this.widthIndex)
+			return index;
 		let width = info.base + info.increment * index;
 		this._setWidth(width);
 		this.widthIndex = index;
+
+		this.twinWrapper?.onResize(index, this.isTwin);
+
 		return index;
 	}
 
@@ -147,10 +167,21 @@ class Paddle extends Sprite{
 		return this.resize(this.widthIndex + deltaIndex);
 	}
 
-	setSpeedLimit(vx=null, vy=null){
+	//if temp is set, the paddle's speed limit will revert
+	//to default speed limit once paddle catches up to mouse
+	setSpeedLimit(vx=null, vy=null, temp=false){
 		let defaultLimit = Paddle.defaultSpeedLimit;
-		this.speedLimit.x = vx ?? defaultLimit.x;
-		this.speedLimit.y = vy ?? defaultLimit.y;
+		let speedLimit = this.speedLimit;
+		speedLimit.x = vx ?? defaultLimit.x;
+		speedLimit.y = vy ?? defaultLimit.y;
+		if (temp){
+			speedLimit.temp_x = true;
+			speedLimit.temp_y = true;
+		}
+	}
+
+	revertSpeedLimit(){
+		this.setSpeedLimit(2, 2, true);
 	}
 
 	normal(){
@@ -159,10 +190,10 @@ class Paddle extends Sprite{
 	}
 
 	//does not revert size
+	//does not revert speed limit (it's the component's job)
 	clearPowerups(){
 		this.clearComponents();
 		this.setTexture("paddle_0_0");
-		this.setSpeedLimit();
 		this.alpha = 1;
 		this.intangible = false;
 	}
@@ -236,7 +267,10 @@ class Paddle extends Sprite{
 	}
 
 	onProjectileHit(proj){
-		proj.onPaddleHit(this);
+		if (this.components.protect)
+			this.components.protect.onProjectileHit(proj);
+		else
+			proj.onPaddleHit(this);
 	}
 
 	//redirect the ball based on where exactly
@@ -254,6 +288,7 @@ class Paddle extends Sprite{
 
 	//fire the subweapon first if it exists
 	//then fire the weapon if it exists
+	//mx and my are mouse pose based on paddle's restriction
 	componentClick(){
 		let {weapon, subweapon} = this.components;
 
@@ -263,8 +298,17 @@ class Paddle extends Sprite{
 			weapon.onClick(mouse.m1);
 	}
 
+	updateStuckBalls(){
+		const ph = 16;
+		for (let [ball, offset] of this.stuckBalls){
+			let x = this.x + offset;
+			let y = this.y - ph/2 - ball.r;
+			ball.moveTo(x, y);
+		}
+	}
+
 	update(delta){
-		//null means paddle's coordinate will not change
+		//if set to null, the paddle's coordinate will not change
 		let mx = mouse.x;
 		let my = Paddle.baseLine;
 
@@ -275,14 +319,23 @@ class Paddle extends Sprite{
 			[mx, my] = this.components.movement.updateMovement();
 		}
 
+		if (this.twinWrapper){
+			mx = this.twinWrapper.modifyMouseXPos(mx, this.isTwin);
+		}
+
 		if (this.stun){
 			this.stun.timer -= delta;
-			if (this.stun.timer <= 0)
+			if (this.stun.timer <= 0){
 				this.stun = null;
+				this.revertSpeedLimit();
+			}
 		}
 
 		//apply speed limit
-		let {x: spd_x, y: spd_y} = this.speedLimit;
+		let defaultLimit = Paddle.defaultSpeedLimit;
+		let speedLimit = this.speedLimit;
+		let {x: spd_x, y: spd_y, temp_x, temp_y} = speedLimit;
+		//stun will temporarily override speed limit
 		if (this.stun){
 			spd_x = this.stun.x ?? spd_x;
 			spd_y = this.stun.y ?? spd_y;
@@ -291,19 +344,40 @@ class Paddle extends Sprite{
 		const pw = this.paddleWidth;
 		const ph = 16;
 
+		const epsilon = 1;
+
 		if (mx !== null){
 			let dx = mx - this.x;
+			//revert speed limit if paddle pos matches mouse pos
+			if (temp_x && Math.abs(dx) <= epsilon){
+				spd_x = defaultLimit.x;
+				speedLimit.x = defaultLimit.x;
+				speedLimit.temp_x = false;
+			}
+			
 			if (isFinite(spd_x)){
 				let sign_x = (dx >= 0) ? 1 : -1;
 				dx = Math.min(Math.abs(dx), spd_x * delta) * sign_x;
 			}
-			//clamp paddle position 
+			//clamp paddle position
 			let px = this.x + dx;
-			px = clamp(px, DIM.lwallx + pw/2, DIM.rwallx - pw/2);
+			let left = DIM.lwallx + pw/2;
+			let right = DIM.rwallx - pw/2;
+			if (this.twinWrapper){
+				[left, right] = this.twinWrapper.getXPosClamp(
+					left, right, this.isTwin);
+			}
+			px = clamp(px, left, right);
 			this.x = px;
 		}
 		if (my !== null){
 			let dy = my - this.y;
+			//revert speed limit if paddle pos matches mouse pos
+			if (temp_y && Math.abs(dy) <= epsilon){
+				spd_y = defaultLimit.y;
+				speedLimit.y = defaultLimit.y;
+				speedLimit.temp_y = false;
+			}
 			if (isFinite(spd_y)){
 				let sign_y = (dy >= 0) ? 1 : -1;
 				dy = Math.min(Math.abs(dy), spd_y * delta) * sign_y;
@@ -316,11 +390,8 @@ class Paddle extends Sprite{
 		this.updateShape();
 
 		//update stuck balls
-		for (let [ball, offset] of this.stuckBalls){
-			let x = this.x + offset;
-			let y = this.y - ph/2 - ball.r;
-			ball.moveTo(x, y);
-		}
+		this.updateStuckBalls();
+		
 		
 		if (!this.isRespawning && mouse.m1 && mouse.inBoard()){
 			//don't activate component click

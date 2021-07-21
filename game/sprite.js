@@ -102,6 +102,13 @@ class Sprite extends PIXI.Sprite{
 		return new this.constructor(...info.args);
 	}
 
+	isClonable(){
+		let info = this._constructorInfo;
+		if (!info)
+			return false;
+		return this.constructor === info.class;
+	}
+
 	onDeath(){
 		if (this.score)
 			game.incrementScore(this.score);

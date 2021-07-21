@@ -261,6 +261,13 @@ class PlayState{
 		}
 		stopAllSounds();
 		game.setPos(0, 0);
+
+		//call destructors of all objects
+		for (let name of this.activeLayers){
+			for (let obj of this[name].children){
+				obj.destructor?.();
+			}
+		}
 	}
 
 	//Either pops itself or replace itself with a new
@@ -2067,5 +2074,45 @@ class Checkbox extends PIXI.Container{
 			this.inner.visible = true;
 		}
 		this.activateFunc(this.checkState);
+	}
+}
+
+//GridSet is a Set that reserves pairs of ints
+class GridSet{
+	//increase this if the board size somehow becomes larger
+	//than 1000 x 1000 bricks
+	static max = 1000;
+
+	static hash(i, j){
+		return i * GridSet.max + j;
+	}
+
+	static unhash(n){
+		return [Math.floor(n / GridSet.max), n % GridSet.max];
+	}
+
+	constructor(){
+		this.set = new Set();
+	}
+
+	get size(){
+		return this.set.size;
+	}
+
+	add(i, j){
+		this.set.add(GridSet.hash(i, j));
+	}
+
+	has(i, j){
+		return this.set.has(GridSet.hash(i, j));
+	}
+
+	delete(i, j){
+		this.set.delete(GridSet.hash(i, j));
+	}
+
+	*values(){
+		for (let n of this.set)
+			yield GridSet.unhash(n);
 	}
 }

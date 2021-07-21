@@ -143,16 +143,35 @@ var brickData = {
 			[12, 12, "ForbiddenBrick", []],
 		];
 
-		let rawGroup = [
+		/************************************************
+		* IMPORTANT: Brick IDs have been finalized.     *
+		* 	DO NOT modify the order of existing bricks. *
+		*************************************************/
+
+		let other2 = [
+			[7, 3, "FuseBrick", []],
+			[8, 6, "ResetBrick", [0]],
+			[9, 6, "ResetBrick", [1]],
+			[10, 6, "ResetBrick", [2]],
+			[11, 6, "ResetBrick", [3]],
+			[12, 6, "ResetBrick", [4]],
+			[12, 20, "CometBrick", ["up"]],
+			[12, 21, "CometBrick", ["down"]],
+			[6, 20, "SlimeBrick", []],
+			[7, 7, "RainbowDetonatorBrick", []],
+		];
+
+		let allGroups = [
 			["normal", normal],
 			["nonbrick", nonbrick],
 			["flip", flip],
 			["other", other],
+			["other2", other2],
 		];
 
 		let index = 0;
 
-		for (let [name, arr] of rawGroup){
+		for (let [name, arr] of allGroups){
 			let group = [];
 			this.group[name] = group;
 			for (let arr2 of arr){
@@ -161,7 +180,7 @@ var brickData = {
 				//using "property value shorthand" technique
 				let data = {
 					tex, brickType, args, id: index
-				}
+				};
 				this.lookup[index] = data;
 				group.push(data);
 				index++;

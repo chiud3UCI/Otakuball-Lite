@@ -4922,14 +4922,8 @@ f[11] = function(){
 //Chaos
 f[16] = function(){
 	playSound("generic_collected");
-	let chaosLookup = generateLookup([
-		"detonator", 
-		"comet", 
-		"triggerdetonator", 
-		"shovedetonator"
-	]);
 	for (let br of game.get("bricks")){
-		if (chaosLookup[br.brickType]){
+		if (explosiveLookup[br.brickType]){
 			br.kill();
 		}
 	}

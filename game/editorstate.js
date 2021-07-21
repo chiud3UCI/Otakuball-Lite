@@ -333,8 +333,8 @@ class EditorState{
 
 		let textures = [
 			"editorbutton_1_0",
+			"editorbutton_1_2",
 			"editorbutton_1_1",
-			"editorbutton_1_2"
 		]
 		for (let i = 0; i < 3; i++){
 			let tab = new TabButton(
@@ -345,10 +345,12 @@ class EditorState{
 			widget.tabs.push(tab);
 		}
 
+		this.brickButtons = [];
+
 		let panels = [
 			this.initBrickButtons(),
+			this.initEnemyButtons(),
 			this.initPatchButtons(),
-			this.initEnemyButtons()
 		]
 		for (let panel of panels){
 			panel.y += th;
@@ -368,10 +370,11 @@ class EditorState{
 		panel.x = 5;
 		panel.y = 5;
 
-		this.brickButtons = [];
+		// this.brickButtons = []; //moved to outside of function
 		this.slotButtons = []; //slot machine brick buttons
 
 		//"this" changes when entering a function
+		this.brickButtonHighlight1 = new PIXI.Graphics();
 		let state = this;
 		let placeButtons = function(name, x0, y0, wrap, scale, flip=false){
 			let group = brickData.group[name];
@@ -385,6 +388,7 @@ class EditorState{
 				let x = x0 + j * dx;
 				let y = y0 + i * dy;
 				let butt = new BrickButton(state, x, y, scale, dat.id);
+				butt.highlightGraphic = state.brickButtonHighlight1;
 				panel.addChild(butt);
 				state.brickButtons.push(butt);
 				if (dat.brickType == "SlotMachineBrick")
@@ -400,8 +404,7 @@ class EditorState{
 		placeButtons("nonbrick", 0, 12*38, 4, 1.5, true);
 
 		//Brick Button Highlight (yellow border)
-		this.brickButtonHighlight = new PIXI.Graphics();
-		panel.addChild(this.brickButtonHighlight);
+		panel.addChild(this.brickButtonHighlight1);
 
 		return panel;
 	}
@@ -528,13 +531,47 @@ class EditorState{
 
 	initEnemyButtons(){
 		let panel = new PIXI.Container();
-		panel.x = 10;
-		panel.y = 10;
+		panel.x = 5;
+		panel.y = 5;
 
+		/* TEMPORARY BRICK BUTTONS SOLUTION */
+		this.brickButtonHighlight2 = new PIXI.Graphics();
+		let state = this;
+		function placeButtons(name, x0, y0, wrap, scale, flip=false){
+			let group = brickData.group[name];
+			let dx = 16 * scale;
+			let dy = 8 * scale;
+			for (let [n, dat] of group.entries()){
+				let i = Math.floor(n/wrap);
+				let j = n % wrap;
+				if (flip)
+					[i, j] = [j, i];
+				let x = x0 + j * dx;
+				let y = y0 + i * dy;
+				let butt = new BrickButton(state, x, y, scale, dat.id);
+				butt.highlightGraphic = state.brickButtonHighlight2;
+				panel.addChild(butt);
+				state.brickButtons.push(butt);
+				if (dat.brickType == "SlotMachineBrick")
+					state.slotButtons.push(butt);
+				if (dat.brickType == "PowerupBrick")
+					state.powerupButton = butt;
+			}
+		};
+
+		placeButtons("other2", 0, 10, 6, 1.5);
+
+
+		panel.addChild(this.brickButtonHighlight2);
+
+
+		/* TODO: Move all enemy stuff to a new window + button */
+		let yoff = 220;
+		
 		this.enemyButtons = [];
 		for (let i = 0; i < 9; i++){		
 			let x = Math.floor(i/5) * 60;
-			let y = (i % 5) * 24;
+			let y = (i % 5) * 24 + yoff;
 			let butt = new EnemyCheckbox(this, x, y, i);
 			panel.addChild(butt);
 			this.enemyButtons.push(butt);
@@ -558,7 +595,11 @@ class EditorState{
 			[0, 420, "seconds"]
 		];
 
+		yoff = 60;
+
 		for (let [x, y, string, wrap] of strings){
+			y += yoff;
+
 			let text = printText(
 				string, "windows", 0x000000, 1, x, y);
 			if (wrap)
@@ -568,6 +609,8 @@ class EditorState{
 
 		this.enemySpawnInputs = [];
 		for (let [i, [x, y]] of positions.entries()){
+			y += yoff;
+
 			let input = new PIXI.TextInput({
 				input: {
 					fontSize: "14px",
@@ -1033,11 +1076,15 @@ class BrickButton extends EditorButton{
 		super(parentState, dat.tex, x, y, scale);
 		this.id = id;
 		this.dat = dat;
+		this.highlightGraphic = null;
 	}
 
 	pointerDown(e){
 		let state = this.parentState;
-		this.highlight(state.brickButtonHighlight);
+		state.brickButtonHighlight1.visible = false;
+		state.brickButtonHighlight2.visible = false;
+		this.highlightGraphic.visible = true;
+		this.highlight(this.highlightGraphic);
 		state.selectedBrick = this.id;
 	}
 }
@@ -1201,10 +1248,14 @@ class TabButton extends PIXI.Sprite{
 		this.zIndex = 6;
 		widget.panels[this.tabIndex].visible = true;
 
-		if (this.tabIndex == 0)
-			state.selectMode = "brick";
-		else if (this.tabIndex == 1)
+		if (this.tabIndex == 2)
 			state.selectMode = "patch";
+		else
+			state.selectMode = "brick";
+		// if (this.tabIndex == 0)
+		// 	state.selectMode = "brick";
+		// else if (this.tabIndex == 1)
+		// 	state.selectMode = "patch";
 	}
 }
 

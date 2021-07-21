@@ -1,7 +1,7 @@
 var brickClasses;
 
 //when this function is called at the bottom, all classes
-//will be already initialized so I can successfully assign
+//will already be initialized so I can successfully assign
 //them to brickClasses
 function initBrickClasses(){
 	brickClasses = {
@@ -44,8 +44,20 @@ function initBrickClasses(){
 		ParachuteBrick,
 		SplitBrick,
 		PowerupBrick,
-	}
+		FuseBrick,
+		ResetBrick,
+		SlimeBrick,
+		RainbowDetonatorBrick,
+	};
 }
+
+var explosiveLookup = generateLookup([
+	"detonator",
+	"comet",
+	"triggerdetonator",
+	"shovedetonator",
+	"fuse",
+]);
 
 class Brick extends Sprite{
 	constructor(texture, x, y){
@@ -518,6 +530,8 @@ class ForbiddenBrick extends Brick{
 class GhostBrick extends Brick{
 	constructor(x, y){
 		super("brick_invis", x, y);
+		setConstructorInfo(this, GhostBrick, arguments);
+
 		this.health = 1000;
 		this.armor = 2;
 		this.essential = false;
@@ -572,6 +586,7 @@ class MetalBrick extends Brick{
 	constructor(x, y, level){
 		let str = `brick_main_6_${1+level}`;
 		super(str, x, y);
+		setConstructorInfo(this, MetalBrick, arguments);
 
 		let anistr = `brick_shine_${4+level}`;
 		this.addAnim("shine", anistr, 0.25);
@@ -616,6 +631,8 @@ class MetalBrick extends Brick{
 class GreenMenacerBrick extends Brick{
 	constructor(x, y){
 		super("brick_main_6_16", x, y);
+		setConstructorInfo(this, GreenMenacerBrick, arguments);
+
 		this.health = 80;
 		this.armor = 1;
 		this.armorTimer = 50000;
@@ -677,6 +694,8 @@ class GoldBrick extends Brick{
 		if (plated)
 			tex = "brick_main_6_7";
 		super(tex, x, y);
+		setConstructorInfo(this, GoldBrick, arguments);
+
 		this.plated = plated;
 		this.health = 100;
 		this.armor = 1;
@@ -730,6 +749,7 @@ class SpeedBrick extends Brick{
 		if (gold)
 			suffix = fast ? "6_8" : "6_9";
 		super("brick_main_" + suffix, x, y);
+		setConstructorInfo(this, SpeedBrick, arguments);
 
 		if (gold){
 			this.health = 100;
@@ -767,6 +787,7 @@ class SpeedBrick extends Brick{
 class CopperBrick extends Brick{
 	constructor(x, y){
 		super("brick_main_6_11", x, y);
+		setConstructorInfo(this, CopperBrick, arguments);
 
 		this.health = 100;
 		this.armor = 1;
@@ -800,6 +821,8 @@ class CopperBrick extends Brick{
 class JumperBrick extends Brick{
 	constructor(x, y){
 		super("brick_jumper_0_0", x, y);
+		setConstructorInfo(this, JumperBrick, arguments);
+
 		this.armor = 1;
 		this.health = 10;
 		this.charges = 3;
@@ -920,6 +943,8 @@ class ConveyorBrick extends Brick{
 		super(`brick_main_${i}_${21+j}`, x, y);
 
 		this.essential = false;
+		this.health = 10000;
+		this.armor = 10;
 
 		let [mag, anispd] = ConveyorBrick.speeds[speedLevel];
 		this.steerArgs = [xn, yn, mag, 0.01];
@@ -1102,10 +1127,6 @@ class DetonatorBrick extends Brick{
 		this.brickType = "detonator";
 	}
 
-	static from(other){
-		return new DetonatorBrick(this.x, this.y, this.detType);
-	}
-
 	//other powerups might call this
 	//create explosion at location of obj
 	static explode(obj, detType="normal"){
@@ -1158,6 +1179,8 @@ class DetonatorBrick extends Brick{
 class TriggerDetonatorBrick extends DetonatorBrick{
 	constructor(x, y){
 		super(x, y, "normal");
+		setConstructorInfo(this, TriggerDetonatorBrick, arguments);
+
 		this.stopAnim();
 		this.removeAnim("glow");
 		this.setTexture("brick_main_8_14");
@@ -1206,6 +1229,9 @@ class TriggerDetonatorBrick extends DetonatorBrick{
 class GlassBrick extends Brick{
 	constructor(x, y){
 		super("brick_main_7_4", x, y);
+
+		setConstructorInfo(this, GlassBrick, arguments);
+
 		this.health = 10;
 		this.brickType = "glass";
 	}
@@ -1244,6 +1270,9 @@ class AlienBrick extends Brick{
 
 	constructor(x, y){
 		super("brick_main_7_6", x, y);
+
+		setConstructorInfo(this, AlienBrick, arguments);
+
 		this.health = 50;
 		for (let i = 0; i < 4; i++){
 			let name = "alien_" + i;
@@ -1354,6 +1383,8 @@ class RainbowBrick extends Brick{
 
 	onDeath(){
 		super.onDeath();
+
+		setConstructorInfo(this, RainbowBrick, arguments);
 
 		let grid = game.top.brickGrid;
 		let empty = [];
@@ -1496,7 +1527,7 @@ class CometBrick extends Brick{
 		vertical: 6
 	};
 
-	static cometData = {
+	static rotation = {
 		//dir: radians
 		up: 0,
 		down: Math.PI,
@@ -1505,15 +1536,25 @@ class CometBrick extends Brick{
 	};
 
 	constructor(x, y, dir){
-		let col = CometBrick.data[dir];
-		let tex = `brick_idle_0_${col}`;
+		//TODO: create a comet brick glow
+		let tex;
+		let col;
+		if (dir == "up" || dir == "down"){
+			tex = (dir == "up") ? "brick_main_12_20" : "brick_main_12_21";
+		}
+		else{
+			col = CometBrick.data[dir];
+			tex = `brick_idle_0_${col}`;
+		}
 		super(tex, x, y);
 		setConstructorInfo(this, CometBrick, arguments);
 		
 		this.cometDir = dir;
 
-		let anistr = `brick_glow_${col}`;
-		this.addAnim("glow", anistr, 0.25, true, true);
+		if (dir != "up" && dir != "down"){
+			let anistr = `brick_glow_${col}`;
+			this.addAnim("glow", anistr, 0.25, true, true);
+		}
 
 		this.brickType = "comet";
 	}
@@ -1527,6 +1568,12 @@ class CometBrick extends Brick{
 			case "right":
 				this.fireComet("right");
 				break;
+			case "up":
+				this.fireComet("up");
+				break;
+			case "down":
+				this.fireComet("down");
+				break;
 			case "vertical":
 				this.fireComet("up");
 				this.fireComet("down");
@@ -1539,7 +1586,7 @@ class CometBrick extends Brick{
 	}
 
 	fireComet(dir){
-		let rad = CometBrick.cometData[dir];
+		let rad = CometBrick.rotation[dir];
 		let [vx, vy] = Vector.rotate(0, -1, rad);
 		let [dx, dy] = Vector.rotate(0, -16, rad);
 		let comet = new Projectile(
@@ -1581,6 +1628,8 @@ class CometBrick extends Brick{
 class LaserEyeBrick extends Brick{
 	constructor(x, y){
 		super("brick_main_7_14", x, y);
+		setConstructorInfo(this, LaserEyeBrick, arguments);
+
 		this.health = 20;
 		this.addAnim("glow", "brick_glow2_0", 0.125, true);
 		this.active = false;
@@ -1631,6 +1680,8 @@ class LaserEyeBrick extends Brick{
 class BoulderBrick extends Brick{
 	constructor(x, y){
 		super("brick_main_7_16", x, y);
+		setConstructorInfo(this, BoulderBrick, arguments);
+
 		this.health = 20;
 		this.deathSound = "boulder_break";
 		this.brickType = "boulder";
@@ -1713,12 +1764,15 @@ class TikiBrick extends Brick{
 }
 
 class TriggerBrick extends Brick{
-	static flipBricks(switchId){
+	//if forceOnOff is true, then all regular flip bricks
+	//	will be set to on and all strong flip bricks
+	// 	will be set to off
+	static flipBricks(switchId, forceOnOff=false){
 		for (let br of game.get("bricks")){
 			let type = br.brickType;
 			if ((type == "flip" || type == "strongflip") &&
 				br.switchId === switchId)
-				br.flip();
+				br.flip(forceOnOff);
 		}
 	}
 
@@ -1738,12 +1792,7 @@ class TriggerBrick extends Brick{
 				return;
 		}
 		//force all flip bricks to on state
-		for (let br of bricks){
-			let type = br.brickType;
-			if ((type == "flip" || type == "strongflip") &&
-				br.switchId === switchId)
-				br.flip(true);
-		}
+		TriggerBrick.flipBricks(switchId, true);
 	}
 
 	constructor(x, y, switchId){
@@ -2022,6 +2071,7 @@ class FactoryBrick extends Brick{
 class ShoveDetonatorBrick extends Brick{
 	constructor(x, y){
 		super("brick_main_8_10", x, y);
+		setConstructorInfo(this, ShoveDetonatorBrick, arguments);
 		this.addAnim("glow", "brick_glow_7", 0.25, true, true);
 		this.brickType = "shovedetonator";
 	}
@@ -2074,7 +2124,7 @@ class ShoveDetonatorBrick extends Brick{
 				let [i, j] = closest;
 				delete empty[h(i, j)];
 				let pos = getGridPosInv(i, j);
-				console.log("closest " + closest);
+				// console.log("closest " + closest);
 				return pos;
 			}
 			return [null, null];
@@ -2280,6 +2330,8 @@ class LauncherBrick extends Brick{
 	//ccw means counter-clockwise
 	constructor(x, y, left, ccw){
 		super("brick_invis", x, y);
+		setConstructorInfo(this, LauncherBrick, arguments);
+
 		this.launchIndex = (left) ? 8 : 0;
 		this.launchDelta = (ccw) ? -1 : 1;
 		this.updateAppearance();
@@ -2324,6 +2376,8 @@ class TwinLauncherBrick extends Brick{
 	constructor(x, y, isYellow){
 		let i = isYellow ? 1 : 0;
 		super(`brick_main_9_${12+i}`, x, y);
+		setConstructorInfo(this, TwinLauncherBrick, arguments);
+
 		this.activeTexture = `brick_main_9_${14+i}`;
 		this.health = 100;
 		this.armor = 1;
@@ -2464,6 +2518,7 @@ class ParachuteBrick extends Brick{
 
 	constructor(x, y){
 		super("brick_main_9_7", x, y);
+		setConstructorInfo(this, ParachuteBrick, arguments);
 		this.brickType = "parachute";
 	}
 
@@ -2482,6 +2537,7 @@ class SplitBrick extends Brick{
 	constructor(x, y, isBlue){
 		let i = isBlue ? 18 : 17;
 		super(`brick_main_12_${i}`, x, y);
+		setConstructorInfo(this, SplitBrick, arguments);
 		this.isBlue = isBlue;
 
 		if (isBlue){
@@ -2537,6 +2593,8 @@ class SplitBrick extends Brick{
 class PowerupBrick extends Brick{
 	constructor(x, y, powId){
 		super("powerup_default_" + powId, x, y);
+		setConstructorInfo(this, PowerupBrick, arguments);
+
 		let overlay = new Sprite("brick_main_7_4");
 		overlay.scale.set(1);
 		overlay.alpha = 0.5;
@@ -2553,5 +2611,237 @@ class PowerupBrick extends Brick{
 	}
 }
 
-//call this after every brick class has been defined
+class FuseBrick extends Brick{
+	constructor(x, y){
+		super("brick_main_7_3", x, y);
+		setConstructorInfo(this, FuseBrick, arguments);
+
+		this.brickType = "fuse";
+	}
+
+	static delay = 50;
+
+	static canDestroy(brick){
+		if (brick.armor == 1)
+			return true;
+		let brickType = brick.brickType;
+		if (brickType == "shovedetonator")
+			return false;
+		return !!explosiveLookup[brick.brickType];
+	}
+
+	static propagate(brick, initial=false){
+		if (brick.isDead() && !initial)
+			return;
+
+		let grid = game.top.brickGrid;
+		brick.kill();
+		let [i0, j0] = getGridPos(...brick.getPos());
+		let coords = [[i0,j0+1], [i0,j0-1], [i0+1,j0], [i0-1,j0]];
+		for (let [i, j] of coords){
+			if (!boundCheck(i, j))
+				continue;
+			let br = grid.getStatic(i, j);
+			if (!br || br.isDead())
+				continue;
+			if (!FuseBrick.canDestroy(br))
+				continue;
+			game.top.emplaceCallback(FuseBrick.delay, () => {
+				FuseBrick.propagate(br);
+			});
+		}
+	}
+
+	onDeath(){
+		super.onDeath();
+		FuseBrick.propagate(this, true);
+	}
+}
+
+class ResetBrick extends TriggerBrick{
+	constructor(x, y, switchId){
+		super(x, y, switchId);
+		this.brickType = "reset";
+	}
+
+	onDeath(){
+		Brick.prototype.onDeath.call(this);
+		TriggerBrick.flipBricks(this.switchId, true);
+	}
+}
+
+class SlimeBrick extends Brick{
+	static spreadDelay = 1000;
+	static spreadChance = 0.25;
+	static transformDelay = 100;
+
+	constructor(x, y){
+		super("brick_main_6_19", x, y);
+
+		this.spreadTimer = SlimeBrick.spreadDelay;
+		this.transformTimer = null;
+		this.transformTarget = null;
+
+		this.tint = 0x00FF00;
+
+		this.brickType = "slime";
+	}
+
+	//when spreading to an existing brick, immediately trigger 
+	//transformation and do a fake spread using particles
+	update(delta){
+		if (this.transformTarget){
+			this.transformTimer -= delta;
+			if (this.transformTimer <= 0){
+				this.kill();
+				let br = this.transformTarget.clone();
+				br.setPos(...this.getPos());
+				game.emplace("bricks", br);
+			}
+		}
+		else{
+			this.spreadTimer -= delta;
+			if (this.spreadTimer <= 0){
+				this.spreadTimer = SlimeBrick.spreadDelay;
+				if (Math.random() < SlimeBrick.spreadChance)
+					this.spreadOrTransform();
+			}
+		}
+
+		super.update(delta);
+	}
+
+	//Will first check if there is a suitable adjacent brick
+	//to transform to. Otherwise, will spread to empty adjacent brick.
+	static crossOffsets = [[1,0], [-1,0], [0,1], [0,-1]];
+
+	static canTransformTo(br){
+		if (br.brickType == "slime")
+			return false;
+		return br.armor < 1;
+	}
+	spreadOrTransform(){
+		let grid = game.top.brickGrid;
+
+		let [i0, j0] = getGridPos(...this.getPos());
+
+		let transformTargets = [];
+		let spreadTargets = [];
+		for (let [di, dj] of SlimeBrick.crossOffsets){
+			let i = i0 + di;
+			let j = j0 + dj;
+			if (!boundCheck(i, j))
+				continue;
+			if (grid.isEmpty(i, j))
+				spreadTargets.push([i, j]);
+			else{
+				let br = grid.getStatic(i, j);
+				if (br && SlimeBrick.canTransformTo(br))
+					transformTargets.push(br);
+			}
+		}
+
+		if (transformTargets.length > 0){
+			let index = randRange(transformTargets.length);
+			let brick = transformTargets[index];
+			this.transformAllSlime(brick, grid);
+		}
+
+		else if (spreadTargets.length > 0){
+			let [i, j] = spreadTargets[randRange(spreadTargets.length)];
+			let br = new SlimeBrick(...this.getPos());
+			br.zIndex = -1;
+			let [x, y] = getGridPosInv(i, j);
+			br.setTravel(x, y, "time", 250);
+			game.emplace("bricks", br);
+			grid.reserve(i, j);
+		}
+	}
+
+	//transform itself and all connecting slime to the target brick
+	transformAllSlime(brick, grid){
+		const delay = SlimeBrick.transformDelay;
+
+		//temporary measure - delete all new slime bricks
+		remove_if(
+			game.top.newObjects.bricks, br => br.brickType == "slime")
+
+		this.transformTarget = brick;
+		this.transformTimer = delay;
+		this.tint = 0xFFFF00;
+
+		let stack = [[this, delay]]; //[slimeBrick, tranformDelay]
+
+		while (stack.length > 0){
+			// console.log("stack: " + stack.length);
+			let [slime, time] = stack.shift();
+			let [i0, j0] = getGridPos(...slime.getPos());
+			for (let [di, dj] of SlimeBrick.crossOffsets){
+				let i = i0 + di;
+				let j = j0 + dj;
+				if (!boundCheck(i, j))
+					continue;
+				for (let br of grid.get(i, j)){
+					if (br.brickType == "slime" && !br.transformTarget){
+						br.transformTarget = brick;
+						br.transformTimer = time + delay;
+						br.tint = 0xFFFF00;
+						stack.push([br, time + delay]);
+					}
+				}
+			}
+		}
+	}
+}
+
+class RainbowDetonatorBrick extends Brick{
+	constructor(x, y){
+		super("brick_main_7_7", x, y);
+		this.brickType = "rainbowdetonator";
+	}
+
+	onDeath(){
+		super.onDeath();
+		let exp = new Explosion(
+			this.x,
+			this.y,
+			32*3-1,
+			16*3-1,
+		);
+
+		let hitBlacklist = generateLookup([
+			"normal",
+		]);
+
+		let transformBlacklist = generateLookup([
+			"normal",
+			"rainbowdetonator",
+		]);
+
+		exp.canHit = function(sprite){
+			if (!(sprite instanceof Brick))
+				return false;
+			return !hitBlacklist[sprite.brickType];
+		};
+
+		exp.onSpriteHit = function(obj, norm, mag){
+			Explosion.prototype.onSpriteHit.call(this, obj, norm, mag);
+			if (!obj.isDead())
+				return;
+			if (!(obj instanceof Brick))
+				return;
+			if (transformBlacklist[obj.brickType])
+				return;
+			let br = new NormalBrick(obj.x, obj.y);
+			game.emplace("bricks", br);
+		};
+
+		game.top.emplaceCallback(50, () => {
+			game.emplace("projectiles", exp);
+		});
+		
+	}
+}
+
+//call this after all brick classes has been defined
 initBrickClasses();

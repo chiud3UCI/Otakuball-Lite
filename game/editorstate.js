@@ -560,9 +560,55 @@ class EditorState{
 		};
 
 		placeButtons("other2", 0, 10, 6, 1.5);
-
+		placeButtons("laser", 0, 50, 5, 1.5);
 
 		panel.addChild(this.brickButtonHighlight2);
+
+		//laser gate brick channel
+		let input = new PIXI.TextInput({
+			input: {
+				fontSize: "14px",
+				width: "36px",
+				padding: "2px",
+				color: 0x000000,
+			},
+			box: {
+				fill: 0xFFFFFF,
+				stroke: {
+					color: 0x000000,
+					width: 2
+				}
+			}
+		});
+		input.restrict = "0123456789";
+		input.text = 0;
+		input.on("input", (text) => {
+			if (text === "")
+				text = "0";
+			let n = Number(text);
+			n = clamp(n, 0, 99);
+			input.text = n;
+			//if a Laser Gate Brick button is already selected,
+			//update the id to be this channel
+			let id = this.selectedBrick;
+			if (id >= 2000 && id < 3000){
+				id = 100 * Math.floor(id / 100) + n;
+				this.selectedBrick = id;
+			}
+		});
+		input.focusOnce = false;
+		input.on("focus", () => {
+			mouse.m1 = 0;
+		});
+		input.position.set(80, 70);
+		panel.addChild(input);
+		this.laserChannelInput = input;
+
+		let channelText = new PIXI.Text("laser channel:", {
+			fontSize: 12,
+		});
+		channelText.position.set(0, 70);
+		panel.addChild(channelText);
 
 
 		/* TODO: Move all enemy stuff to a new window + button */
@@ -970,6 +1016,13 @@ class GridNode{
 		overlay.visible = false;
 		stage.addChild(overlay);
 
+		//laser gate brick channel
+		let channel = printText("0", "windows", 0xFFFFFF, 1, 0, 0);
+		channel.anchor.set(0.5);
+		this.laserChannel = channel;
+		channel.visible = false;
+		stage.addChild(channel);
+
 		//4 shields, movement, invisible, antilaser
 		this.patch = null;
 		this.patchSprites = [];
@@ -1009,17 +1062,23 @@ class GridNode{
 			this.dat = null;
 			this.sprite.visible = false;
 			this.overlay.visible = false;
+			this.laserChannel.visible = false;
 			this.clearPatch();
 		}
 		else{
-			//Powerup Brick
 			this.brickId = id;
 			this.dat = brickData.lookup[id];
 			this.sprite.setTexture(this.dat.tex);
 			this.sprite.visible = true;
 			this.overlay.visible = false;
+			this.laserChannel.visible = false;
+			//Powerup Brick
 			if (id >= 1000 && id < 2000)
 				this.overlay.visible = true;
+			else if (id >= 2000){
+				this.laserChannel.visible = true;
+				this.laserChannel.text = id % 100;
+			}
 		}
 	}
 
@@ -1085,7 +1144,14 @@ class BrickButton extends EditorButton{
 		state.brickButtonHighlight2.visible = false;
 		this.highlightGraphic.visible = true;
 		this.highlight(this.highlightGraphic);
-		state.selectedBrick = this.id;
+		let id = this.id;
+		if (id < 2000)
+			state.selectedBrick = id;
+		else{
+			//for laser gate brick buttons, add channel to id
+			let channel = Number(state.laserChannelInput.text);
+			state.selectedBrick = id + channel;
+		}
 	}
 }
 

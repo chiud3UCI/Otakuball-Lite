@@ -161,6 +161,9 @@ var brickData = {
 			[7, 7, "RainbowDetonatorBrick", []],
 		];
 
+		//TODO:
+		let lasergate = [];
+
 		let allGroups = [
 			["normal", normal],
 			["nonbrick", nonbrick],
@@ -201,6 +204,27 @@ var brickData = {
 			this.group.powerup.push(data);
 		}
 		this.group.other.push(this.lookup[1000]);
+
+		//Laser Gate Bricks
+		//there are 5 colors * 100 channels * on/off state = 1000 bricks?
+
+		let laser = [];
+		for (let i = 0; i < 5; i++){
+			let id = 2000 + i*100;
+			for (let j = 0; j < 100; j++){
+				let id2 = id + j;
+				let data = {
+					tex: `brick_laser_0_${i}`,
+					brickType: "LaserWallBrick",
+					args: [i, j],
+					id: id2,
+				};
+				this.lookup[id2] = data;
+				if (j == 0)
+					laser.push(data);
+			}
+		}
+		this.group.laser = laser;
 		
 	}
 };

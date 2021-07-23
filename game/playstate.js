@@ -868,6 +868,12 @@ class PlayState{
 				br.initPatches(patch);
 			this.add("bricks", br);
 		}
+		//after creating all the bricks, call each
+		//brick class's static activate() function if it exists
+		for (let brickClass of Object.values(brickClasses)){
+			if (brickClass.activate)
+				brickClass.activate(this);
+		}
 
 		let enemy = level.enemies;
 		if (!enemy)

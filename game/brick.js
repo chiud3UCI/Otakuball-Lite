@@ -48,6 +48,7 @@ function initBrickClasses(){
 		ResetBrick,
 		SlimeBrick,
 		RainbowDetonatorBrick,
+		LaserWallBrick,
 	};
 }
 
@@ -1770,8 +1771,9 @@ class TriggerBrick extends Brick{
 	static flipBricks(switchId, forceOnOff=false){
 		for (let br of game.get("bricks")){
 			let type = br.brickType;
-			if ((type == "flip" || type == "strongflip") &&
-				br.switchId === switchId)
+			if (!(type == "flip" || type == "strongflip" || type == "laserwall"))
+				continue;
+			if (br.switchId === switchId)
 				br.flip(forceOnOff);
 		}
 	}
@@ -2840,6 +2842,183 @@ class RainbowDetonatorBrick extends Brick{
 			game.emplace("projectiles", exp);
 		});
 		
+	}
+}
+
+class LaserWallBrick extends Brick{
+	static thickness = 10;
+
+	static activate(playstate){
+		//link bricks with same color and channel together
+		let groups = {};
+		for (let br of playstate.get("bricks")){
+			if (br.brickType != "laserwall")
+				continue;
+			let key = `${br.switchId}_${br.channel}`;
+			if (!groups[key])
+				groups[key] = [];
+			groups[key].push(br);
+		}
+
+		for (let arr of Object.values(groups))
+			LaserWallBrick.linkAll(playstate, arr);
+	}
+
+	//link all bricks together
+	static linkAll(playstate, arr){
+		let link = LaserWallBrick.link;
+		const n = arr.length;
+		if (n <= 1)
+			return;
+		if (n == 2){
+			link(playstate, arr[0], arr[1]);
+			return;
+		}
+		if (n == 3){
+			link(playstate, arr[0], arr[1]);
+			link(playstate, arr[1], arr[2]);
+			link(playstate, arr[2], arr[0]);
+			return;
+		}
+		//for n > 3, link the bricks together in the shape of a polygon
+		//calculate the midpoint of all the bricks
+		let x = 0;
+		let y = 0;
+		for (let br of arr){
+			x += br.x;
+			y += br.y;
+		}
+		x /= n;
+		y /= n;
+		//sort the bricks based on their angle relative to midpoint
+		let angles = arr.map(br => [br, Math.atan2(br.y - y, br.x - x)]);
+		angles.sort((p0, p1) => p0[1] - p1[1]);
+		//link each edge of the polygon
+		for (let i = 0; i < n; i++){
+			let br1 = angles[i][0];
+			let br2 = angles[(i+1)%n][0];
+			link(playstate, br1, br2);
+		}
+	}
+
+	//create laser linking two bricks together
+	static link(playstate, br1, br2){
+		const colors = [0xFF0000, 0x00FF00, 0x0000FF, 0xFF00FF, 0xFFFF00];
+		let color = colors[br1.switchId];
+
+		//make sure br2 is always below br1
+		if (br1.y > br2.y)
+			[br1, br2] = [br2, br1];
+		//get midpoint
+		let [x1, y1] = br1.getPos();
+		let [x2, y2] = br2.getPos();
+		[x1, y1, x2, y2] = [x1-2, y1-2, x2-2, y2-2];
+		let length = Vector.dist(x1, y1, x2, y2);
+		let angle = Vector.angleBetween(1, 0, x2-x1, y2-y1);
+
+		//first create sprite without any rotation
+		let laser = new Sprite(
+			media.textures.white_pixel,
+			(x1+x2) / 2,
+			(y1+y2) / 2,
+			0,
+			0,
+			0,
+			Math.max(1, length - 55),
+			LaserWallBrick.thickness
+		);
+		laser.update = function(delta){
+			if (this.intangible)
+				return;
+			for (let ball of game.get("balls")){
+				let [check, norm, mag] = ball.checkCollision(this);
+				if (check){
+					ball.handleCollision(norm.x, norm.y);
+				}
+			}
+		};
+		laser.setState = function(state){
+			if (state){
+				this.intangible = false;
+				this.visible = true;
+			}
+			else{
+				this.intangible = true;
+				this.visible = false;
+			}
+		};
+		laser.intagible = false;
+		laser.tint = color;
+		//give sprite a shape that's independent from the
+		//sprite's size
+		laser.setShape(new RectangleShape(length, 10));
+		laser.setRotation(angle);
+		playstate.add("specials2", laser);
+
+		br1.addTurret(angle);
+		br2.addTurret(angle + Math.PI);
+		br1.lasers.push(laser);
+		br2.lasers.push(laser);
+	}
+
+	//switchId is same as Switch/Trigger/Flip bricks
+	constructor(x, y, switchId, channel){
+		super("brick_laser_0_" + switchId, x, y);
+
+		this.health = 9999;
+		this.armor = 3;
+		this.intangible = true;
+		
+		this.switchId = switchId;
+		this.laserState = true;
+		this.channel = channel;
+		this.flipState = true;
+
+		//add a circular hitbox right at the center
+		let radius = LaserWallBrick.thickness/2;
+		let circle = new CircleShape(this.x-2, this.y-2, radius);
+		this.circleHitbox = circle;
+
+		//will be set after creation
+		this.turrets = [];
+		this.lasers = [];
+
+		this.essential = false;
+		this.brickType = "laserwall";
+	}
+
+	addTurret(angle){
+		let turret = new Sprite("brick_laser_1_" + this.switchId);
+		turret.scale.set(1);
+		turret.anchor.set(4/16, 5/8);
+		turret.setRotation(angle);
+		//add a small offset based on rotation
+		turret.x = -Math.sin(angle);
+		turret.y = Math.cos(angle);
+		this.addChild(turret);
+		this.turrets.push(turret);
+	}
+
+	flip(forceOff){
+		if (forceOff)
+			this.flipState = false;
+		else
+			this.flipState = !this.flipState;
+		for (let turret of this.turrets)
+			turret.setTexture(`brick_laser_${this.flipState ? 1 : 2}_${this.switchId}`);
+		for (let laser of this.lasers)
+			laser.setState(this.flipState);
+	}
+
+	update(delta){
+		if (this.flipState){
+			for (let ball of game.get("balls")){
+				let [check, norm, mag] = ball.shape.collide(this.circleHitbox);
+				if (check)
+					ball.handleCollision(norm.x, norm.y);
+			}
+		}
+		super.update(delta);
 	}
 }
 

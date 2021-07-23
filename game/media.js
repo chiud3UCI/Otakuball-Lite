@@ -198,6 +198,7 @@ let recursive_texture_names = [
 		"brick_regen_mask",
 		"unification",
 		"barrier_brick",
+		"laser_gate",
 	]],
 
 	["paddles/", [
@@ -584,6 +585,7 @@ media.processTextures = function(){
 	partition("snapper", "snapper");
 	partition("bulk", "brick_bulk");
 	partition("unification", "brick_unification");
+	partition("laser_gate", "brick_laser");
 	//also create an invisible brick texture
 	this.textures["brick_invis"] = this.textures["brick_main_5_20"];
 

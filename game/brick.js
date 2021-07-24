@@ -2847,6 +2847,7 @@ class RainbowDetonatorBrick extends Brick{
 
 class LaserWallBrick extends Brick{
 	static thickness = 10;
+	static hitboxThickness = 10;
 
 	static activate(playstate){
 		//link bricks with same color and channel together
@@ -2902,30 +2903,32 @@ class LaserWallBrick extends Brick{
 	}
 
 	//create laser linking two bricks together
+	static laserOffset = 42;
 	static link(playstate, br1, br2){
-		const colors = [0xFF0000, 0x00FF00, 0x0000FF, 0xFF00FF, 0xFFFF00];
-		let color = colors[br1.switchId];
-
 		//make sure br2 is always below br1
 		if (br1.y > br2.y)
 			[br1, br2] = [br2, br1];
 		//get midpoint
+		const off = -1;
 		let [x1, y1] = br1.getPos();
 		let [x2, y2] = br2.getPos();
-		[x1, y1, x2, y2] = [x1-2, y1-2, x2-2, y2-2];
+		x1 += off;
+		y1 += off;
+		x2 += off;
+		y2 += off;
 		let length = Vector.dist(x1, y1, x2, y2);
 		let angle = Vector.angleBetween(1, 0, x2-x1, y2-y1);
 
 		//first create sprite without any rotation
 		let laser = new Sprite(
-			media.textures.white_pixel,
+			"laser_laser_" + br1.switchId,
 			(x1+x2) / 2,
 			(y1+y2) / 2,
 			0,
 			0,
 			0,
-			Math.max(1, length - 55),
-			LaserWallBrick.thickness
+			Math.max(4, length - LaserWallBrick.laserOffset),
+			2,
 		);
 		laser.update = function(delta){
 			if (this.intangible)
@@ -2948,7 +2951,6 @@ class LaserWallBrick extends Brick{
 			}
 		};
 		laser.intagible = false;
-		laser.tint = color;
 		//give sprite a shape that's independent from the
 		//sprite's size
 		laser.setShape(new RectangleShape(length, 10));
@@ -2963,7 +2965,16 @@ class LaserWallBrick extends Brick{
 
 	//switchId is same as Switch/Trigger/Flip bricks
 	constructor(x, y, switchId, channel){
+		let index = switchId * 2;
+		let textures = {
+			core_on: "laser_core_" + index,
+			core_off: "laser_core_" + (index + 1),
+			gun_on: "laser_turret_" + index,
+			gun_off: "laser_turret_" + (index + 1),
+		};
+
 		super("brick_laser_0_" + switchId, x, y);
+		this.laserTextures = textures;
 
 		this.health = 9999;
 		this.armor = 3;
@@ -2979,8 +2990,12 @@ class LaserWallBrick extends Brick{
 		let circle = new CircleShape(this.x-2, this.y-2, radius);
 		this.circleHitbox = circle;
 
-		//will be set after creation
-		this.turrets = [];
+		this.turrets = new PIXI.Container();
+		this.addChild(this.turrets);
+		this.core = new Sprite(textures.core_on, -0.5, -0.5, 0, 0, 0, 1, 1);
+		this.addChild(this.core);
+
+		//will be set externally
 		this.lasers = [];
 
 		this.essential = false;
@@ -2988,15 +3003,9 @@ class LaserWallBrick extends Brick{
 	}
 
 	addTurret(angle){
-		let turret = new Sprite("brick_laser_1_" + this.switchId);
-		turret.scale.set(1);
-		turret.anchor.set(4/16, 5/8);
-		turret.setRotation(angle);
-		//add a small offset based on rotation
-		turret.x = -Math.sin(angle);
-		turret.y = Math.cos(angle);
-		this.addChild(turret);
-		this.turrets.push(turret);
+		let tex = this.laserTextures;
+		let gun = new Sprite(tex.gun_on, -0.5, -0.5, 0, 0, angle, 1, 1);
+		this.turrets.addChild(gun);
 	}
 
 	flip(forceOff){
@@ -3004,8 +3013,13 @@ class LaserWallBrick extends Brick{
 			this.flipState = false;
 		else
 			this.flipState = !this.flipState;
-		for (let turret of this.turrets)
-			turret.setTexture(`brick_laser_${this.flipState ? 1 : 2}_${this.switchId}`);
+
+		let str = this.flipState ? "on" : "off";
+		let tex = this.laserTextures;
+		for (let gun of this.turrets.children)
+			gun.setTexture(tex["gun_" + str]);
+		this.core.setTexture(tex["core_" + str]);
+
 		for (let laser of this.lasers)
 			laser.setState(this.flipState);
 	}

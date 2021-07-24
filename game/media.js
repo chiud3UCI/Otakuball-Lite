@@ -595,6 +595,27 @@ media.processTextures = function(){
 	//experimental brick regen mask
 	partition("brick_regen_mask", "brick_regen_mask", 16, 8);
 
+	//laser gate turrets
+	tex = this.textures.laser_gate;
+	for (let i = 0; i < 10; i++){
+		let rect = new PIXI.Rectangle(8, 11+i*8, 7, 7);
+		let str = "laser_core_" + i;
+		this.textures[str] = new PIXI.Texture(tex, rect);
+
+		rect = new PIXI.Rectangle(24, 12+i*8, 23, 5);
+		str = "laser_turret_" + i;
+		this.textures[str] = new PIXI.Texture(tex, rect);
+	}
+	for (let i = 0; i < 5; i++){
+		let rect = new PIXI.Rectangle(16*i, 0, 16, 8);
+		let str = "brick_laser_" + i;
+		this.textures[str] = new PIXI.Texture(tex, rect);
+
+		rect = new PIXI.Rectangle(49, 12+i*16, 1, 5);
+		str = "laser_laser_" + i;
+		this.textures[str] = new PIXI.Texture(tex, rect);
+	}
+
 	//process main_balls
 	partition("main_balls", "ball_main", 7, 7, 1, 1);
 	this.textures["ball_large"] = 

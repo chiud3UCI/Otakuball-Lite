@@ -2855,7 +2855,7 @@ class LaserWallBrick extends Brick{
 		for (let br of playstate.get("bricks")){
 			if (br.brickType != "laserwall")
 				continue;
-			let key = `${br.switchId}_${br.channel}`;
+			let key = `${br.switchId}_${br.channel}_${br.flipState}`;
 			if (!groups[key])
 				groups[key] = [];
 			groups[key].push(br);
@@ -2936,6 +2936,8 @@ class LaserWallBrick extends Brick{
 			for (let ball of game.get("balls")){
 				let [check, norm, mag] = ball.checkCollision(this);
 				if (check){
+					let offset = norm.scale(mag);
+					ball.translate(offset.x, offset.y);
 					ball.handleCollision(norm.x, norm.y);
 				}
 			}
@@ -2957,6 +2959,9 @@ class LaserWallBrick extends Brick{
 		laser.setRotation(angle);
 		playstate.add("specials2", laser);
 
+		if (!br1.flipState)
+			laser.setState(false);
+
 		br1.addTurret(angle);
 		br2.addTurret(angle + Math.PI);
 		br1.lasers.push(laser);
@@ -2964,7 +2969,7 @@ class LaserWallBrick extends Brick{
 	}
 
 	//switchId is same as Switch/Trigger/Flip bricks
-	constructor(x, y, switchId, channel){
+	constructor(x, y, switchId, channel, initialState){
 		let index = switchId * 2;
 		let textures = {
 			core_on: "laser_core_" + index,
@@ -2983,7 +2988,7 @@ class LaserWallBrick extends Brick{
 		this.switchId = switchId;
 		this.laserState = true;
 		this.channel = channel;
-		this.flipState = true;
+		this.flipState = !!initialState;
 
 		//add a circular hitbox right at the center
 		let radius = LaserWallBrick.thickness/2;
@@ -2992,7 +2997,8 @@ class LaserWallBrick extends Brick{
 
 		this.turrets = new PIXI.Container();
 		this.addChild(this.turrets);
-		this.core = new Sprite(textures.core_on, -0.5, -0.5, 0, 0, 0, 1, 1);
+		let str = initialState ? "on" : "off";
+		this.core = new Sprite(textures["core_" + str], -0.5, -0.5, 0, 0, 0, 1, 1);
 		this.addChild(this.core);
 
 		//will be set externally
@@ -3003,8 +3009,9 @@ class LaserWallBrick extends Brick{
 	}
 
 	addTurret(angle){
+		let str = this.flipState ? "on" : "off";
 		let tex = this.laserTextures;
-		let gun = new Sprite(tex.gun_on, -0.5, -0.5, 0, 0, angle, 1, 1);
+		let gun = new Sprite(tex["gun_"+str], -0.5, -0.5, 0, 0, angle, 1, 1);
 		this.turrets.addChild(gun);
 	}
 
@@ -3028,8 +3035,11 @@ class LaserWallBrick extends Brick{
 		if (this.flipState){
 			for (let ball of game.get("balls")){
 				let [check, norm, mag] = ball.shape.collide(this.circleHitbox);
-				if (check)
+				if (check){
+					let offset = norm.scale(mag);
+					ball.translate(offset.x, offset.y);
 					ball.handleCollision(norm.x, norm.y);
+				}
 			}
 		}
 		super.update(delta);

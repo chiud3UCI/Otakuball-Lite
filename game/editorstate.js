@@ -600,14 +600,14 @@ class EditorState{
 		input.on("focus", () => {
 			mouse.m1 = 0;
 		});
-		input.position.set(80, 70);
+		input.position.set(80, 80);
 		panel.addChild(input);
 		this.laserChannelInput = input;
 
 		let channelText = new PIXI.Text("laser channel:", {
 			fontSize: 12,
 		});
-		channelText.position.set(0, 70);
+		channelText.position.set(0, 80);
 		panel.addChild(channelText);
 
 

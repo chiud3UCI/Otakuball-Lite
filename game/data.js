@@ -190,7 +190,7 @@ var brickData = {
 			}
 		}
 
-		//Powerup Bricks
+		//Powerup Bricks ids 1000 to 1999
 		//There are 135 of them and their ids start at 1000
 		this.group.powerup = [];
 		for (let i = 0; i < 135; i++){
@@ -205,23 +205,27 @@ var brickData = {
 		}
 		this.group.other.push(this.lookup[1000]);
 
-		//Laser Gate Bricks
+		//Laser Gate Bricks ids 2000 to 2999
 		//there are 5 colors * 100 channels * on/off state = 1000 bricks?
-
 		let laser = [];
-		for (let i = 0; i < 5; i++){
-			let id = 2000 + i*100;
-			for (let j = 0; j < 100; j++){
-				let id2 = id + j;
-				let data = {
-					tex: `brick_laser_0_${i}`,
-					brickType: "LaserWallBrick",
-					args: [i, j],
-					id: id2,
-				};
-				this.lookup[id2] = data;
-				if (j == 0)
-					laser.push(data);
+		//initial on/off state
+		for (let i = 0; i < 2; i++){
+			//switch id colors
+			for (let j = 0; j < 5; j++){
+				//channels
+				for (let k = 0; k < 100; k++){
+					let id = 2000 + i*500 + j*100 + k;
+					let data = {
+						tex: `brick_laser_${i}_${j}`,
+						brickType: "LaserWallBrick",
+						args: [j, k, i == 0],
+						id: id,
+					};
+					this.lookup[id] = data;
+					//only use channel 0 brick data as buttons
+					if (k == 0)
+						laser.push(data);
+				}
 			}
 		}
 		this.group.laser = laser;

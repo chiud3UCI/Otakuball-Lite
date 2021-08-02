@@ -3082,11 +3082,18 @@ class Shotgun extends PaddleWeapon{
 		for (let theta of deg){
 			let rad = theta*Math.PI/180;
 			let [vx, vy] = Vector.rotate(0, -0.8, rad);
-			let p = new Projectile("shotgun_pellet", 0, 0, vx, vy);
+			let p = new Projectile("shotgun_0_1", 0, 0, vx, vy, rad);
 			p.scale.set(1);
 			p.damage = 5;
 			this.fireProjectile(p, 0);
 		}
+		//create a little muzzle flash
+		let paddle = this.paddle;
+		let flash = new Particle(null, paddle.x, paddle.y - 18);
+		let arr = ["shotgun_1_1", "shotgun_1_0"];
+		flash.addAnim("flash", arr, 0.25, false, true);
+		game.emplace("projectiles", flash);
+
 		playSound("shotgun_fire");
 	}
 }

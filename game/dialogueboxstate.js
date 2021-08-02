@@ -3,6 +3,9 @@ Creates a dialogue box that goes over the other states.
 */
 class DialogueBox{
 	constructor(w=300, h=100, title="Dialogue Box", underlay=null){
+		this.width = w;
+		this.height = h;
+
 		let stage = new PIXI.Container();
 		this.stage = stage;
 

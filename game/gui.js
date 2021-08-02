@@ -83,10 +83,12 @@ class Button extends PIXI.Container{
 	}
 
 	pointerUp(e){
-		if (this.down)
+		if (this.down){
+			this.over = false;
 			this.onClick();
+		}
 		this.down = false;
-		this.updateState(); 
+		this.updateState();
 	}
 
 	pointerOver(e){

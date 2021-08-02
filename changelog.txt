@@ -1,0 +1,5 @@
+[08/02/21]
+-Added changelog to Main Menu
+-Added Laser Gate Block variant that starts deactivated
+-Updated Shotgun pellet's sprite and added muzzle flash
+-Updated Ball Cannon ball's sprite

@@ -270,6 +270,7 @@ let recursive_texture_names = [
 		"buzzer",
 		"raindrop",
 		"gelato",
+		"shotgun",
 	]]
 ];
 
@@ -451,7 +452,11 @@ media.load = function(callback){
 
 	//load ALL the levels
 	loader.add("default_levels", "levels/default_levels.json");
-	//can be accessed at loader.resources.default_levels.data;
+	//can be accessed at loader.resources.default_levels.data
+	
+	//load changelog
+	loader.add("changelog", "changelog.txt");
+	//can be accessed at loader.resources.changelog.data
 
 	for (let pair of recursive_texture_names){
 		let [path, names] = pair;
@@ -585,7 +590,6 @@ media.processTextures = function(){
 	partition("snapper", "snapper");
 	partition("bulk", "brick_bulk");
 	partition("unification", "brick_unification");
-	partition("laser_gate", "brick_laser");
 	//also create an invisible brick texture
 	this.textures["brick_invis"] = this.textures["brick_main_5_20"];
 
@@ -598,20 +602,21 @@ media.processTextures = function(){
 	//laser gate turrets
 	tex = this.textures.laser_gate;
 	for (let i = 0; i < 10; i++){
-		let rect = new PIXI.Rectangle(8, 11+i*8, 7, 7);
+		let rect = new PIXI.Rectangle(8, 27+i*8, 7, 7);
 		let str = "laser_core_" + i;
 		this.textures[str] = new PIXI.Texture(tex, rect);
 
-		rect = new PIXI.Rectangle(24, 12+i*8, 23, 5);
+		rect = new PIXI.Rectangle(24, 28+i*8, 23, 5);
 		str = "laser_turret_" + i;
 		this.textures[str] = new PIXI.Texture(tex, rect);
 	}
 	for (let i = 0; i < 5; i++){
-		let rect = new PIXI.Rectangle(16*i, 0, 16, 8);
-		let str = "brick_laser_" + i;
-		this.textures[str] = new PIXI.Texture(tex, rect);
-
-		rect = new PIXI.Rectangle(49, 12+i*16, 1, 5);
+		for (let j = 0; j < 3; j++){
+			let rect = new PIXI.Rectangle(16*i, 8*j, 16, 8);
+			let str = `brick_laser_${j}_${i}`;
+			this.textures[str] = new PIXI.Texture(tex, rect);
+		}
+		rect = new PIXI.Rectangle(49, 28+i*16, 1, 5);
 		str = "laser_laser_" + i;
 		this.textures[str] = new PIXI.Texture(tex, rect);
 	}
@@ -744,6 +749,7 @@ media.processTextures = function(){
 	partition("drill", "drill", 15, 41, 1, 1);
 	partition("missile", "missile", 16, 40);
 	partition("buzzer", "buzzer", 48, 48, 2, 0);
+	partition("shotgun", "shotgun", 10, 10);
 
 	//enemies
 	partition("dropper", "dropper", 23, 24, 1, 0);

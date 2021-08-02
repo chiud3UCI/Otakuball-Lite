@@ -117,6 +117,17 @@ class MainMenuState{
 			game.push(new EditorState());
 		});
 
+		//changelog button
+		const w = 80;
+		const h = 26;
+		let butt = new Button(DIM.w - 20 - w, DIM.h - 4 - h, w, h);
+		butt.stage.addChild(printText("changelog", "windows", 0x000000, 1, 6, 4));
+		let mainmenu = this;
+		butt.onClick = function(){
+			game.push(new ChangelogState(mainmenu));
+		};
+		this.add("hud", butt);
+
 		this.windowTitle = "Title Screen";
 	}
 
@@ -192,5 +203,52 @@ class TitleBrick extends Brick{
 	takeDamage(damage, strength){
 		super.takeDamage(damage, strength);
 		this.playAnim("shine");
+	}
+}
+
+class ChangelogState extends DialogueBox{
+	//underlay should be instance of MainMenuState
+	constructor(underlay){
+		super(700, 520, "Changelog", underlay);
+
+		let box = this.box;
+		let w = 90;
+		let h = 40;
+
+		let close = new Button(box.width - w - 8, box.height - h - 8, w, h);
+		close.onClick = function(){
+			game.pop();
+		};
+		close.stage.addChild(printText("Close", "windows", 0x000000, 2, 6, 6));
+		box.addChild(close);
+
+		let textArea = new PIXI.TextInput({
+			input: {
+				fontSize: "16px",
+				width: "650px",
+				height: "420px",
+				color: 0x000000,
+				multiline: true,
+			},
+			box: {
+				fill: 0xFFFFFF,
+				stroke: {
+					color: 0x000000,
+					width: 2,
+				}
+			}
+		});
+		textArea.x = (700 - 650)/2 - 2;
+		textArea.y = 40;
+		textArea.substituteText = false;
+		let changelog = PIXI.Loader.shared.resources.changelog.data;
+		textArea.text = changelog;
+		this.textArea = textArea;
+		box.addChild(textArea);
+	}
+
+	destructor(){
+		super.destructor();
+		this.textArea.destroy();
 	}
 }

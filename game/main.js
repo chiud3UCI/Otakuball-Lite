@@ -24,7 +24,7 @@ DIM.offy = 30;
 var app;
 var renderer;
 var appMouse;
-var mouse;
+var mouse = {};
 var keyboard;
 var keycode;
 var game;
@@ -172,6 +172,7 @@ function init(){
 		y: 0,
 		m1: 0,
 		m2: 0,
+		scroll: 0, //can be positive or negative value
 		updatePos(){
 			this.x = appMouse.global.x - DIM.offx;
 			this.y = appMouse.global.y - DIM.offy;
@@ -183,6 +184,7 @@ function init(){
 				this.m1 = 2;
 			if (this.m2 == 1)
 				this.m2 = 2;
+			this.scroll = 0;
 		},
 		inBoard(){
 			return (
@@ -212,9 +214,8 @@ function init(){
 			mouse.m1 = 0;
 		else if (butt == 2)
 			mouse.m2 = 0;
-	})
-
-
+	});
+	
 	alterMouseEvents();
 
 	app.renderer.backgroundColor = 0x000000;
@@ -288,11 +289,11 @@ function getTrueGlobalPosition(obj){
 	return new PIXI.Point(p.x-DIM.offx, p.y-DIM.offy);
 }
 
-//disable right click contex menu and
-//disable mouse click while cursor is in game
-//	disabling mouse click is important because otherwise 
-//  double-clicking the game might cause the player to 
-//  highlight html elements outside of the game
+//when cursor is in game window:
+//	-disable right click context menu
+//	-disable left click (to prevent double click highlighting)
+//	-disable scroll wheel (to prevent scrolling the page while scrolling Level Select)
+//can be temporarily disabled if ENABLE_RIGHT_CLICK is set to true.
 function alterMouseEvents(){
 	function mouseInWindow(){
 		if (ENABLE_RIGHT_CLICK)
@@ -316,6 +317,15 @@ function alterMouseEvents(){
         	if (mouseInWindow())
             	e.preventDefault();
         }, false);
+		// document.addEventListener(`scroll`, function(e){
+		// 	if (mouseInWindow())
+		// 		e.preventDefault();
+		// 	console.log("scroll");
+		// });
+		document.addEventListener(`wheel`, function(e){
+			// console.log("wheel " + e.deltaY);
+			mouse.scroll = e.deltaY;
+		});
         // console.log("addevent");
     }
     else {

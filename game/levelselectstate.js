@@ -153,6 +153,7 @@ class LevelSelectState{
 
 		let {x, y, width:w, height:h} = whiteBox.getLocalBounds();
 		let scrollBar = new ScrollBar(this, x+w+4, y, 18, h, h/4);
+		this.scrollBar = scrollBar;
 		widget.addChild(scrollBar);
 
 		this.add(widget);
@@ -163,10 +164,51 @@ class LevelSelectState{
 		this.levelList.y = -this.scrollHeight * ratio;
 	}
 
+	//update scrollbar if levelList moved without touching the scrollbar
+	updateScrollBar(){
+		const y = this.levelList.y;
+		const ratio = -y / this.scrollHeight;
+		let bar = this.scrollBar;
+		bar.bar.y = ratio * bar.barMaxY;
+	}
+
+	//scrolling with keyboard buttons
+	keyboardScroll(delta){
+		function isPressed(str){
+			return keyboard.isPressed(keycode[str]);
+		}
+		let up = isPressed("UP") || isPressed("W");
+		let down = isPressed("DOWN") || isPressed("S");
+		if (!(up || down))
+			return;
+		//select next level that's below or up
+		let buttons = this.allLevelButtons;
+		let index = this.selectedIndex + (down ? 1 : -1);
+		if (index < 0 || index >= buttons.length)
+			return;
+		buttons[index].pointerDown();
+		let levelList = this.levelList;
+		//make sure selected level is in view
+		let levelIndex = clamp(-levelList.y / 16, index - 25 + 1, index);
+		levelList.y = -levelIndex * 16;
+		this.updateScrollBar();
+	}
+
 	update(delta){
 		if (keyboard.isPressed(keycode.ESCAPE)){
 			game.pop();
 			return;
+		}
+		//scrolling with keyboard
+		this.keyboardScroll(delta);
+		
+		//scrolling with mouse wheel
+		if (mouse.scroll != 0){
+			let sign = mouse.scroll > 0 ? -1 : 1;
+			let y = this.levelList.y;
+			y = clamp(y + 4 * sign * 16, -this.scrollHeight, 0);
+			this.levelList.y = y;
+			this.updateScrollBar();
 		}
 	}
 }

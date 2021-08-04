@@ -1,3 +1,7 @@
+[08/04/21]
+-Added Level Select scrolling support for mouse scroll wheel and keyboard (W/S/UP/DOWN)
+    -Touch scrolling (laptop touchpad and Mac mouse) still might not work
+
 [08/02/21]
 -Added changelog to Main Menu
 -Added Laser Gate Block variant that starts deactivated

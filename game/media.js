@@ -453,6 +453,7 @@ media.load = function(callback){
 	//load ALL the levels
 	loader.add("default_levels", "levels/default_levels.json");
 	//can be accessed at loader.resources.default_levels.data
+	loader.add("default_playlists", "levels/default_playlists.json");
 	
 	//load changelog
 	loader.add("changelog", "changelog.txt");

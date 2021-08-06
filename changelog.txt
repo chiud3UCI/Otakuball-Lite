@@ -1,5 +1,9 @@
+[08/05/21]
+-Implemented Play Playlist mode
+
 [08/04/21]
--Added Level Select scrolling support for mouse scroll wheel and keyboard (W/S/UP/DOWN)
+-Added Level Select scrolling support for mouse scroll wheel and keyboard
+    -Keys: Up Arrow, Down Arrow, W, S
     -Touch scrolling (laptop touchpad and Mac mouse) still might not work
 
 [08/02/21]

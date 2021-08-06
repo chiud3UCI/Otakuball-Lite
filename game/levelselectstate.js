@@ -1,9 +1,10 @@
 class LevelSelectState{
 	//modes: ["play", "save", "load"]
-	constructor(mode){
+	constructor(isPlaylist, mode){
+		this.isPlaylist = isPlaylist;
 		this.mode = mode;
 
-		this.windowTitle = "Level Select";
+		this.windowTitle = isPlaylist ? "Playlist Select" : "Level Select";
 		//do we need multiple layers?
 		let stage = new PIXI.Container();
 		this.stage = stage;
@@ -16,51 +17,134 @@ class LevelSelectState{
 		this.selectedIndex = null;
 
 		let butt;
-		//back button
+		//back button is universal
 		butt = new Button(DIM.w - 100, DIM.h - 50, 80, 35);
-		butt.add(printText(
-			"Back", "arcade", 0x000000, 1, 7, 8
-		));
+		butt.addCentered(printText("Back", "arcade", 0x000000, 1));
 		butt.onClick = () => {
 			game.pop();
 		};
 		this.add(butt);
-		if (mode == "load"){
+
+		this.initLeftWidget();
+
+		if (isPlaylist){
+			this.createPlaylistSelectButtons();
+			this.initPlaylistPreview();
+		}
+		else{
+			this.createLevelSelectButtons();
+			this.initPreview();
+		}
+	}
+
+	// destructor(){
+	// 	if (this.isPlaylist)
+	// 		this.playlistPreview.destroy();
+	// }
+
+	createPlaylistSelectButtons(){
+		let butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
+		butt.addCentered(printText("Play", "arcade", 0x000000, 1));
+		butt.onClick = () => {
+			let index = this.selectedIndex;
+			if (index === null)
+				return;
+			let playlist = this.default_list[index][1];
+			playlist = PlayState.convertPlaylist(false, playlist);
+			game.push(new PlayState("playlist", playlist));
+		};
+		this.add(butt);
+	}
+
+	createLevelSelectButtons(){
+		if (this.mode == "load"){
 			//load button
-			butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
-			butt.add(printText(
-				"Load", "arcade", 0x000000, 1, 7, 8
-			));
+			let butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
+			butt.addCentered(printText("Load", "arcade", 0x000000, 1));
 			butt.onClick = () => {
 				let index = this.selectedIndex;
 				if (index === null)
 					return;
-				let level = default_levels[index][1];
+				let level = this.default_list[index][1];
 				let editorstate = game.getState(-2);
 				editorstate.loadLevel(level);
 				game.pop();
 			};
 			this.add(butt);
 		}
-		else if (mode == "play"){
+		else if (this.mode == "play"){
 			//play button
-			butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
-			butt.add(printText(
-				"Play", "arcade", 0x000000, 1, 7, 8
-			));
+			let butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
+			butt.addCentered(printText("Play", "arcade", 0x000000, 1));
 			butt.onClick = () => {
 				let index = this.selectedIndex;
 				if (index === null)
 					return;
-				let level = default_levels[index][1];
+				let level = this.default_list[index][1];
 				game.push(new PlayState("play", level));
 			};
 			this.add(butt);
 		}
+	}
 
+	add(obj){
+		this.stage.addChild(obj);
+	}
 
-		this.initLeftWidget();
+	//text area causes a bunch of problems
+	initPlaylistPreviewOld(){
+		let textArea = new PIXI.TextInput({
+			input: {
+				fontSize: "16px",
+				width: "250px",
+				height: "400px",
+				color: 0x000000,
+				multiline: true,
+			},
+			box: {
+				fill: 0xFFFFFF,
+				stroke: {
+					color: 0x000000,
+					width: 2,
+				}
+			}
+		});
+		textArea.x = DIM.w/2 + 50;
+		textArea.y = 100;
+		textArea.substituteText = false;
+		textArea.text = "hello world";
+		textArea.htmlInput.readOnly = true;
+		//Note: ENABLE_RIGHT_CLICK is false in this state
+		this.playlistPreview = textArea;
+		this.add(textArea);
+	}
 
+	initPlaylistPreview(){
+		let cont = new PIXI.Container();
+		cont.position.set(DIM.w/2 + 50, 100);
+		cont.addChild(new PIXI.Graphics()
+			.beginFill(0xFFFFFF)
+			.drawRect(0, 0, 250, 400)
+		);
+		let text = new PIXI.Text("Select a Playlist", {
+			fontFamily: "Courier New",
+			fontSize: 16,
+			fontWeight: "bold",
+		});
+		text.position.set(5, 5);
+		cont.addChild(text);
+		this.playlistPreview = text;
+		this.add(cont);
+	}
+
+	setPlaylistPreview(index){
+		let preview = this.playlistPreview;
+		let playlist = this.default_list[index][1];
+		let str = playlist.join("\n");
+		preview.text = str;
+	}
+
+	initPreview(){
 		this.preview = new PIXI.Container();
 		this.preview.position.set(500, 150);
 		this.preview.addChild(makeSprite("border"));
@@ -69,10 +153,6 @@ class LevelSelectState{
 		this.add(this.preview);
 
 		this.previewCache = {};
-	}
-
-	add(obj){
-		this.stage.addChild(obj);
 	}
 
 	generatePreview(level){
@@ -113,16 +193,21 @@ class LevelSelectState{
 	setPreview(index){
 		let preview = this.previewCache[index];
 		if (!preview){
-			let level = default_levels[index][1];
+			let level = this.default_list[index][1];
 			preview = this.generatePreview(level);
 			this.previewCache[index] = preview;
 		}
 		this.preview.children[1].texture = preview;
 	}
 
-	selectLevel(index){
+	selectIndex(index){
 		this.selectedIndex = index;
-		this.setPreview(index);
+		if (this.isPlaylist){
+			this.setPlaylistPreview(index);
+		}
+		else{
+			this.setPreview(index);
+		}
 	}
 
 	initLeftWidget(){
@@ -134,21 +219,24 @@ class LevelSelectState{
 			.drawRect(0, 0, 300, 400);
 		widget.addChild(whiteBox);
 
-		let levelList = new PIXI.Container();
-		widget.addChild(levelList);
+		let leftList = new PIXI.Container();
+		widget.addChild(leftList);
 		let p = whiteBox.getGlobalPosition();
-		levelList.mask = new Mask(p.x, p.y, 300, 400);
-		this.levelList = levelList;
+		leftList.mask = new Mask(p.x, p.y, 300, 400);
+		this.leftList = leftList;
+
+		let default_list = this.isPlaylist ? playlists.default.list : levels.default.list;
+		this.default_list = default_list;
 		
-		this.allLevelButtons = [];
-		for (let [i, [name, level]] of default_levels.entries()){
+		this.allListButtons = [];
+		for (let [i, [name, level]] of default_list.entries()){
 			let y = i * 16;
 			let butt = new LevelButton(this, name, 0, y, 300, 16, i);
-			levelList.addChild(butt);
-			this.allLevelButtons.push(butt);
+			leftList.addChild(butt);
+			this.allListButtons.push(butt);
 		}
 
-		let listHeight = this.allLevelButtons.length * 16;
+		let listHeight = this.allListButtons.length * 16;
 		this.scrollHeight = Math.max(0, listHeight - 400);
 
 		let {x, y, width:w, height:h} = whiteBox.getLocalBounds();
@@ -161,12 +249,12 @@ class LevelSelectState{
 
 	//ratio is a value between [0, 1]
 	onScroll(ratio){
-		this.levelList.y = -this.scrollHeight * ratio;
+		this.leftList.y = -this.scrollHeight * ratio;
 	}
 
-	//update scrollbar if levelList moved without touching the scrollbar
+	//update scrollbar if leftList moved without touching the scrollbar
 	updateScrollBar(){
-		const y = this.levelList.y;
+		const y = this.leftList.y;
 		const ratio = -y / this.scrollHeight;
 		let bar = this.scrollBar;
 		bar.bar.y = ratio * bar.barMaxY;
@@ -182,15 +270,17 @@ class LevelSelectState{
 		if (!(up || down))
 			return;
 		//select next level that's below or up
-		let buttons = this.allLevelButtons;
-		let index = this.selectedIndex + (down ? 1 : -1);
+		let buttons = this.allListButtons;
+		let index = 0;
+		if (this.selectedIndex !== null)
+			index = this.selectedIndex + (down ? 1 : -1);
 		if (index < 0 || index >= buttons.length)
 			return;
 		buttons[index].pointerDown();
-		let levelList = this.levelList;
+		let leftList = this.leftList;
 		//make sure selected level is in view
-		let levelIndex = clamp(-levelList.y / 16, index - 25 + 1, index);
-		levelList.y = -levelIndex * 16;
+		let levelIndex = clamp(-leftList.y / 16, index - 25 + 1, index);
+		leftList.y = -levelIndex * 16;
 		this.updateScrollBar();
 	}
 
@@ -205,9 +295,9 @@ class LevelSelectState{
 		//scrolling with mouse wheel
 		if (mouse.scroll != 0){
 			let sign = mouse.scroll > 0 ? -1 : 1;
-			let y = this.levelList.y;
+			let y = this.leftList.y;
 			y = clamp(y + 4 * sign * 16, -this.scrollHeight, 0);
-			this.levelList.y = y;
+			this.leftList.y = y;
 			this.updateScrollBar();
 		}
 	}
@@ -250,10 +340,10 @@ class LevelButton extends PIXI.Container{
 
 	pointerDown(e){
 		let state = this.parentState;
-		for (let butt of state.allLevelButtons)
+		for (let butt of state.allListButtons)
 			butt.setHighlight(false);
 		this.setHighlight(true);
-		this.parentState.selectLevel(this.index);
+		this.parentState.selectIndex(this.index);
 	}
 }
 

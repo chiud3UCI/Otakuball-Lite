@@ -50,8 +50,17 @@ class Button extends PIXI.Container{
 		this.over = false;
 	}
 
-	add(drawable){
+	add(drawable, center=false){
 		this.stage.addChild(drawable);
+		if (center){
+			let width = this.width;
+			let height = this.height;
+			drawable.anchor.set(0.5);
+			drawable.position.set(width/2, height/2);
+		}
+	}
+	addCentered(drawable){
+		this.add(drawable, true);
 	}
 
 	//0: up, 1: over, 2: down

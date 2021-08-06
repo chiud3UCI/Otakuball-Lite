@@ -102,10 +102,10 @@ class MainMenuState{
 			console.log("Campaign not implemented yet");
 		}, true);
 		makeButton("menu_button_1", "Play Playlist", function(){
-			console.log("Playlist Select not implemented yet");
-		}, true);
+			game.push(new LevelSelectState(true, "play"));
+		});
 		makeButton("menu_button_2", "Play Level", function(){
-			game.push(new LevelSelectState("play"));
+			game.push(new LevelSelectState(false, "play"));
 		});
 		makeButton("menu_button_3", "Options", function(){
 			console.log("Options not implemented yet");
@@ -241,6 +241,7 @@ class ChangelogState extends DialogueBox{
 		textArea.x = (700 - 650)/2 - 2;
 		textArea.y = 40;
 		textArea.substituteText = false;
+		textArea.htmlInput.readOnly = true;
 		let changelog = PIXI.Loader.shared.resources.changelog.data;
 		textArea.text = changelog;
 		this.textArea = textArea;

@@ -157,8 +157,8 @@ class EditorState{
 			"Load", "arcade", 0x000000, 1, 7, 8
 		));
 		butt.onClick = function(){
-			game.push(new LevelSelectState("load"));
-		}
+			game.push(new LevelSelectState(false, "load"));
+		};
 		this.add("hud", butt);
 
 		//Import/Export buttons
@@ -178,7 +178,7 @@ class EditorState{
 		butt.onClick = function(){
 			// state.exportLevel();
 			game.push(state.createImportExportDialogue(false));
-		}
+		};
 		this.add("hud", butt);
 
 		//Main Menu Button
@@ -187,7 +187,7 @@ class EditorState{
 			"Main Menu", "arcade", 0x000000, 1, 7, 9));
 		butt.onClick = function(){
 			game.pop();
-		}
+		};
 		this.add("hud", butt);
 
 		this.stateName = "editorstate";
@@ -756,7 +756,8 @@ class EditorState{
 			}
 		});
 		textArea.substituteText = false;
-		textArea.isTextInput = true;
+		textArea.isTextInput = true; //used in state's destructor
+		textArea.htmlInput.readOnly = !isImport;
 		let rect = textArea.getBounds();
 		// textArea.text = `width: ${rect.width}, height: ${rect.height}`;
 		//center the text area within the dialogue box

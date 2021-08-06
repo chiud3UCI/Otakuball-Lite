@@ -35,14 +35,59 @@ function printObjectCounts(){
 	}
 }
 
+function beatLevel(allLevels=false){
+	let ps = game.top;
+	if (!(ps instanceof PlayState)){
+		console.log("ERROR: You're not currently playing a level");
+		return;
+	}
+	if (ps.state.name != "playing"){
+		console.log("ERROR: Wait until the level has started");
+		return;
+	}
+	ps.setState("victory");
+	if (allLevels){
+		if (ps.mode == "playlist")
+			ps.playlist = [ps.playlist[0]];
+	}
+}
+
+function beatZone(){
+	beatLevel(true);
+}
+
 //I chose to use a class approach instead of a singleton
 //because I want to make sure everything in this instance
 //is cleared when the player exits the playstate
 class PlayState{
-	//mode is ["test", "play", "playlist", "campaign"]
-	//arg is based on mode and is either a Level, list of Levels,
-	//   or a campaign object
-	constructor(mode, arg){
+	/**
+	 * Converts a list of level names to a list of level objects
+	 * 
+	 * @param {boolean} isUser if the levels are default or user-made
+	 * @param {string[]} playlist array of level names
+	 * @return list of level objects
+	 */
+	static convertPlaylist(isUser, playlist){
+		let lookup = levels[isUser ? "user" : "default"].lookup;
+		let newPlaylist = [];
+		for (let name of playlist){
+			let level = lookup[name];
+			if (!level)
+				ALERT_ONCE(`level "${name}" does not exist!`, "level_not_found");
+			else
+				newPlaylist.push(level);
+		}
+		return newPlaylist;
+	}
+	/*
+		mode can be one of ["test", "play", "playlist", "campaign"]
+		args will vary based on mode:
+			"test": [level object],
+			"play": [level object],
+			"playlist": [list of level objects],
+			"campaign": [playlist name, starting index for playlist],
+	*/
+	constructor(mode, ...args){
 		this.mode = mode;
 
 		if (mode == "test"){
@@ -50,11 +95,21 @@ class PlayState{
 			cheats.enabled = true;
 		}
 
-		this.windowTitle = "Playing";
+		let titles = {
+			test: "Testing",
+			play: "Playing",
+			playlist: "Playing Playlist",
+			campign: "Campaign"
+		};
+		this.windowTitle = titles[mode];
 
 		let level;
 		if (mode == "test" || mode == "play")
-			level = arg;
+			level = args[0];
+		else if (mode == "playlist"){
+			this.playlist = args[0];
+			level = this.playlist[0];
+		}
 
 		this.timescale = 1;
 		this.timewarp = null;
@@ -196,12 +251,17 @@ class PlayState{
 			text, "windows", 0x000000, 2, 10, 10
 		));
 
-		//Stop Button
+		//Stop/Exit Button
 		let butt = new Button(10, 45, 150, 50);
-		butt.add(makeSprite("editorbutton_2_1", 3, 5, -2));
-		butt.add(printText(
-			"Stop","arcade", 0x000000, 1.5, 55, 10
-		));
+		if (mode == "test"){
+			butt.add(makeSprite("editorbutton_2_1", 3, 5, -2));
+			butt.add(printText("Stop", "arcade", 0x000000, 1.5, 56, 10));
+		}
+		else{
+			butt.add(makeSprite("editorbutton_4_2", 2, 12, 7));
+			butt.add(printText("Exit", "arcade", 0x000000, 1.5, 60, 10));
+		}
+		
 		butt.onClick = function(){
 			game.pop();
 		}
@@ -273,7 +333,17 @@ class PlayState{
 	//Either pops itself or replace itself with a new
 	//PlayState with the next level
 	nextLevel(){
-		game.pop();
+		let mode = this.mode;
+		if (mode == "test" || mode == "play"){
+			game.pop();
+			return;
+		}
+		if (mode == "playlist"){
+			let playlist = this.playlist;
+			game.pop();
+			if (playlist.length >= 2)
+				game.push(new PlayState("playlist", playlist.slice(1)));
+		}
 	}
 
 	initBrickGrid(){
@@ -1028,6 +1098,7 @@ class PlayState{
 			this.state.destructor();
 
 		this.state = new PlayState.states[name](this);
+		this.state.name = name;
 	}
 
 	updateState(delta){

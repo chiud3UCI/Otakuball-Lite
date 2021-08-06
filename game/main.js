@@ -28,8 +28,22 @@ var mouse = {};
 var keyboard;
 var keycode;
 var game;
-var default_levels = null;
 var ENABLE_RIGHT_CLICK = false;
+
+//default levels and playlists are loaded from PIXI loader assets
+//user levels and playlists are loaded from localstorage
+var levels = {
+	default: {list: null, lookup: {}},
+	user: {list: null, lookup: {}},
+};
+var playlists = {
+	default: {list: null, lookup: {}},
+	user: {list: null, lookup: {}},
+};
+//loaded form localstorage
+var options = {
+
+};
 
 var alert_record = {};
 function ALERT_ONCE(message, id = 0){
@@ -231,7 +245,20 @@ function setup(){
 	media.processTextures();
 	media.processSounds();
 	media.createAnimations();
-	default_levels = PIXI.Loader.shared.resources.default_levels.data;
+
+	//load levels + playlists
+	levels.default.list = PIXI.Loader.shared.resources.default_levels.data;
+	for (let [name, level] of levels.default.list){
+		levels.default.lookup[name] = level;
+	}
+
+	playlists.default.list = PIXI.Loader.shared.resources.default_playlists.data;
+	for (let [name, playlist] of playlists.default.list){
+		playlists.default.lookup[name] = playlist;
+	}
+
+	//load options
+
 
 	game = new Game();
 

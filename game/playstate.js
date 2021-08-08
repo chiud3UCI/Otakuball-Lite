@@ -48,7 +48,7 @@ function beatLevel(allLevels=false){
 	ps.setState("victory");
 	if (allLevels){
 		if (ps.mode == "playlist")
-			ps.playlist = [ps.playlist[0]];
+			ps.playlistIndex = ps.playlist.length - 1;
 	}
 }
 
@@ -84,8 +84,8 @@ class PlayState{
 		args will vary based on mode:
 			"test": [level object],
 			"play": [level object],
-			"playlist": [list of level objects],
-			"campaign": [playlist name, starting index for playlist],
+			"playlist": [list of level objects, playlist index],
+			"campaign": [playlist name, playlist index],
 	*/
 	constructor(mode, ...args){
 		this.mode = mode;
@@ -108,7 +108,8 @@ class PlayState{
 			level = args[0];
 		else if (mode == "playlist"){
 			this.playlist = args[0];
-			level = this.playlist[0];
+			this.playlistIndex = args[1];
+			level = this.playlist[this.playlistIndex];
 		}
 
 		this.timescale = 1;
@@ -340,9 +341,10 @@ class PlayState{
 		}
 		if (mode == "playlist"){
 			let playlist = this.playlist;
+			let index = this.playlistIndex;
 			game.pop();
-			if (playlist.length >= 2)
-				game.push(new PlayState("playlist", playlist.slice(1)));
+			if (index < playlist.length - 1)
+				game.push(new PlayState("playlist", playlist, index+1));
 		}
 	}
 
@@ -1411,7 +1413,11 @@ PlayState.states = {
 			this.spawnCircles.dist = Paddle.baseLine - DIM.ceiling;
 			ps.particles.addChild(this.spawnCircles);
 
-			let text = printText("ROUND 1\nREADY",
+			let round = 1;
+			if (ps.mode == "playlist")
+				round = ps.playlistIndex + 1;
+
+			let text = printText(`ROUND ${round}\nREADY`,
 				"arcade", 0xFFFFFF, 2, DIM.w/2, DIM.h*3/4);
 			text.align = "center";
 			text.anchor.set(0.5, 0.5);

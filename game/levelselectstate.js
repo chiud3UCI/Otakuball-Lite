@@ -1,3 +1,18 @@
+/*
+LevelSelectState
+	Stage
+		Base
+			Panels[] (only 1 panel can be visible at a time)
+				left widget (file list)
+				right widget (preview)
+		Tabs[]
+		Buttons ()
+			Close is universal
+			Play
+			Save
+			Load
+*/
+
 class LevelSelectState{
 	//modes: ["play", "save", "load"]
 	constructor(isPlaylist, mode){
@@ -33,14 +48,9 @@ class LevelSelectState{
 		}
 		else{
 			this.createLevelSelectButtons();
-			this.initPreview();
+			this.initLevelPreview();
 		}
 	}
-
-	// destructor(){
-	// 	if (this.isPlaylist)
-	// 		this.playlistPreview.destroy();
-	// }
 
 	createPlaylistSelectButtons(){
 		let butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
@@ -51,7 +61,7 @@ class LevelSelectState{
 				return;
 			let playlist = this.default_list[index][1];
 			playlist = PlayState.convertPlaylist(false, playlist);
-			game.push(new PlayState("playlist", playlist));
+			game.push(new PlayState("playlist", playlist, 0));
 		};
 		this.add(butt);
 	}
@@ -144,7 +154,7 @@ class LevelSelectState{
 		preview.text = str;
 	}
 
-	initPreview(){
+	initLevelPreview(){
 		this.preview = new PIXI.Container();
 		this.preview.position.set(500, 150);
 		this.preview.addChild(makeSprite("border"));

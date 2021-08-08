@@ -315,38 +315,12 @@ class EditorState{
 		widget.sortableChildren = true;
 		widget.x = DIM.rwallx + 8 + 18;
 		widget.y = 10;
-		//bottom panel is static
+
+		//base panel is static
 		let [x, y, w, h] = [0, th-6, (tw-4)*3, DIM.h-widget.y-(th-6)-10];
-		let b = new PIXI.Graphics();
-		b.zIndex = 5;
-		b.beginFill(0x000000);
-		b.drawRect(x, y, w, h);
-		b.beginFill(0xFFFFFF);
-		b.drawRect(x, y, w-2, h-2);
-		b.beginFill(0x646464);
-		b.drawRect(x+2, y+2, w-4, h-4);
-		b.beginFill(0xDCDCDC);
-		b.drawRect(x+2, y+2, w-6, h-6);
-		widget.addChild(b);
-		
-		widget.tabs = [];
+		widget.addChild(new Base(x, y, w, h));
 
-		let textures = [
-			"editorbutton_1_0",
-			"editorbutton_1_2",
-			"editorbutton_1_1",
-		]
-		for (let i = 0; i < 3; i++){
-			let tab = new TabButton(
-				this, textures[i],
-				(tw-6)*i, 0, tw, th, i
-			);
-			widget.addChild(tab);
-			widget.tabs.push(tab);
-		}
-
-		this.brickButtons = [];
-
+		//initialize panels
 		let panels = [
 			this.initBrickButtons(),
 			this.initEnemyButtons(),
@@ -354,23 +328,52 @@ class EditorState{
 		]
 		for (let panel of panels){
 			panel.y += th;
-			panel.zIndex = 6;
+			panel.zIndex = 10;
+			panel.visible = false;
 			widget.addChild(panel);
 		}
 		widget.panels = panels;
 
-		this.add("hud", widget);
-		this.widget = widget;
-		 
-	}
+		//initialize tabs
+		let state = this;
+		widget.tabs = [];
+		let textures = [
+			"editorbutton_1_0",
+			"editorbutton_1_2",
+			"editorbutton_1_1",
+		]
+		for (let i = 0; i < 3; i++){
+			let tab = new TabButton((tw-6)*i, 0, tw, th, widget.tabs, i);
+			tab.addCentered(new Sprite(textures[i]));
+			widget.addChild(tab);
+			widget.tabs.push(tab);
 
+			let panel = panels[i];
+			tab.onStateChange = function(value){
+				if (value){
+					panel.visible = true;
+					state.selectMode = (this.tabIndex == 2) ? "patch" : "brick";
+				}
+				else{
+					panel.visible = false;
+					panel.onOutOfFocus?.();
+				}
+			}
+		}
+
+		//start off with first tab selected
+		widget.tabs[0].pointerDown(null);
+
+		this.add("hud", widget);
+		this.widget = widget;	 
+	}
 
 	initBrickButtons(){
 		let panel = new PIXI.Container();
 		panel.x = 5;
 		panel.y = 5;
 
-		// this.brickButtons = []; //moved to outside of function
+		this.brickButtons = []; //moved to outside of function
 		this.slotButtons = []; //slot machine brick buttons
 
 		//"this" changes when entering a function
@@ -703,6 +706,7 @@ class EditorState{
 		panel.onOutOfFocus = () => {
 			for (let input of this.enemySpawnInputs)
 				input.blur();
+			this.laserChannelInput.blur();
 		};
 		
 		return panel;
@@ -1232,98 +1236,6 @@ class EnemyCheckbox extends EditorButton{
 		this.setState(!this.checkState);
 	}
 
-}
-
-class TabButton extends PIXI.Sprite{
-	constructor(parentState, texture, x, y, w, h, tabIndex){
-		super(null);
-		this.parentState = parentState;
-
-		let on = new PIXI.Graphics();
-		on.beginFill(0x000000);
-		on.drawRect(x, y, w, h-6);
-		on.beginFill(0xFFFFFF);
-		on.drawRect(x, y, w-2, h-4);
-		on.beginFill(0x646464);
-		on.drawRect(x+2, y+2, w-4, h-6);
-		on.beginFill(0xDCDCDC);
-		on.drawRect(x+2, y+2, w-6, h-6);
-
-		let off = new PIXI.Graphics();
-		off.beginFill(0x000000);
-		off.drawRect(x+2, y+2, w-4, h-4);
-		off.beginFill(0xFFFFFF);
-		off.drawRect(x+2, y+2, w-6, h-6);
-		off.beginFill(0x646464);
-		off.drawRect(x+4, y+4, w-8, h-8);
-		off.beginFill(0xBBBBBB);
-		off.drawRect(x+4, y+4, w-10, h-10);
-
-		let icon = new Sprite(texture);
-		this.iconPos = [x, y, 26];
-
-		this.addChild(on);
-		this.addChild(off);
-		this.addChild(icon);
-
-		this.onGraphic = on;
-		this.offGraphic = off;
-		this.icon = icon;
-
-		this.setState(true);
-
-		this.tabIndex = tabIndex;
-
-		this.interactive = true;
-		this.on("pointerdown", (e) => {this.pointerDown(e);});
-	}
-
-	setState(value){
-		let on = this.onGraphic;
-		let off = this.offGraphic;
-		let icon = this.icon;
-		let [x, y, offset] = this.iconPos;
-		if (value){
-			on.visible = true;
-			off.visible = false;
-			icon.x = x + offset;
-			icon.y = y + offset - 2;
-		}
-		else{
-			on.visible = false;
-			off.visible = true;
-			icon.x = x + offset;
-			icon.y = y + offset;
-		}
-	}
-
-	pointerDown(e){
-		let state = this.parentState;
-		let widget = state.widget;
-		for (let [i, tab] of widget.tabs.entries()){
-			if (i != this.tabIndex){
-				tab.setState(false);
-				tab.zIndex = i;
-				let panel = widget.panels[i];
-				if (panel.visible){
-					panel.visible = false;
-					panel.onOutOfFocus?.();
-				}
-			}
-		}
-		this.setState(true);
-		this.zIndex = 6;
-		widget.panels[this.tabIndex].visible = true;
-
-		if (this.tabIndex == 2)
-			state.selectMode = "patch";
-		else
-			state.selectMode = "brick";
-		// if (this.tabIndex == 0)
-		// 	state.selectMode = "brick";
-		// else if (this.tabIndex == 1)
-		// 	state.selectMode = "patch";
-	}
 }
 
 class PatchCycler{

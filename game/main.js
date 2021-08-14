@@ -34,7 +34,8 @@ var ENABLE_RIGHT_CLICK = false;
 //user levels and playlists are loaded from localstorage
 var levels = {
 	default: {list: null, lookup: {}},
-	user: {list: null, lookup: {}},
+	// user: {list: null, lookup: {}},
+	user: null
 };
 var playlists = {
 	default: {list: null, lookup: {}},
@@ -73,6 +74,7 @@ class Game {
 	}
 
 	push(state){
+		this.top?.onExit?.();
 		this.top = state;
 		this.states.push(state);
 		this.switchStage();
@@ -86,6 +88,7 @@ class Game {
 			this.top = null;
 		else
 			this.top = states[states.length-1];
+		this.top?.onEnter?.();
 		this.switchStage();
 	}
 	//switch rendering to the top layer
@@ -246,19 +249,31 @@ function setup(){
 	media.processSounds();
 	media.createAnimations();
 
-	//load levels + playlists
-	levels.default.list = PIXI.Loader.shared.resources.default_levels.data;
-	for (let [name, level] of levels.default.list){
-		levels.default.lookup[name] = level;
-	}
+	//load default levels & playlists from loaded assets
+	let list = PIXI.Loader.shared.resources.default_levels.data;
+	levels.default = new FileDatabase(list); 
+	// levels.default.list = PIXI.Loader.shared.resources.default_levels.data;
+	// for (let [name, level] of levels.default.list){
+	// 	levels.default.lookup[name] = level;
+	// }
 
 	playlists.default.list = PIXI.Loader.shared.resources.default_playlists.data;
 	for (let [name, playlist] of playlists.default.list){
 		playlists.default.lookup[name] = playlist;
 	}
 
-	//load options
-
+	//load user levels & playlists from localStorage
+	//TODO: make both lookups a map?
+	let str = localStorage.getItem("user_levels");
+	// let arr = [];
+	// if (str !== null)
+	// 	arr = JSON.parse(str);
+	// levels.user.list = arr;
+	// for (let [name, level] of arr){
+	// 	levels.user.lookup[name] = level;
+	// }
+	// sortLevels();
+	levels.user = new FileDatabase((str === null) ? [] : JSON.parse(str));
 
 	game = new Game();
 
@@ -409,7 +424,7 @@ function clampGridPos(i, j){
 }
 
 /**
- * Create a lookup table with arr elements as keys
+ * Create a lookup table with the array elements as keys and the value as true
  */
 function generateLookup(arr){
 	let lookup = {};

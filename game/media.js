@@ -438,6 +438,9 @@ let recursive_sound_names = [
 	["enemy/", [
 		"enemy_death",
 	]],
+	["etc/", [
+		"board_saved.ogg",
+	]],
 ]
 
 let font_names = [

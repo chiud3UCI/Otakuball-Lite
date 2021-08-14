@@ -20,9 +20,11 @@ class Base extends PIXI.Container{
 }
 
 class Button extends PIXI.Container{
-	constructor(x, y, w, h){
+	constructor(x, y, w, h, color=null){
 		super();
 		this.position.set(x, y);
+
+		let topColor = color ?? 0x90;
 
 		let fr = fillRect;
 		//give it a Windows 95 feel
@@ -30,7 +32,7 @@ class Button extends PIXI.Container{
 		fr(up, 0x00, 0, 0, w,   h);
 		fr(up, 0xFF, 0, 0, w-2, h-2);
 		fr(up, 0x64, 2, 2, w-4, h-4);
-		fr(up, 0x90, 2, 2, w-6, h-6);
+		fr(up, topColor, 2, 2, w-6, h-6);
 
 		let over = new PIXI.Graphics();
 		fr(over, 0x20, 0, 0, w,    h);
@@ -64,6 +66,11 @@ class Button extends PIXI.Container{
 
 		this.down = false;
 		this.over = false;
+
+		//if true, the button will revert to un-hovered state
+		//after being clicked to prevent it from appearing hovered
+		//when a new state is pushed
+		this.hoverGuard = true;
 	}
 
 	add(drawable, center=false){
@@ -109,7 +116,8 @@ class Button extends PIXI.Container{
 
 	pointerUp(e){
 		if (this.down){
-			this.over = false;
+			if (this.hoverGuard)
+				this.over = false;
 			this.onClick();
 		}
 		this.down = false;
@@ -145,7 +153,7 @@ class TabButton extends PIXI.Container{
 		fr(off, 0x00, 2, 2, w-4, h-4);
 		fr(off, 0xFF, 2, 2, w-6, h-6);
 		fr(off, 0x64, 4, 4, w-8, h-8);
-		fr(off, 0xBB, 4, 4, w-10, w-10);
+		fr(off, 0xBB, 4, 4, w-10, h-10);
 
 		this.addChild(on);
 		this.addChild(off);
@@ -158,6 +166,7 @@ class TabButton extends PIXI.Container{
 		this.stage = stage;
 
 		this.state = false;
+		on.visible = false;
 
 		this.tabList = tabList;
 		this.tabIndex = tabIndex;

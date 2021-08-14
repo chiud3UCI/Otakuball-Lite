@@ -1,3 +1,7 @@
+[08/13/21]
+-Added ability to save custom levels
+-Play Playlist mode is temporarily disabled for now
+
 [08/05/21]
 -Implemented Play Playlist mode
 

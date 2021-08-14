@@ -151,33 +151,36 @@ class EditorState{
 		};
 		this.add("hud", butt);
 
-		//Load Button
-		butt = new Button(10, 290, 100, 35);
-		butt.add(printText(
-			"Load", "arcade", 0x000000, 1, 7, 8
-		));
+		
+
+		//Import/Export buttons
+		butt = new Button(2, 440, 96, 36);
+		butt.addCentered(printText("Export", "arcade", 0x000000, 1));
 		butt.onClick = function(){
-			game.push(new LevelSelectState(false, "load"));
+			// state.exportLevel();
+			game.push(state.createImportExportDialogue(false));
 		};
 		this.add("hud", butt);
 
-		//Import/Export buttons
-		butt = new Button(10, 400, 100, 35);
-		butt.add(printText(
-			"Import", "arcade", 0x000000, 1, 7, 8
-		));
+		butt = new Button(2, 480, 96, 36);
+		butt.addCentered(printText("Import", "arcade", 0x000000, 1));
 		butt.onClick = function(){
 			game.push(state.createImportExportDialogue(true));
 		}
 		this.add("hud", butt);
 
-		butt = new Button(10, 445, 100, 35);
-		butt.add(printText(
-			"Export", "arcade", 0x000000, 1, 7, 8
-		));
+		//Save/Load Button
+		butt = new Button(102, 440, 70, 36);
+		butt.addCentered(printText("Save", "arcade", 0x000000, 1, 7, 8));
 		butt.onClick = function(){
-			// state.exportLevel();
-			game.push(state.createImportExportDialogue(false));
+			game.push(new LevelSelectState(false, "save"));
+		};
+		this.add("hud", butt);
+
+		butt = new Button(102, 480, 70, 36);
+		butt.addCentered(printText("Load", "arcade", 0x000000, 1, 7, 8));
+		butt.onClick = function(){
+			game.push(new LevelSelectState(false, "load"));
 		};
 		this.add("hud", butt);
 

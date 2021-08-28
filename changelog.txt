@@ -1,3 +1,15 @@
+[08/27/21]
+-Added experimental playlist feature
+    -Levels with "playlist/name" format will automatically be
+     put in a playlist
+    -Levels without a slash "/" in its name will not be put
+     in a playlist
+-Speed Blocks now play the proper sound when hit.
+-Speed Blocks now obey the speed limit.
+-Sequence Blocks are now darkened when they are locked
+-Changed Paddle's death animation
+-Updated Scatter Bomb Block's sprite
+
 [08/13/21]
 -Added ability to save custom levels
 -Play Playlist mode is temporarily disabled for now

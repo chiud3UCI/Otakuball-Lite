@@ -199,6 +199,7 @@ let recursive_texture_names = [
 		"unification",
 		"barrier_brick",
 		"laser_gate",
+		"brick_scatter",
 	]],
 
 	["paddles/", [
@@ -206,6 +207,7 @@ let recursive_texture_names = [
 		"paddles",
 		"frozen_paddle",
 		"protect_outline",
+		"paddle_white",
 	]],
 
 	["balls/", [
@@ -319,7 +321,8 @@ let recursive_sound_names = [
 		"gate_enter_2",
 		"invisible_reveal",
 		"ultraviolet_pop",
-		
+		"brick_speed_up",
+		"brick_speed_down",	
 	]],
 	["ball/", [
 		"ball_generator",
@@ -594,6 +597,7 @@ media.processTextures = function(){
 	partition("snapper", "snapper");
 	partition("bulk", "brick_bulk");
 	partition("unification", "brick_unification");
+	partition("brick_scatter", "brick_scatter");
 	//also create an invisible brick texture
 	this.textures["brick_invis"] = this.textures["brick_main_5_20"];
 
@@ -696,6 +700,8 @@ media.processTextures = function(){
 	partition("explosion_regular", "det_smoke_normal", 24, 24);
 	partition("explosion_freeze", "det_smoke_freeze", 24, 24);
 	partition("explosion_mega", "det_smoke_neo", 32, 32);
+
+	partition("brick_scatter", "brick_scatter_explosion", 48, 24);
 
 	//whiskey bubbles
 	rects = [
@@ -957,6 +963,13 @@ media.createAnimations = function(){
 	for (let i = 0; i < 3; i++)
 		ani2[i] = `brick_split_${5+i}_2`;
 	this.animations["split_blue_right"] = ani2;
+
+	//scatter bomb brick glow
+	create("scatter_glow", "brick_scatter", 0, 0, 8, 1);
+	//scatter bomb brick spawn
+	create("scatter_spawn", "brick_scatter", 0, 1, 8, 1);
+	//scatter bomb brick explosion
+	create("scatter_explosion", "brick_scatter_explosion", 0, 1, 5, 1);
 
 	//menacer coating
 	for (let i = 0; i < 3; i++){

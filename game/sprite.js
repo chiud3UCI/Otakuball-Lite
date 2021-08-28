@@ -3,7 +3,7 @@
  * using Sprite.clone()
  * @param {Sprite} obj - instance of Sprite or Sprite Subclasses
  * @param {function} currentClass - pass the current class here
- * @param {any[]} args - pass the arguments here
+ * @param {any[]} args - pass the arguments variable here
  */
 function setConstructorInfo(obj, currentClass, args){
 	obj._constructorInfo = {
@@ -245,6 +245,11 @@ class Sprite extends PIXI.Sprite{
 			this.isAnimating = false;
 			if (ani.onCompleteCustom)
 				ani.onCompleteCustom();
+		}
+
+		ani.onFrameChange = function(){
+			if (ani.onFrameChangeCustom)
+				ani.onFrameChangeCustom(ani.currentFrame);
 		}
 
 		if (playNow)

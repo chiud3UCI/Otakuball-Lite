@@ -148,6 +148,7 @@ var brickData = {
 		* 	DO NOT modify the order of existing bricks. *
 		*************************************************/
 
+		//new experimental b ricks
 		let other2 = [
 			[7, 3, "FuseBrick", []],
 			[8, 6, "ResetBrick", [0]],
@@ -158,11 +159,8 @@ var brickData = {
 			[12, 20, "CometBrick", ["up"]],
 			[12, 21, "CometBrick", ["down"]],
 			[6, 20, "SlimeBrick", []],
-			[7, 7, "RainbowDetonatorBrick", []],
+			[12, 22, "ScatterBombBrick", []],
 		];
-
-		//TODO:
-		let lasergate = [];
 
 		let allGroups = [
 			["normal", normal],

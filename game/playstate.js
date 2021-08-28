@@ -1229,7 +1229,8 @@ class PlayState{
 				remaining++;
 		}
 
-		if (this.mode == "play" && remaining == 0)
+		//win the level if there are no more bricks
+		if ((this.mode == "playlist" || this.mode == "play") && remaining == 0)
 			this.setState("victory");
 
 		//update other info
@@ -1503,7 +1504,7 @@ PlayState.states = {
 			this.ps = ps;
 			ps.lives--;
 
-			this.timer = 3000;
+			this.timer = 2000;
 
 			this.paddleExplode = false;
 
@@ -1520,7 +1521,7 @@ PlayState.states = {
 				growAccel: -0.00075,
 				growVel: 0.25,
 				shakeTimer: 0,
-				shakeTimerMax: 500,
+				shakeTimerMax: 250,
 				shakeMag: 3,
 				shakeDelayMax: 30,
 				shakeDelay: 0
@@ -1532,11 +1533,8 @@ PlayState.states = {
 			glow.uniforms.mag = 0;
 			this.glowShader = glow;
 
-			let deathCircles = new PIXI.Graphics();
-			deathCircles.position.set(paddle.x, paddle.y);
-			deathCircles.time = 0;
-			ps.particles.addChild(deathCircles);
-			this.deathCircles = deathCircles;
+			let deathHalves = [];
+			this.deathHalves = deathHalves;
 
 			playSound("paddle_death_1");
 		}
@@ -1552,9 +1550,10 @@ PlayState.states = {
 			let ps = this.ps;
 
 			let dp = this.deathPaddle;
-			let dc = this.deathCircles;
+			let dh = this.deathHalves;
 
 			if (!this.paddleExplode){
+				//paddle shrink
 				let w = dp.paddleWidth;
 				if (w > 40){
 					w += delta*dp.growVel + delta*delta*dp.growAccel;
@@ -1562,6 +1561,7 @@ PlayState.states = {
 					w = Math.max(40, w);
 					dp._setWidth(w);
 				}
+				//paddle shake
 				else{
 					dp.shakeTimer += delta;
 					dp.shakeDelay -= delta;
@@ -1579,33 +1579,28 @@ PlayState.states = {
 						this.paddleExplode = true;
 						dp.visible = false;
 						playSound("paddle_death_2");
+						//create death particles and add them directly to ps.particles
+						let [x0, y0] = dp.origin;
+						for (let i = 0; i < 2; i++){
+							let sign = (i == 0) ? -1 : 1;
+							let half = new Particle("paddle_3_0_left", x0 + sign * 10, y0);
+							if (i == 1)
+								half.rotation = Math.PI;
+							half.vx = sign * 1;
+							half.timer = 100; //particle will not die until state becomes "play"
+							ps.particles.addChild(half);
+							dh.push(half);
+						}
 					}
 				}
+				
+				//gradually turn white while shrinking/shaking
 				let u = this.glowShader.uniforms;
 				u.mag = Math.min(1, u.mag + delta/600);
 			}
-			else{
-				let dc = this.deathCircles;
-				dc.clear().beginFill(0xFFFFFF);
-				dc.time += delta;
-				let t = dc.time;
-				//fast straight circles
-				let mag1 = t*0.2 + t*t*0.001;
-				for (let i = 0; i < 8; i++){
-					let rad = 2*Math.PI * i/8;
-					let [x, y] = Vector.rotate(mag1, 0, rad);
-					dc.drawCircle(x, y, 8);
-				}
-				//slow spiral glowing circles
-				let mag2 = t*0.6;
-				for (let i = 0; i < 8; i++){
-					let rad = 2*Math.PI * i/8;
-					rad += (0.5/8) + t * 0.001;
-					let r = 8 + t*0.03;
-					let [x, y] = Vector.rotate(mag2, 0, rad);
-					dc.drawCircle(x, y, r);
-				}
-			}
+			//update death particles
+			for (let half of dh)
+				half.update(delta);
 
 			this.timer -= delta;
 			if (this.timer <= 0){
@@ -1620,6 +1615,129 @@ PlayState.states = {
 			return false;
 		}
 	},
+
+	// death: class{
+	// 	constructor(ps){
+	// 		this.ps = ps;
+	// 		ps.lives--;
+
+	// 		this.timer = 3000;
+
+	// 		this.paddleExplode = false;
+
+	// 		ps.paddles.visible = false;
+	// 		ps.balls.visible = false;
+
+	// 		let paddle = ps.paddles.children[0];
+	// 		let deathPaddle = new Paddle();
+	// 		deathPaddle.setPos(paddle.x, paddle.y);
+	// 		ps.particles.addChild(deathPaddle);
+	// 		this.deathPaddle = deathPaddle;
+	// 		Object.assign(deathPaddle, {
+	// 			origin: [paddle.x, paddle.y],
+	// 			growAccel: -0.00075,
+	// 			growVel: 0.25,
+	// 			shakeTimer: 0,
+	// 			shakeTimerMax: 500,
+	// 			shakeMag: 3,
+	// 			shakeDelayMax: 30,
+	// 			shakeDelay: 0
+	// 		});
+
+	// 		let glow = media.shaders.paddleGlow;
+	// 		deathPaddle.filters = [glow];
+	// 		glow.uniforms.color = [1, 1, 1];
+	// 		glow.uniforms.mag = 0;
+	// 		this.glowShader = glow;
+
+	// 		let deathCircles = new PIXI.Graphics();
+	// 		deathCircles.position.set(paddle.x, paddle.y);
+	// 		deathCircles.time = 0;
+	// 		ps.particles.addChild(deathCircles);
+	// 		this.deathCircles = deathCircles;
+
+	// 		playSound("paddle_death_1");
+	// 	}
+	// 	destructor(){
+	// 		let ps = this.ps;
+
+	// 		ps.paddles.visible = true;
+	// 		ps.balls.visible = true;
+	// 		ps.particles.removeChild(this.deathPaddle);
+	// 		ps.particles.removeChild(this.deathCircles);
+	// 	}
+	// 	update(delta){
+	// 		let ps = this.ps;
+
+	// 		let dp = this.deathPaddle;
+	// 		let dc = this.deathCircles;
+
+	// 		if (!this.paddleExplode){
+	// 			let w = dp.paddleWidth;
+	// 			if (w > 40){
+	// 				w += delta*dp.growVel + delta*delta*dp.growAccel;
+	// 				dp.growVel += delta*dp.growAccel;
+	// 				w = Math.max(40, w);
+	// 				dp._setWidth(w);
+	// 			}
+	// 			else{
+	// 				dp.shakeTimer += delta;
+	// 				dp.shakeDelay -= delta;
+	// 				if (dp.shakeDelay <= 0){
+	// 					dp.shakeDelay = dp.shakeDelayMax;
+	// 					let [x0, y0] = dp.origin;
+	// 					let ratio = dp.shakeTimer / dp.shakeTimerMax;
+	// 					let mag = ratio * dp.shakeMag;
+	// 					let rad = Math.random() * 2 * Math.PI;
+	// 					let [dx, dy] = Vector.rotate(mag, 0, rad);
+	// 					dp.setPos(x0+dx, y0+dy);
+	// 				}
+
+	// 				if (dp.shakeTimer >= dp.shakeTimerMax){
+	// 					this.paddleExplode = true;
+	// 					dp.visible = false;
+	// 					playSound("paddle_death_2");
+	// 				}
+	// 			}
+	// 			let u = this.glowShader.uniforms;
+	// 			u.mag = Math.min(1, u.mag + delta/600);
+	// 		}
+	// 		else{
+	// 			let dc = this.deathCircles;
+	// 			dc.clear().beginFill(0xFFFFFF);
+	// 			dc.time += delta;
+	// 			let t = dc.time;
+	// 			//fast straight circles
+	// 			let mag1 = t*0.2 + t*t*0.001;
+	// 			for (let i = 0; i < 8; i++){
+	// 				let rad = 2*Math.PI * i/8;
+	// 				let [x, y] = Vector.rotate(mag1, 0, rad);
+	// 				dc.drawCircle(x, y, 8);
+	// 			}
+	// 			//slow spiral glowing circles
+	// 			let mag2 = t*0.6;
+	// 			for (let i = 0; i < 8; i++){
+	// 				let rad = 2*Math.PI * i/8;
+	// 				rad += (0.5/8) + t * 0.001;
+	// 				let r = 8 + t*0.03;
+	// 				let [x, y] = Vector.rotate(mag2, 0, rad);
+	// 				dc.drawCircle(x, y, r);
+	// 			}
+	// 		}
+
+	// 		this.timer -= delta;
+	// 		if (this.timer <= 0){
+	// 			if (ps.lives < 0)
+	// 				ps.setState("gameover");
+	// 			else{
+	// 				ps.updateLivesDisplay(ps.lives);
+	// 				ps.setState("respawn");
+	// 			}
+	// 		}
+
+	// 		return false;
+	// 	}
+	// },
 
 	gameover: class{
 		constructor(ps){

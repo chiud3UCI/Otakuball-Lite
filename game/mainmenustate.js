@@ -102,9 +102,8 @@ class MainMenuState{
 			console.log("Campaign not implemented yet");
 		}, true);
 		makeButton("menu_button_1", "Play Playlist", function(){
-			// game.push(new LevelSelectState(true, "play"));
-			console.log("Playlist temporarily  disabled");
-		}, true);
+			game.push(new LevelSelectState(true, "play"));
+		});
 		makeButton("menu_button_2", "Play Level", function(){
 			game.push(new LevelSelectState(false, "play"));
 		});

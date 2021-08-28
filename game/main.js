@@ -252,15 +252,17 @@ function setup(){
 	//load default levels & playlists from loaded assets
 	let list = PIXI.Loader.shared.resources.default_levels.data;
 	levels.default = new FileDatabase(list); 
+	//the playlist FileDatabse will be generated in LevelSelectState instead
+	
 	// levels.default.list = PIXI.Loader.shared.resources.default_levels.data;
 	// for (let [name, level] of levels.default.list){
 	// 	levels.default.lookup[name] = level;
 	// }
 
-	playlists.default.list = PIXI.Loader.shared.resources.default_playlists.data;
-	for (let [name, playlist] of playlists.default.list){
-		playlists.default.lookup[name] = playlist;
-	}
+	// playlists.default.list = PIXI.Loader.shared.resources.default_playlists.data;
+	// for (let [name, playlist] of playlists.default.list){
+	// 	playlists.default.lookup[name] = playlist;
+	// }
 
 	//load user levels & playlists from localStorage
 	//TODO: make both lookups a map?

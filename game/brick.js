@@ -47,7 +47,8 @@ function initBrickClasses(){
 		FuseBrick,
 		ResetBrick,
 		SlimeBrick,
-		RainbowDetonatorBrick,
+		ScatterBombBrick,
+		ScatterBrick,
 		LaserWallBrick,
 	};
 }
@@ -766,15 +767,16 @@ class SpeedBrick extends Brick{
 		this.fast = fast;
 		this.deltaSpeed = fast ? 0.05 : -0.05;
 
+		this.hitSound = fast ? "brick_speed_up" : "brick_speed_down";
+		this.deathSound = this.hitSound;
+
 		this.brickType = "speed";
 	}
 
 	onSpriteHit(obj, norm, mag){
 		super.onSpriteHit(obj, norm, mag);
 		if (obj.gameType == "ball"){
-			let spd = obj.getSpeed();
-			spd = Math.max(0, spd + this.deltaSpeed);
-			obj.setSpeed(spd);
+			obj.setSpeed2(obj.getSpeed() + this.deltaSpeed);
 		}
 	}
 
@@ -2186,17 +2188,33 @@ class SequenceBrick extends Brick{
 		this.brickType = "sequence";
 	}
 
-	takeDamage(damage, strength){
-		this.armor = 0;
-		for (let br of game.get("bricks")){
-			if (br.brickType == "sequence"){
-				if (br.sequenceId < this.sequenceId){
-					this.armor = 1;
-					break;
-				}
+	destructor(){
+		super.destructor();
+		SequenceBrick.updateBricks(game.get("bricks"));
+	}
+
+	static activate(playstate){
+		SequenceBrick.updateBricks(playstate.get("bricks"));
+	}
+
+	//change every sequence brick's armor and tint based
+	//on which sequence bricks remain
+	static updateBricks(bricks){
+		let sequence = [];
+		let min_id = 4;
+		for (let br of bricks){
+			if (br instanceof SequenceBrick && !br.isDead()){
+				sequence.push(br);
+				min_id = Math.min(br.sequenceId, min_id);
 			}
 		}
-		super.takeDamage(damage, strength);
+		for (let br of sequence){
+			let delta = br.sequenceId - min_id;
+			br.armor = (delta == 0) ? 0 : 1;
+			let mag = (delta == 0) ? 0 : 128; //should be in range (0, 255)
+			br.tint = 0xFFFFFF - (mag * 0x010101);
+		}
+
 	}
 }
 
@@ -2796,52 +2814,90 @@ class SlimeBrick extends Brick{
 	}
 }
 
-class RainbowDetonatorBrick extends Brick{
+class ScatterBombBrick extends Brick{
 	constructor(x, y){
-		super("brick_main_7_7", x, y);
-		this.brickType = "rainbowdetonator";
+		super("brick_main_12_22", x, y);
+
+		this.addAnim("glow", "scatter_glow", 1/8, true, true);
+
+		this.brickType = "scatterbomb";
 	}
 
 	onDeath(){
 		super.onDeath();
-		let exp = new Explosion(
-			this.x,
-			this.y,
-			32*3-1,
-			16*3-1,
-		);
 
-		let hitBlacklist = generateLookup([
-			"normal",
-		]);
+		let blast = new Particle(null, this.x, this.y);
+		blast.addAnim("blast", "scatter_explosion", 1/2, false, true);
+		blast.dieOnAniFinish = true;
+		game.emplace("particles", blast);
 
-		let transformBlacklist = generateLookup([
-			"normal",
-			"rainbowdetonator",
-		]);
-
-		exp.canHit = function(sprite){
-			if (!(sprite instanceof Brick))
-				return false;
-			return !hitBlacklist[sprite.brickType];
-		};
-
-		exp.onSpriteHit = function(obj, norm, mag){
-			Explosion.prototype.onSpriteHit.call(this, obj, norm, mag);
-			if (!obj.isDead())
-				return;
-			if (!(obj instanceof Brick))
-				return;
-			if (transformBlacklist[obj.brickType])
-				return;
-			let br = new NormalBrick(obj.x, obj.y);
-			game.emplace("bricks", br);
-		};
-
+		//Any brick the Explosion hits will be placed into an array
+		//Then new bricks will spawn at the location of those bricks
+		let exp = new Explosion( this.x, this.y, 32*3-1, 16*3-1);
 		game.top.emplaceCallback(50, () => {
 			game.emplace("projectiles", exp);
 		});
+
+		let delay = 4.2 * 1000/30; //spawn bricks just before the end of the explosion animation
+		let [i0, j0] = getGridPos(this.x, this.y);
+		let grid = game.top.brickGrid;
+		game.top.emplaceCallback(delay, () => {
+			for (let di = -1; di <= 1; di++){
+				for (let dj = -1; dj <= 1; dj++){
+					let i = i0 + di;
+					let j = j0 + dj;
+					if (boundCheck(i, j) && grid.isEmpty(i, j)){
+						let [x, y] = getGridPosInv(i, j);
+						game.emplace("bricks", new ScatterBrick(x, y));
+						grid.reserve(i, j);
+					}
+				}
+			}
+		});
+
+		// let hitBlacklist = generateLookup([
+		// 	"normal",
+		// ]);
+
+		// let transformBlacklist = generateLookup([
+		// 	"normal",
+		// 	"scatterbomb",
+		// ]);
+
+		// exp.canHit = function(sprite){
+		// 	if (!(sprite instanceof Brick))
+		// 		return false;
+		// 	return !hitBlacklist[sprite.brickType];
+		// };
+
+		// exp.onSpriteHit = function(obj, norm, mag){
+		// 	Explosion.prototype.onSpriteHit.call(this, obj, norm, mag);
+		// 	if (!obj.isDead())
+		// 		return;
+		// 	if (!(obj instanceof Brick))
+		// 		return;
+		// 	if (transformBlacklist[obj.brickType])
+		// 		return;
+		// 	let br = new NormalBrick(obj.x, obj.y);
+		// 	game.emplace("bricks", br);
+		// };
 		
+	}
+}
+
+class ScatterBrick extends Brick{
+	constructor(x, y){
+		super("brick_invis", x, y);
+		this.intangible = true;
+		let ani = this.addAnim("spawn", "scatter_spawn", 1/4, false, true);
+		ani.onCompleteCustom = () => {
+			this.setTexture("brick_main_12_23");
+		};
+		ani.onFrameChangeCustom = (index) => {
+			if (index == 4)
+				this.intangible = false;
+		};
+		this.brickType = "scatter";
 	}
 }
 

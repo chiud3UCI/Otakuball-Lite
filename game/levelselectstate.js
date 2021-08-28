@@ -48,7 +48,7 @@ class LevelSelectState{
 		//TODO: make multiple panel instances
 		this.panels = [];
 		for (let i = 0; i < 2; i++){
-			let panel = new LSS_Panel(base, !!i);
+			let panel = new LSS_Panel(base, isPlaylist, !!i);
 			base.addChild(panel);
 			panel.fileList.initMask(); //called here after everything is attached
 			this.panels.push(panel);
@@ -117,7 +117,7 @@ class LevelSelectState{
 		base.addChild(backButton);
 
 		//create Play/Load/Save button
-		this.initPlayButton(
+		this.initButtons(
 			base.width - bw*2 - 16*2,
 			base.height - bh - 16,
 			bw,
@@ -128,7 +128,7 @@ class LevelSelectState{
 		let dividers = new PIXI.Graphics();
 		base.addChild(dividers);
 		//vertical
-		let x = base.width/2 - 20;
+		let x = base.width/2;
 		let y = 8;
 		let height = base.height - 90 - y*2; //gap from horizontal line
 		
@@ -152,89 +152,26 @@ class LevelSelectState{
 			panel.textBox.input.destroy();
 	}
 
-	initPlayButton(x, y, w, h){
+	initButtons(x, y, w, h){
 		let butt = new Button(x, y, w, h, 0xA0);
 		butt.hoverGuard = false;
 		this.base.addChild(butt);
 
 		if (this.mode == "play"){
 			butt.addCentered(printText("Play", "arcade", 0x000000, 1));
-			butt.onClick = () => {
-				let panel = this.panel;
-				let filename = panel.textBox.input.text;
-				let arr = panel.database.get(filename);
-				if (!arr)
-					panel.textBox.setMessage("Level does not exist!", "red");
-				else
-					game.push(new PlayState("play", arr[1]));
-			};
+			butt.onClick = () => {this.panel.onPlay();};
 		}
 		else if (this.mode == "load"){
 			butt.addCentered(printText("Load", "arcade", 0x000000, 1));
-			butt.onClick = () => {
-				let panel = this.panel;
-				let filename = panel.textBox.input.text;
-				let arr = panel.database.get(filename);
-				if (!arr)
-					panel.textBox.setMessage("Level does not exist!", "red");
-				else{
-					let editorstate = game.getState(-2);
-					editorstate.loadLevel(arr[1]);
-					game.pop();
-				}
-			};
+			butt.onClick = () => {this.panel.onLoad();};
 		}
 		else if (this.mode == "save"){
 			butt.addCentered(printText("Save", "arcade", 0x000000, 1));
-			butt.onClick = () => {
-				/* TODO: change levels.user.lookup to a Map<name, [name, level, ...];
-					1. add level to level list (handle override)
-					2. add level to level lookup
-					3. add level button to FileList
-					4. resize both FileList and its ScrollBar
-					5. save all levels to localStorage.user_levels
-				*/
-				let panel = this.panel;
-				let db = panel.database;
-				let name = panel.textBox.input.text;
-
-				if (name.length == 0){
-					panel.textBox.setMessage("Invalid Name!", "red");
-					return;
-				}
-
-
-				let editorstate = game.getState(-2);
-				let level = editorstate.createLevel();
-
-				let isNew = db.indexOf(name) < 0;
-				db.set(name, level);
-				//recreate all the buttons in FileList
-				if (isNew){
-					let fileList = panel.fileList;
-					fileList.createListButtons();
-					fileList.scrollBar.resize();
-
-					let index = db.indexOf(name);
-					fileList.selectButton(index);
-					fileList.seek(index);
-
-					panel.selectIndex(index);
-				}
-				else{
-					panel.preview.setLevel(name, level, true);
-				}
-
-				db.save("user_levels");
-
-				//cannot call playSound() here because SoundWrappers are not being updated
-				PIXI.sound._sounds["board_saved"].play();
-				panel.textBox.setMessage("Level Saved!", "green");
-			};
+			butt.onClick = () => {this.panel.onSave();};
 		}
 	}
 
-	//when a new state gets pushed over
+	//when a new state gets pushed on top of this state
 	onExit(){
 		for (let panel of this.panels)
 			panel.hideTextInput();
@@ -257,28 +194,42 @@ class LevelSelectState{
 
 //LSS is short for LevelSelectState
 class LSS_Panel extends PIXI.Container{
-	constructor(base, isUser){
+	constructor(base, isPlaylist, isUser){
 		super();
 		this.base = base;
+		this.isPlaylist = isPlaylist;
 		this.isUser = isUser;
-		//debug graphic
-		// let gr = new PIXI.Graphics()
-		// 	.beginFill(0xFF0000)
-		// 	.drawRect(0, 0, base.width, base.height);
-		// this.addChild(gr);
 
 		this.selectedIndex = null;
 
-		let database = isUser ? levels.user : levels.default;
-		// this.file_list = data.list;
-		// this.file_lookup = data.lookup;
-		this.database = database;
+		if (isPlaylist){
+			let list = isUser ? levels.user.list : levels.default.list;
+			let map = new Map();
+			for (let arr of list){
+				let name = arr[0];
+				let tokens = name.split("/");
+				if (tokens.length == 1)
+					continue;
+				let [playlist, level] = tokens;
+				if (!map.has(playlist))
+					map.set(playlist, [name, []]);
+				map.get(playlist)[1].push(arr);
+			}
+			//the list will be sorted due to Map keys being ordered by insertion order
+			//key=name, value=[name, level[]]
+			this.database = new FileDatabase(Array.from(map.entries()), map);
+		}
+		else
+			this.database = isUser ? levels.user : levels.default;
 
 		//left widget
 		this.fileList = new LSS_FileList(this);
 		this.addChild(this.fileList);
 		//right widget
-		this.preview = new LSS_LevelPreview(this);
+		if (isPlaylist)
+			this.preview = new LSS_PlaylistPreview(this);
+		else
+			this.preview = new LSS_LevelPreview(this);
 		this.addChild(this.preview);
 		//bottom left textbox
 		this.textBox = new LSS_TextBox(this);
@@ -294,9 +245,81 @@ class LSS_Panel extends PIXI.Container{
 		if (index === null)
 			this.preview.clear();
 		else{
-			let [name, level] = this.database.at(index);
-			this.preview.setLevel(name, level);
+			let [name, object] = this.database.at(index);
+			if (this.isPlaylist)
+				this.preview.setPlaylist(object);
+			else
+				this.preview.setLevel(name, object);
 		}
+	}
+
+	onPlay(){
+		let filename = this.textBox.input.text;
+		let arr = this.database.get(filename);
+		if (!arr)
+			this.textBox.setMessage("Level does not exist!", "red");
+		else{
+			if (this.isPlaylist){
+				let list = arr[1].map(x => x[1]);
+				game.push(new PlayState("playlist", list, 0));
+			}
+			else
+				game.push(new PlayState("play", arr[1]));
+		}
+	}
+
+	onLoad(){
+		let filename = this.textBox.input.text;
+		let arr = this.database.get(filename);
+		if (!arr)
+			this.textBox.setMessage("Level does not exist!", "red");
+		else{
+			let editorstate = game.getState(-2);
+			editorstate.loadLevel(arr[1]);
+			game.pop();
+		}
+	}
+
+	onSave(){
+		let db = this.database;
+		let name = this.textBox.input.text;
+
+		if (name.length == 0){
+			this.textBox.setMessage("Invalid Name!", "red");
+			return;
+		}
+
+		if (name[0] === "/" || name.indexOf("/") === name.length-1){
+			this.textBox.setMessage("Invalid Name!", "red");
+			return;
+		}
+
+		let editorstate = game.getState(-2);
+		let level = editorstate.createLevel();
+
+		let isNew = db.indexOf(name) < 0;
+		db.set(name, level);
+		//recreate all the buttons in FileList
+		if (isNew){
+			let fileList = this.fileList;
+			fileList.createListButtons();
+			fileList.scrollBar.resize();
+
+			let index = db.indexOf(name);
+			fileList.selectButton(index);
+			fileList.seek(index);
+
+			this.selectIndex(index);
+		}
+		else{
+			this.preview.setLevel(name, level, true);
+		}
+
+		db.save("user_levels");
+
+		//cannot call playSound() here because SoundWrappers are not being updated
+		PIXI.sound._sounds["board_saved"].play();
+		this.textBox.setMessage("Level Saved!", "green");
 	}
 
 	hideTextInput(){
@@ -352,7 +375,7 @@ class LSS_FileList extends PIXI.Container{
 		this.textdim = textdim;
 
 		//how many pixels high each button is
-		let lh = 16;
+		let lh = 18;
 		this.lineHeight = lh; 
 		//how many lines can fit in the textbox
 		this.rowHeight = Math.floor(text_h / lh);
@@ -477,12 +500,14 @@ class LSS_FileList extends PIXI.Container{
 class LSS_FileButton extends PIXI.Container{
 	constructor(fileList, str, x, y, w, h, index){
 		super();
+		this.position.set(x, y);
+
 		this.index = index;
 		this.fileList = fileList;
 
 		let highlight = new PIXI.Graphics()
 			.beginFill(0xFFFF00)
-			.drawRect(x, y, w, h);
+			.drawRect(0, 0, w, h);
 		//setting highlight.visible = false
 		//will make the button unselectable
 		highlight.alpha = 0;
@@ -490,10 +515,12 @@ class LSS_FileButton extends PIXI.Container{
 		this.highlight = highlight;
 
 		let text = new PIXI.Text(str, {
+			fontFamily: "Courier New",
+			fontWeight: "bold",
 			fontSize: 18,
 			fill: 0x000000
 		});
-		text.position.set(x, y);
+		text.position.set(0, -2);
 		this.addChild(text);
 
 		this.interactive = true;
@@ -735,8 +762,33 @@ class LSS_LevelPreview extends PIXI.Container{
 
 }
 
-class LSS_PlaylistPreview{
+class LSS_PlaylistPreview extends PIXI.Container{
+	constructor(panel){
+		super();
+		this.panel = panel;
+		let base = panel.base;
+		this.position.set(base.width/2 + 20, 20);
+		this.addChild(new PIXI.Graphics()
+			.beginFill(0xFFFFFF)
+			.drawRect(0, 0, 320, 400)
+		);
+		let text = new PIXI.Text("Select a Playlist", {
+			fontFamily: "Courier New",
+			fontSize: 18,
+			fontWeight: "bold",
+		});
+		text.position.set(5, 5);
+		this.addChild(text);
+		this.playlistPreview = text;
+	}
 
+	setPlaylist(playlist){
+		let names = playlist[1].map(arr => arr[0]);
+		names = names.map(str => str.substring(str.indexOf("/")+1));
+		this.playlistPreview.text = names.join("\n");
+	}
+
+	
 }
 
 class LSS_TextBox extends PIXI.Container{
@@ -824,11 +876,18 @@ class LSS_TextBox extends PIXI.Container{
 
 //keeps track of stuff
 class FileDatabase{
-	constructor(list){
-		this.list = list;
-		this.map = new Map();
-		for (let arr of list)
-			this.map.set(arr[0], arr);
+	constructor(list, map=null){
+		//when isPlaylist is true, dynamically group levels into playlists
+		if (map){
+			this.list = list;
+			this.map = map;
+		}
+		else{
+			this.list = list;
+			this.map = new Map();
+			for (let arr of list)
+				this.map.set(arr[0], arr);
+		}
 	}
 
 	has(name){
@@ -857,6 +916,14 @@ class FileDatabase{
 		map.set(name, newArr);
 	}
 
+	delete(name){
+		if (!this.map.has(name))
+			return false;
+		this.list.splice(this.list.findIndex(arr => arr[0] == name), 1);
+		this.map.delete(name);
+		return true;
+	}
+
 	at(index){
 		return this.list[index];
 	}
@@ -870,305 +937,3 @@ class FileDatabase{
 		localStorage.setItem(key, string);
 	}
 }
-
-/*
-class LevelSelectState2{
-	//modes: ["play", "save", "load"]
-	constructor(isPlaylist, mode){
-		this.isPlaylist = isPlaylist;
-		this.mode = mode;
-		this.windowTitle = isPlaylist ? "Playlist Select" : "Level Select";
-
-		//do we need multiple layers?
-		let stage = new PIXI.Container();
-		this.stage = stage;
-
-		let bg = new PIXI.Graphics();
-		bg.beginFill(0xAAAAAA)
-			.drawRect(0, 0, DIM.w, DIM.h);
-		stage.addChild(bg);
-
-		this.selectedIndex = null;
-
-		let butt;
-		//back button is universal
-		butt = new Button(DIM.w - 100, DIM.h - 50, 80, 35);
-		butt.addCentered(printText("Back", "arcade", 0x000000, 1));
-		butt.onClick = () => {
-			game.pop();
-		};
-		this.add(butt);
-
-		this.initLeftWidget();
-
-		if (isPlaylist){
-			this.createPlaylistSelectButtons();
-			this.initPlaylistPreview();
-		}
-		else{
-			this.createLevelSelectButtons();
-			this.initLevelPreview();
-		}
-	}
-
-	createPlaylistSelectButtons(){
-		let butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
-		butt.addCentered(printText("Play", "arcade", 0x000000, 1));
-		butt.onClick = () => {
-			let index = this.selectedIndex;
-			if (index === null)
-				return;
-			let playlist = this.default_list[index][1];
-			playlist = PlayState.convertPlaylist(false, playlist);
-			game.push(new PlayState("playlist", playlist, 0));
-		};
-		this.add(butt);
-	}
-
-	createLevelSelectButtons(){
-		if (this.mode == "load"){
-			//load button
-			let butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
-			butt.addCentered(printText("Load", "arcade", 0x000000, 1));
-			butt.onClick = () => {
-				let index = this.selectedIndex;
-				if (index === null)
-					return;
-				let level = this.default_list[index][1];
-				let editorstate = game.getState(-2);
-				editorstate.loadLevel(level);
-				game.pop();
-			};
-			this.add(butt);
-		}
-		else if (this.mode == "play"){
-			//play button
-			let butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
-			butt.addCentered(printText("Play", "arcade", 0x000000, 1));
-			butt.onClick = () => {
-				let index = this.selectedIndex;
-				if (index === null)
-					return;
-				let level = this.default_list[index][1];
-				game.push(new PlayState("play", level));
-			};
-			this.add(butt);
-		}
-	}
-
-	add(obj){
-		this.stage.addChild(obj);
-	}
-
-	//text area causes a bunch of problems
-	initPlaylistPreviewOld(){
-		let textArea = new PIXI.TextInput({
-			input: {
-				fontSize: "16px",
-				width: "250px",
-				height: "400px",
-				color: 0x000000,
-				multiline: true,
-			},
-			box: {
-				fill: 0xFFFFFF,
-				stroke: {
-					color: 0x000000,
-					width: 2,
-				}
-			}
-		});
-		textArea.x = DIM.w/2 + 50;
-		textArea.y = 100;
-		textArea.substituteText = false;
-		textArea.text = "hello world";
-		textArea.htmlInput.readOnly = true;
-		//Note: ENABLE_RIGHT_CLICK is false in this state
-		this.playlistPreview = textArea;
-		this.add(textArea);
-	}
-
-	initPlaylistPreview(){
-		let cont = new PIXI.Container();
-		cont.position.set(DIM.w/2 + 50, 100);
-		cont.addChild(new PIXI.Graphics()
-			.beginFill(0xFFFFFF)
-			.drawRect(0, 0, 250, 400)
-		);
-		let text = new PIXI.Text("Select a Playlist", {
-			fontFamily: "Courier New",
-			fontSize: 16,
-			fontWeight: "bold",
-		});
-		text.position.set(5, 5);
-		cont.addChild(text);
-		this.playlistPreview = text;
-		this.add(cont);
-	}
-
-	setPlaylistPreview(index){
-		let preview = this.playlistPreview;
-		let playlist = this.default_list[index][1];
-		let str = playlist.join("\n");
-		preview.text = str;
-	}
-
-	initLevelPreview(){
-		this.preview = new PIXI.Container();
-		this.preview.position.set(500, 150);
-		this.preview.addChild(makeSprite("border"));
-		this.preview.addChild(new PIXI.Sprite()
-			.setTransform(8, 8));
-		this.add(this.preview);
-
-		this.previewCache = {};
-	}
-
-	generatePreview(level){
-		//board width and height
-		let bw = 16*13;
-		let bh = 8*32;
-		let preview = PIXI.RenderTexture.create(
-			{width: bw, height: bh});
-
-		let cont = new PIXI.Container();
-
-		let [color, tile] = level.bg;
-
-		let bg = new PIXI.Graphics()
-			.beginFill(color)
-			.drawRect(0, 0, bw, bh);
-		if (tile){
-			let sprite = new PIXI.TilingSprite(
-				media.textures[tile], DIM.boardw/2, DIM.boardh/2);
-			bg.addChild(sprite);
-		}
-		cont.addChild(bg);
-
-		for (let [i, j, id, patch] of level.bricks){
-			let x = j * 16;
-			let y = i * 8;
-			let tex = brickData.lookup[id].tex;
-			let sprite = makeSprite(tex, 1, x, y);
-			// renderer.render(sprite, preview);
-			cont.addChild(sprite);
-		}
-
-		renderer.render(cont, {renderTexture: preview});
-		return preview;
-	}
-
-	//cache generated previews
-	setPreview(index){
-		let preview = this.previewCache[index];
-		if (!preview){
-			let level = this.default_list[index][1];
-			preview = this.generatePreview(level);
-			this.previewCache[index] = preview;
-		}
-		this.preview.children[1].texture = preview;
-	}
-
-	selectIndex(index){
-		this.selectedIndex = index;
-		if (this.isPlaylist){
-			this.setPlaylistPreview(index);
-		}
-		else{
-			this.setPreview(index);
-		}
-	}
-
-	initLeftWidget(){
-		let widget = new PIXI.Container();
-		widget.position.set(100, 100);
-
-		let whiteBox = new PIXI.Graphics()
-			.beginFill(0xFFFFFF)
-			.drawRect(0, 0, 300, 400);
-		widget.addChild(whiteBox);
-
-		let leftList = new PIXI.Container();
-		widget.addChild(leftList);
-		let p = whiteBox.getGlobalPosition();
-		leftList.mask = new Mask(p.x, p.y, 300, 400);
-		this.leftList = leftList;
-
-		let default_list = this.isPlaylist ? playlists.default.list : levels.default.list;
-		this.default_list = default_list;
-		
-		this.allListButtons = [];
-		for (let [i, [name, level]] of default_list.entries()){
-			let y = i * 16;
-			let butt = new LevelButton(this, name, 0, y, 300, 16, i);
-			leftList.addChild(butt);
-			this.allListButtons.push(butt);
-		}
-
-		let listHeight = this.allListButtons.length * 16;
-		this.scrollHeight = Math.max(0, listHeight - 400);
-
-		let {x, y, width:w, height:h} = whiteBox.getLocalBounds();
-		let scrollBar = new ScrollBar(this, x+w+4, y, 18, h, h/4);
-		this.scrollBar = scrollBar;
-		widget.addChild(scrollBar);
-
-		this.add(widget);
-	}
-
-	//ratio is a value between [0, 1]
-	onScroll(ratio){
-		this.leftList.y = -this.scrollHeight * ratio;
-	}
-
-	//update scrollbar if leftList moved without touching the scrollbar
-	updateScrollBar(){
-		const y = this.leftList.y;
-		const ratio = -y / this.scrollHeight;
-		let bar = this.scrollBar;
-		bar.bar.y = ratio * bar.barMaxY;
-	}
-
-	//scrolling with keyboard buttons
-	keyboardScroll(delta){
-		function isPressed(str){
-			return keyboard.isPressed(keycode[str]);
-		}
-		let up = isPressed("UP") || isPressed("W");
-		let down = isPressed("DOWN") || isPressed("S");
-		if (!(up || down))
-			return;
-		//select next level that's below or up
-		let buttons = this.allListButtons;
-		let index = 0;
-		if (this.selectedIndex !== null)
-			index = this.selectedIndex + (down ? 1 : -1);
-		if (index < 0 || index >= buttons.length)
-			return;
-		buttons[index].pointerDown();
-		let leftList = this.leftList;
-		//make sure selected level is in view
-		let levelIndex = clamp(-leftList.y / 16, index - 25 + 1, index);
-		leftList.y = -levelIndex * 16;
-		this.updateScrollBar();
-	}
-
-	update(delta){
-		if (keyboard.isPressed(keycode.ESCAPE)){
-			game.pop();
-			return;
-		}
-		//scrolling with keyboard
-		this.keyboardScroll(delta);
-		
-		//scrolling with mouse wheel
-		if (mouse.scroll != 0){
-			let sign = mouse.scroll > 0 ? -1 : 1;
-			let y = this.leftList.y;
-			y = clamp(y + 4 * sign * 16, -this.scrollHeight, 0);
-			this.leftList.y = y;
-			this.updateScrollBar();
-		}
-	}
-}
-*/

@@ -1,26 +1,31 @@
+//TODO: use localStorage to keep track of cheats configuration?
 var cheats = {
-	enabled: false, //will enable cheats in Play Mode
-	_disable_pit: true,
-	_instant_powerups: true,
-	_fling_existing: false,
-	_show_forbidden: false,
-	_disable_powerup_spawning: false,
+	enabled: false, //set manually; will enable cheats in normal play
+	enabled2: false, //set by PlayState when testing a level
 
-	get disable_pit(){
-		return this.enabled && this._disable_pit;
+	flags: {
+		disable_pit: true,
+		instant_powerups: true,
+		fling_existing: false,
+		show_forbidden: false,
+		disable_powerup_spawning: false,
 	},
-	get instant_powerups(){
-		return this.enabled && this._instant_powerups;
+
+	isEnabled(){
+		return this.enabled || this.enabled2;
 	},
-	get fling_existing(){
-		return this.enabled && this._fling_existing;
+
+	get(name){
+		return this.isEnabled() && this.flags[name];
 	},
-	get show_forbidden(){
-		return this.enabled && this._show_forbidden;
-	},
-	get disable_powerup_spawning(){
-		return this.enabled && this._disable_powerup_spawning;
-	},
+};
+
+function enableCheats(){
+	cheats.enabled = true;
+}
+
+function disableCheats(){
+	cheats.enabled = false;
 }
 
 function printObjectCounts(){
@@ -34,21 +39,28 @@ function printObjectCounts(){
 		console.log(`${name}: ${cont.children.length}`);
 	}
 }
-
+//works in PlayState and CampaignState only
 function beatLevel(allLevels=false){
-	let ps = game.top;
-	if (!(ps instanceof PlayState)){
-		console.log("ERROR: You're not currently playing a level");
-		return;
+	let state = game.top;
+	if (state instanceof PlayState){
+		state.setState("victory");
+		if (state.mode == "playlist"){
+			if (allLevels)
+				state.playlistIndex = state.playlist.length - 1;
+		}
+		else if (state.mode == "campaign"){
+			if (allLevels)
+				campaign_save.onVictory(state, 2);
+			else
+				campaign_save.onVictory(state, 0);
+		}
 	}
-	if (ps.state.name != "playing"){
-		console.log("ERROR: Wait until the level has started");
-		return;
+	else if (state instanceof CampaignState){
+		campaign_save.updateLevel(allLevels ? 2 : 0);
+		state.load();
 	}
-	ps.setState("victory");
-	if (allLevels){
-		if (ps.mode == "playlist")
-			ps.playlistIndex = ps.playlist.length - 1;
+	else{
+		console.log("Cannot be called in this state.");
 	}
 }
 
@@ -84,16 +96,14 @@ class PlayState{
 		args will vary based on mode:
 			"test": [level object],
 			"play": [level object],
-			"playlist": [list of level objects, playlist index],
-			"campaign": [playlist name, playlist index],
+			"playlist": [list of level objects, playlist index, previous PlayState instance],
+			"campaign": no args needed; global campaign_save will be used instead
 	*/
 	constructor(mode, ...args){
 		this.mode = mode;
 
-		if (mode == "test"){
-			this.prevCheatEnabled = cheats.enabled;
-			cheats.enabled = true;
-		}
+		if (mode == "test")
+			cheats.enabled2 = true;
 
 		let titles = {
 			test: "Testing",
@@ -103,13 +113,27 @@ class PlayState{
 		};
 		this.windowTitle = titles[mode];
 
+		//initializing starting values
 		let level;
+		let lives = 3;
+		let score = 0;
 		if (mode == "test" || mode == "play")
 			level = args[0];
 		else if (mode == "playlist"){
 			this.playlist = args[0];
 			this.playlistIndex = args[1];
 			level = this.playlist[this.playlistIndex];
+			//get the score and lives from the previous PlayState
+			if (args[2]){
+				lives = args[2].lives;
+				score = args[2].score;
+			}
+		}
+		else if (mode == "campaign"){
+			let {data, playlist} = campaign_save;
+			level = playlist[1][data.zone_index][1];
+			score = data.score;
+			lives = data.lives;
 		}
 
 		this.timescale = 1;
@@ -269,57 +293,36 @@ class PlayState{
 		this.add("hud", butt);
 
 		//score display
-		let scoreDisplay = new PIXI.Container();
-		scoreDisplay.position.set(DIM.lwallx, 10);
-		let digits = new PIXI.Container();
-		digits.position.set(0, 30);
-		//draw each digit individually to make it monospaced
-		for (let i = 0; i < 8; i++){
-			digits.addChild(printText(
-				"0", "arcade", 0x000000, 1.5, i*24, 0
-			));
-		}
-		scoreDisplay.addChild(digits);
-		scoreDisplay.digits = digits;
-		scoreDisplay.addChild(printText(
-			"Score", "arcade", 0x000000, 1.5, 0, 0
-		));
-		this.add("hud", scoreDisplay);
-		this.scoreDisplay = scoreDisplay;
-		this.setScore(0);
-		//score multiplier
-		let mult = printText(
-			"", "arcade", 0x000000, 1, 124, 8);
-		this.scoreDisplay.addChild(mult);
-		this.scoreDisplay.mult = mult;
+		this.scoreDisplay = new ScoreDisplay(DIM.lwallx, 10, false);
+		this.setScore(score);
 		this.setScoreMultiplier(0);
+		this.add("hud", this.scoreDisplay);
 
 		//lives display
+		//TODO: figure out interface with campaign_save.data.lives
 		//lives will decrement at the start of the death state
 		//livesDisplay will update after the death state
-		this.lives = 3;
-		let livesDisplay = new PIXI.Container();
-		livesDisplay.position.set(DIM.lwallx, DIM.h - 16);
-		this.add("hud", livesDisplay);
-		this.livesDisplay = livesDisplay;
+		this.lives = lives;
+		this.livesDisplay = new LivesDisplay(DIM.lwallx, DIM.h - 16);
 		this.updateLivesDisplay();
+		this.add("hud", this.livesDisplay);
+
 		this.initOtherInfo();
 
 		//testing/cheat stuff
-		if (cheats.enabled){
+		if (cheats.isEnabled()){
 			this.initPowerupButtons();
 			this.initEnemyButtons();
 			this.initCheckboxes();
-			this.livesDisplay.visible = false;
+			// this.livesDisplay.visible = false;
 		}
 
 		this.stateName = "playstate";
 	}
 
 	destructor(){
-		if (this.mode == "test"){
-			cheats.enabled = this.prevCheatEnabled;
-		}
+		if (this.mode == "test")
+			cheats.enabled2 = false;
 		stopAllSounds();
 		game.setPos(0, 0);
 
@@ -342,9 +345,23 @@ class PlayState{
 		if (mode == "playlist"){
 			let playlist = this.playlist;
 			let index = this.playlistIndex;
-			game.pop();
-			if (index < playlist.length - 1)
-				game.push(new PlayState("playlist", playlist, index+1));
+			if (index < playlist.length - 1){
+				game.pop(true);
+				game.push(new PlayState("playlist", playlist, index+1, this));
+			}
+			else
+				game.pop();
+			return;
+		}
+		if (mode == "campaign"){
+			let level = campaign_save.getNextLevel();
+			if (level === null){
+				game.pop();
+			}
+			else{
+				game.pop(true);
+				game.push(new PlayState("campaign"));
+			}
 		}
 	}
 
@@ -654,11 +671,10 @@ class PlayState{
 		let ps = this;
 		let x = 20;
 		let y = DIM.ceiling + 150;
-		function create(dy, var_name, text, font_size=16, func=null){
-			var_name = "_" + var_name;
-			let curr_val = cheats[var_name];
+		function create(dy, flag_name, text, font_size=16, func=null){
+			let curr_val = cheats.flags[flag_name];
 			let func2 = function(val){
-				cheats[var_name] = val;
+				cheats.flags[flag_name] = val;
 				func?.();
 			};
 			let cb = new Checkbox(x, y, text, curr_val, func2);
@@ -697,61 +713,22 @@ class PlayState{
 	setScore(score){
 		score = Math.max(0, Math.min(99999999, score));
 		this.score = score;
-
-		let digits = this.scoreDisplay.digits.children;
-		let str = String(score);
-		let n = str.length;
-		for (let i = 0; i < n; i++){
-			let digit = digits[8-n+i];
-			digit.text = str[i];
-			digit.tint = 0x000000;
-		}
-		for (let i = 0; i < 8-n; i++){
-			let digit = digits[i];
-			digit.text = "0";
-			digit.tint = 0x666666;
-		}
+		this.scoreDisplay.setScore(score);
 	}
 
-	incrementScore(score){
-	 	score = Math.floor(score * (2 ** this.scoreMultiplier));
-		this.setScore(this.score + score);
+	incrementScore(deltaScore){
+		deltaScore = Math.floor(deltaScore * (2 ** this.scoreMultiplier));
+		this.setScore(this.score + deltaScore);
 	}
 
-	/**
-	 * scoreMultiplier is actually the exponent to 2^x
-	 */
+	//scoreMultiplier is actually the exponent of 2^x
 	setScoreMultiplier(mult=0){
-		let disp = this.scoreDisplay.mult;
 		this.scoreMultiplier = mult;
-		if (mult == 1)
-			disp.text = "x2";
-		else if (mult == -1)
-			disp.text = "x0.5";
-		else
-			disp.text = "";
+		this.scoreDisplay.setMultiplier(mult);
 	}
 
 	updateLivesDisplay(){
-		let lives = this.lives;
-		let display = this.livesDisplay;
-		display.removeChildren();
-		let count = lives;
-		if (count >= 6)
-			count = 1;
-		for (let i = 0; i < count; i++){
-			let life = makeSprite("paddlelife", 2, i*36, 0);
-			display.addChild(life);
-		}
-		if (lives >= 6){
-			let text = printText(
-				String(lives),
-				"arcade",
-				0xFFFFFF,
-				1, 34, -2
-			);
-			display.addChild(text);
-		}
+		this.livesDisplay.setLives(this.lives);
 	}
 
 	initOtherInfo(){
@@ -967,7 +944,7 @@ class PlayState{
 
 		if (mouse.m2 == 1 && boardCheck && !this.flingBall){
 			let ball;
-			if (cheats.fling_existing){
+			if (cheats.get("fling_existing")){
 				this.paddles.children[0].releaseBalls();
 				let storedDist = Infinity;
 				ball = this.balls.children[0];
@@ -1218,8 +1195,12 @@ class PlayState{
 			let ball = new Ball(0, 0, 0.4, 0);
 			this.add("balls", ball);
 			paddle.attachBall(ball, true);
-			if (this.mode != "test")
+			if (this.mode != "test"){
+				this.lives--;
 				this.setState("death");
+				if (this.mode == "campaign")
+					campaign_save.onDeath(this);
+			}
 		}
 
 		//count remaining essential bricks
@@ -1230,13 +1211,16 @@ class PlayState{
 		}
 
 		//win the level if there are no more bricks
-		if ((this.mode == "playlist" || this.mode == "play") && remaining == 0)
+		if (this.mode != "test" && remaining == 0){
 			this.setState("victory");
+			if (this.mode == "campaign")
+				campaign_save.onVictory(this);
+		}
 
 		//update other info
 		this.updateOtherInfo(remaining);
 
-		if (cheats.enabled)
+		if (cheats.isEnabled())
 			this.ballFling();
 
 		//activate queued sounds
@@ -1502,7 +1486,7 @@ PlayState.states = {
 	death: class{
 		constructor(ps){
 			this.ps = ps;
-			ps.lives--;
+			// ps.lives--;
 
 			this.timer = 2000;
 
@@ -1790,6 +1774,11 @@ PlayState.states = {
 		}
 
 		update(delta){
+			if (mouse.m1 == 1){
+				this.ps.nextLevel();
+				return false;
+			}
+
 			if (this.ps.bypass.exitTriggered){
 				let paddle = this.ps.get("paddles")[0];
 				paddle.x += 0.1 * delta;
@@ -1810,7 +1799,6 @@ PlayState.states = {
 			}
 
 			this.ps.nextLevel();
-
 			return false;
 		}
 	}
@@ -2018,6 +2006,8 @@ class Bypass extends Sprite{
 				playSound("bypass_exit");
 				text.visible = false;
 				this.playstate.setState("victory");
+				if (this.playstate.mode == "campaign")
+					campaign_save.onVictory(this.playstate, this.mode-1);
 			}
 		}
 	}
@@ -2168,7 +2158,7 @@ class PowerupButton extends PlayButton{
 		let x = paddle.x;
 		let y = paddle.y - 100;
 		// let y = DIM.ceiling + 100;
-		if (cheats.instant_powerups)
+		if (cheats.get("instant_powerups"))
 			y = paddle.y;
 		state.emplace("powerups", new Powerup(x, y, this.id));
 	}
@@ -2279,6 +2269,7 @@ class Checkbox extends PIXI.Container{
 }
 
 //GridSet is a Set that reserves pairs of ints
+//TODO: find a use for this or delete this
 class GridSet{
 	//increase this if the board size somehow becomes larger
 	//than 1000 x 1000 bricks
@@ -2315,5 +2306,100 @@ class GridSet{
 	*values(){
 		for (let n of this.set)
 			yield GridSet.unhash(n);
+	}
+}
+
+//will be used in PlayState and CampaignState
+class ScoreDisplay extends PIXI.Container{
+	constructor(x, y, digitsOnly=false){
+		super();
+		this.position.set(x, y);
+		this.digitsOnly = digitsOnly;
+
+		//draw each digit individually to make it monospaced
+		let digits = new PIXI.Container();
+		let scale = 1.5;
+		if (!digitsOnly){
+			digits.position.set(0, 30);
+			scale = 1.5;
+		}
+		for (let i = 0; i < 8; i++){
+			digits.addChild(printText(
+				"0", "arcade", 0x000000, scale, i*16*scale, 0
+			));
+		}
+		this.addChild(digits);
+		this.digits = digits;
+		this.setScore(0);
+
+		if (!digitsOnly){
+			//"Score" label
+			this.addChild(printText(
+				"Score", "arcade", 0x000000, 1.5, 0, 0
+			));
+			//score multiplier
+			let mult = printText(
+				"", "arcade", 0x000000, 1, 124, 8);
+			this.addChild(mult);
+			this.mult = mult;
+			this.setMultiplier(0);
+		}
+	}
+
+	setScore(score){
+		//score should be checked by Playstate beforehand
+		let digits = this.digits.children;
+		let str = String(score);
+		let n = str.length;
+		//significant digits should be black
+		for (let i = 0; i < n; i++){
+			let digit = digits[8-n+i];
+			digit.text = str[i];
+			digit.tint = 0x000000;
+		}
+		//leading zeroes should be grey
+		for (let i = 0; i < 8-n; i++){
+			let digit = digits[i];
+			digit.text = "0";
+			digit.tint = 0x666666;
+		}
+	}
+
+	setMultiplier(multiplier){
+		if (multiplier == 1)
+			this.mult.text = "x2";
+		else if (multiplier == -1)
+			this.mult.text = "x0.5";
+		else
+			this.mult.text = "";
+
+	}
+}
+
+class LivesDisplay extends PIXI.Container{
+	constructor(x, y, fontColor=0xFFFFFF){
+		super();
+		this.position.set(x, y);
+		this.fontColor = fontColor;
+	}
+
+	setLives(lives){
+		this.removeChildren();
+		let count = lives;
+		if (count >= 6)
+			count = 1;
+		for (let i = 0; i < count; i++){
+			let life = makeSprite("paddlelife", 2, i*36, 0);
+			this.addChild(life);
+		}
+		if (lives >= 6){
+			let text = printText(
+				"x" + String(lives),
+				"arcade",
+				this.fontColor,
+				1, 34, -2
+			);
+			this.addChild(text);
+		}
 	}
 }

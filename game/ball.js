@@ -273,7 +273,7 @@ class Ball extends Sprite{
 		if (!this.disableBounce){
 			if (
 				this.y - this.shape.radius > DIM.h && 
-				!cheats.disable_pit &&
+				!cheats.get("disable_pit") &&
 				game.top.pit_blockers == 0
 			)
 			{
@@ -287,7 +287,7 @@ class Ball extends Sprite{
 				this.handleCollision(-1, 0);
 			else if (y0 < DIM.ceiling)
 				this.handleCollision(0, 1);
-			else if (cheats.disable_pit && y1 > DIM.h)
+			else if (cheats.get("disable_pit") && y1 > DIM.h)
 				this.handleCollision(0, -1);
 
 			this.stuckBounceTimer += delta;

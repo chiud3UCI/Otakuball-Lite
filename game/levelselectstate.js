@@ -21,7 +21,7 @@ function sortLevels(list=null){
 }
 
 class LevelSelectState{
-	//mode is one of ["play", "load", "save"]
+	//mode is one of ["play", "load", "save", "manager"]
 	constructor(isPlaylist, mode){
 		ENABLE_RIGHT_CLICK = true;
 
@@ -43,9 +43,10 @@ class LevelSelectState{
 		let base = new Base(20, 10 + tab_height, DIM.w - 20*2, DIM.h - 10 - 20 - tab_height);
 		base.zIndex = 0;
 		stage.addChild(base);
+		base.parentState = this;
 		this.base = base;
 
-		//TODO: make multiple panel instances
+		//create one panel per tab
 		this.panels = [];
 		for (let i = 0; i < 2; i++){
 			let panel = new LSS_Panel(base, isPlaylist, !!i);
@@ -55,7 +56,7 @@ class LevelSelectState{
 		}
 		this.panel = null; //will be set when selecting the first tab
 
-		var save_tab_selection = false;
+		var skip_tab_save = true;
 
 		//create tabs
 		let tab_w = 110;
@@ -88,41 +89,40 @@ class LevelSelectState{
 				panel.showTextInput();
 				this.parentState.panel = panel;
 
-				if (save_tab_selection && value){
+				if (!skip_tab_save && value){
 					localStorage.setItem("last_selected_tab", this.tabIndex);
 				}
 			};
-			if (mode == "save" && i == 0){
+			if ((mode == "save" || mode == "manager") && i == 0){
 				text.tint = 0x777777;
 				tab.interactive = false;
 			}
 		}
-		if (mode == "save")
+		if (mode == "save" || mode == "manager")
 			tabs[1].pointerDown();
 		else{
 			let str = localStorage.getItem("last_selected_tab") ?? "0";
 			tabs[Number(str)].pointerDown();
 		}
 
-		save_tab_selection = true;
+		skip_tab_save = false;
 
-		//create back button
-		let bw = 80;
+		//create buttons (back, play, save, etc) based on mode
+		let bw = (mode == "manager") ? 90 : 80;
 		let bh = 40;
-		let backButton = new Button(base.width - bw - 16, base.height - bh - 16, bw, bh, 0xA0);
-		backButton.addCentered(printText("Back", "arcade", 0x000000, 1));
-		backButton.onClick = () => {
-			game.pop();
-		};
-		base.addChild(backButton);
-
-		//create Play/Load/Save button
 		this.initButtons(
-			base.width - bw*2 - 16*2,
+			base.width - bw - 16,
 			base.height - bh - 16,
 			bw,
 			bh
 		);
+
+		//create notification message that goes above the buttons
+		let message = printText("", "arcade", 0xFF0000, 1, base.width/2, base.height - 80)
+		message.visible = false;
+		this.message = message;
+		this.messageTimer = 0;
+		base.addChild(message);
 
 		//draw dividers
 		let dividers = new PIXI.Graphics();
@@ -153,40 +153,69 @@ class LevelSelectState{
 	}
 
 	initButtons(x, y, w, h){
-		let butt = new Button(x, y, w, h, 0xA0);
-		butt.hoverGuard = false;
-		this.base.addChild(butt);
+		let index = 0;
+		let makeButton = (name, func) => {
+			let butt = new Button(x - (index * (w + 10)), y, w, h, "light");
+			index++;
+			butt.hoverGuard = false;
+			butt.addCentered(printText(name, "arcade", 0x000000, 1));
+			butt.onClick = func;
+			this.base.addChild(butt);
+		};
 
+		makeButton("Back", () => {game.pop();});
 		if (this.mode == "play"){
-			butt.addCentered(printText("Play", "arcade", 0x000000, 1));
-			butt.onClick = () => {this.panel.onPlay();};
+			makeButton("Play", () => {this.panel.onPlay();});
 		}
 		else if (this.mode == "load"){
-			butt.addCentered(printText("Load", "arcade", 0x000000, 1));
-			butt.onClick = () => {this.panel.onLoad();};
+			makeButton("Load", () => {this.panel.onLoad();});
 		}
 		else if (this.mode == "save"){
-			butt.addCentered(printText("Save", "arcade", 0x000000, 1));
-			butt.onClick = () => {this.panel.onSave();};
+			makeButton("Save", () => {this.panel.onSave();});
+		}
+		else if (this.mode == "manager"){
+			makeButton("Delete", () => {this.panel.onDelete();});
+			makeButton("Copy", () => {this.panel.onCopy();});
+			makeButton("Move", () => {this.panel.onMove();});
 		}
 	}
 
 	//when a new state gets pushed on top of this state
 	onExit(){
+		ENABLE_RIGHT_CLICK = false;
 		for (let panel of this.panels)
 			panel.hideTextInput();
 	}
 
-	//when this state becomes the top state again
-	onEnter(){
+	//when this state becomes the top state again after the above state was popped
+	onReEnter(){
+		ENABLE_RIGHT_CLICK = true;
 		for (let panel of this.panels)
 			panel.showTextInput();
+	}
+
+	//can also use "red" and "green" for shortcuts
+	setMessage(message, color=0x000000, timer=3000){
+		// console.log(`set message="${message}", color=${color}, timer=${timer}"`);
+		if (color === "red")
+			color = 0xFF0000;
+		else if (color === "green")
+			color = 0x00CC00;
+		this.message.text = message;
+		this.message.tint = color;
+		this.message.visible = true;
+		this.messageTimer = timer;
 	}
 
 	update(delta){
 		if (keyboard.isPressed(keycode.ESCAPE)){
 			game.pop();
 			return;
+		}
+		if (this.message.visible){
+			this.messageTimer -= delta;
+			if (this.messageTimer <= 0)
+				this.message.visible = false;
 		}
 		this.panel.update(delta);
 	}
@@ -203,21 +232,12 @@ class LSS_Panel extends PIXI.Container{
 		this.selectedIndex = null;
 
 		if (isPlaylist){
-			let list = isUser ? levels.user.list : levels.default.list;
-			let map = new Map();
-			for (let arr of list){
-				let name = arr[0];
-				let tokens = name.split("/");
-				if (tokens.length == 1)
-					continue;
-				let [playlist, level] = tokens;
-				if (!map.has(playlist))
-					map.set(playlist, [name, []]);
-				map.get(playlist)[1].push(arr);
-			}
-			//the list will be sorted due to Map keys being ordered by insertion order
-			//key=name, value=[name, level[]]
-			this.database = new FileDatabase(Array.from(map.entries()), map);
+			//the default playlist should be static
+			//but the user playlist should be generated every time we enter PlaylistSelect
+			if (isUser)
+				this.database = new FileDatabase(levels.user.list, true);
+			else
+				this.database = playlists.default;
 		}
 		else
 			this.database = isUser ? levels.user : levels.default;
@@ -229,15 +249,24 @@ class LSS_Panel extends PIXI.Container{
 		if (isPlaylist)
 			this.preview = new LSS_PlaylistPreview(this);
 		else
-			this.preview = new LSS_LevelPreview(this);
+			this.preview = new LSS_LevelPreview(this, "default");
 		this.addChild(this.preview);
 		//bottom left textbox
-		this.textBox = new LSS_TextBox(this);
-		this.addChild(this.textBox);
+		if (base.parentState.mode == "manager"){
+			this.textBox = new LSS_TextBox(this, "src");
+			this.textBox2 = new LSS_TextBox(this, "dest");
+			this.addChild(this.textBox);
+			this.addChild(this.textBox2);
+		}
+		else{
+			this.textBox = new LSS_TextBox(this);
+			this.addChild(this.textBox);
+		}
 	}
 
 	destructor(){
 		this.textBox.destructor();
+		this.textBox2?.destructor();
 	}
 
 	selectIndex(index){
@@ -251,6 +280,10 @@ class LSS_Panel extends PIXI.Container{
 			else
 				this.preview.setLevel(name, object);
 		}
+	}
+
+	setMessage(message, color, timer){
+		this.base.parentState.setMessage(message, color, timer);
 	}
 
 	onPlay(){
@@ -280,27 +313,54 @@ class LSS_Panel extends PIXI.Container{
 		}
 	}
 
+	static validName(name){
+		if (name.length == 0)
+			return false;
+		//cannot have slash at beginning or end of string
+		if (name[0] === "/" || name[name.length-1] === "/")
+			return false;
+		//cannot have more than 1 slash
+		let slashFound = false;
+		for (let char of name){
+			if (char === "/"){
+				if (slashFound)
+					return false;
+				slashFound = true;
+			}
+		}
+		return true;
+	}
+
 	onSave(){
 		let db = this.database;
 		let name = this.textBox.input.text;
 
-		if (name.length == 0){
-			this.textBox.setMessage("Invalid Name!", "red");
-			return;
-		}
-
-		if (name[0] === "/" || name.indexOf("/") === name.length-1){
-			this.textBox.setMessage("Invalid Name!", "red");
+		if (!LSS_Panel.validName(name)){
+			this.setMessage("Invalid name!", "red");
 			return;
 		}
 
 		let editorstate = game.getState(-2);
 		let level = editorstate.createLevel();
 
-		let isNew = db.indexOf(name) < 0;
-		db.set(name, level);
-		//recreate all the buttons in FileList
-		if (isNew){
+		if (db.has(name)){
+			let dialogue = new DialogueBox(400, 200, "Confirm Override");
+			dialogue.setMessage(`"${name}" already exists. Are you sure you want to override it?`);
+			dialogue.addButton("Cancel", 90, 40, () => {
+				game.pop();
+			});
+			dialogue.addButton("Yes", 90, 40, () => {
+				db.set(name, level);
+				this.preview.setLevel(name, level, true);
+				this.setMessage("Level saved!", "green");
+				playSound2("board_saved");
+				db.save("user_levels");
+				game.pop();
+			});
+			game.push(dialogue);
+		}
+		else{
+			db.set(name, level);
 			let fileList = this.fileList;
 			fileList.createListButtons();
 			fileList.scrollBar.resize();
@@ -310,27 +370,159 @@ class LSS_Panel extends PIXI.Container{
 			fileList.seek(index);
 
 			this.selectIndex(index);
+			playSound2("board_saved");
+
+			db.save("user_levels");
+		}
+	}
+
+	onDelete(){
+		let db = this.database;
+		let name = this.textBox.input.text;
+
+		if (!db.has(name)){
+			this.setMessage("Level does not exist!", "red");
+			return;
+		}
+
+		let dialogue = new DialogueBox(400, 200, "Confirm Delete");
+		dialogue.setMessage(`Are you sure you want to delete "${name}"?`);
+		dialogue.addButton("Cancel", 90, 40, () => {
+			game.pop();
+		});
+		dialogue.addButton("Yes", 90, 40, () => {
+			db.delete(name);
+
+			let fileList = this.fileList;
+			fileList.createListButtons();
+			fileList.scrollBar.resize();
+
+			this.selectIndex(null);
+			fileList.selectButton(null);
+
+			this.setMessage("Level Deleted!", "green");
+			playSound2("board_saved");
+
+			db.save("user_levels");
+
+			game.pop();
+		});
+		game.push(dialogue);
+	}
+
+	onMove(){
+		let db = this.database;
+		let src = this.textBox.input.text;
+		let dest = this.textBox2.input.text;
+
+		if (!db.has(src)){
+			this.setMessage("Level does not exist!", "red");
+			return;
+		}
+		if (!LSS_Panel.validName(dest)){
+			this.setMessage("Invalid Destination name!", "red");
+			return;
+		}
+		if (src == dest){
+			this.setMessage("Source and Destination cannot be the same!", "red");
+			return;
+		}
+
+		let move = () => {
+			db.set(dest, db.get(src)[1]);
+			db.delete(src);
+
+			let fileList = this.fileList;
+			fileList.createListButtons();
+			fileList.scrollBar.resize();
+
+			let index = db.indexOf(dest);
+			this.selectIndex(index);
+			fileList.selectButton(index);
+
+			this.setMessage("Move Successful!", "green");
+			playSound2("board_saved");
+
+			db.save("user_levels");
+		};
+
+		if (db.has(dest)){
+			let dialogue = new DialogueBox(400, 200, "Confirm Override");
+			dialogue.setMessage(`"${dest}" already exists. Are you sure you want to override it?`);
+			dialogue.addButton("Cancel", 90, 40, () => {
+				game.pop();
+			});
+			dialogue.addButton("Yes", 90, 40, () => {
+				move();
+				game.pop();
+			});
+			game.push(dialogue);
 		}
 		else{
-			this.preview.setLevel(name, level, true);
+			move();
+		}
+	}
+
+	onCopy(){
+		let db = this.database;
+		let src = this.textBox.input.text;
+		let dest = this.textBox2.input.text;
+
+		if (!db.has(src)){
+			this.setMessage("Level does not exist!", "red");
+			return;
+		}
+		if (!LSS_Panel.validName(dest)){
+			this.setMessage("Invalid Destination name!", "red");
+			return;
+		}
+		if (src == dest){
+			this.setMessage("Source and Destination cannot be the same!", "red");
+			return;
 		}
 
-		db.save("user_levels");
+		let copy = () => {
+			db.set(dest, db.get(src)[1]);
 
-		//cannot call playSound() here because SoundWrappers are not being updated
-		PIXI.sound._sounds["board_saved"].play();
-		this.textBox.setMessage("Level Saved!", "green");
+			let fileList = this.fileList;
+			fileList.createListButtons();
+			fileList.scrollBar.resize();
+
+			let index = db.indexOf(dest);
+			this.selectIndex(index);
+			fileList.selectButton(index);
+
+			this.setMessage("Copy Successful!", "green");
+			playSound2("board_saved");
+
+			db.save("user_levels");
+		};
+
+		if (db.has(dest)){
+			let dialogue = new DialogueBox(400, 200, "Confirm Override");
+			dialogue.setMessage(`"${dest}" already exists. Are you sure you want to override it?`);
+			dialogue.addButton("Cancel", 90, 40, () => {
+				game.pop();
+			});
+			dialogue.addButton("Yes", 90, 40, () => {
+				copy();
+				game.pop();
+			});
+			game.push(dialogue);
+		}
+		else{
+			copy();
+		}
 	}
 
 	hideTextInput(){
-		let input = this.textBox.input;
-		input.blur();
-		input.substituteText = true;
+		this.textBox.hide();
+		this.textBox2?.hide();
 	}
 
 	showTextInput(){
-		let input = this.textBox.input;
-		input.substituteText = false;
+		this.textBox.unhide();
+		this.textBox2?.unhide();
 	}
 
 	updateTextBoxText(){
@@ -639,7 +831,11 @@ class LSS_ScrollBar extends PIXI.Container{
 }
 
 class LSS_LevelPreview extends PIXI.Container{
-	constructor(panel){
+	//modes:
+	//	default: show level + enemies
+	//	minimal: show level
+	//	detailed: show level + enemies + enemy spawn timers
+	constructor(panel, mode="default"){
 		super();
 		this.position.set(400, 16);
 		this.addChild(makeSprite("border"));
@@ -647,14 +843,15 @@ class LSS_LevelPreview extends PIXI.Container{
 		this.addChild(levelSprite);
 		this.levelSprite = levelSprite;
 
-		this.initEnemyDisplay(260, 0);
+		if (mode != "minimal")
+			this.initEnemyDisplay(260, 0, (mode=="detailed"));
 
 		this.cache = new Map();
 
 		this.preview = null;
 	}
 
-	initEnemyDisplay(x, y){
+	initEnemyDisplay(x, y, showTimers=false){
 		let display = new PIXI.Container();
 		display.position.set(x, y);
 		//create enemy sprite indicators
@@ -683,7 +880,8 @@ class LSS_LevelPreview extends PIXI.Container{
 			fontWeight: "bold",
 		});
 		text.position.set(0, 130);
-		display.addChild(text);
+		if (showTimers)
+			display.addChild(text);
 		display.timerText = text;
 
 		display.reset = function(){
@@ -748,7 +946,7 @@ class LSS_LevelPreview extends PIXI.Container{
 
 	clear(){
 		this.levelSprite.texture = null;
-		this.enemyDisplay.reset();
+		this.enemyDisplay?.reset();
 	}
 
 	setLevel(name, level, replace=false){
@@ -756,7 +954,7 @@ class LSS_LevelPreview extends PIXI.Container{
 			this.cache.set(name, LSS_LevelPreview.generate(level));
 		}
 		let preview = this.cache.get(name);
-		this.enemyDisplay.setLevel(level);
+		this.enemyDisplay?.setLevel(level);
 		this.levelSprite.texture = preview;
 	}
 
@@ -793,15 +991,32 @@ class LSS_PlaylistPreview extends PIXI.Container{
 
 class LSS_TextBox extends PIXI.Container{
 	//keeps track of filename textbox and status message
-	constructor(panel){
+	//mode can be either null, "src", or "dest"
+	constructor(panel, mode=null){
 		super();
+
+		let x0 = 16;
+		let y0 = 470;
+		let dx = 0;
+		let dy = 0;
+		let w = 322; //will be converted to px string
+		if (mode !== null){
+			dx = 50;
+			w -= 50;
+		}
+		if (mode == "src")
+			dy = -10;
+		else if (mode == "dest")
+			dy = 20;
+		this.mode = mode;
+
 		this.panel = panel;
-		this.position.set(16, 460);
+		this.position.set(x0 + dx, y0 + dy);
 
 		let input = new PIXI.TextInput({
 			input: {
 				fontSize: "18px",
-				width: "322px",
+				width: `${w}px`,
 				padding: "2px",
 				color: 0x000000,
 			},
@@ -818,36 +1033,53 @@ class LSS_TextBox extends PIXI.Container{
 		this.addChild(input);
 		this.input = input;
 
-		let db = panel.database;
-		input.on("input", name => {
-			let index = db.indexOf(name);
-			if (index < 0){
-				panel.selectIndex(null);
-				panel.fileList.selectButton(null);
-			}
-			else{
-				panel.selectIndex(index);
-				panel.fileList.selectButton(index);
-				panel.fileList.seek(index);
-			}
-		});
+		if (mode !== null){
+			let str = (mode == "src") ? "Source" : "Dest";
+			let text = printText(str, "windows", 0x000000, 1, -dx, 4);
+			this.addChild(text);
+		}
+
+		if (mode != "dest"){
+			let db = panel.database;
+			input.on("input", name => {
+				let index = db.indexOf(name);
+				if (index < 0){
+					panel.selectIndex(null);
+					panel.fileList.selectButton(null);
+				}
+				else{
+					panel.selectIndex(index);
+					panel.fileList.selectButton(index);
+					panel.fileList.seek(index);
+				}
+			});
+		}
 
 		//message
-		let message = printText("Test message please ignore", "arcade", 0x000000, 1, 0, 30);
+		// let message = printText("Test message please ignore", "arcade", 0x000000, 1, 0, 30);
 		// let message = new PIXI.Text("test message", {
 		// 	fontFamily: "Verdanda",
 		// 	fontSize: 22,
 		// 	fill: 0xFFFFFF
 		// });
 		// message.position.set(0, 30);
-		message.visible = false;
-		this.addChild(message);
-		this.message = message;
-		this.messageTimer = null;
+		// message.visible = false;
+		// this.addChild(message);
+		// this.message = message;
+		// this.messageTimer = null;
 	}
 
 	destructor(){
 		this.input.destroy();
+	}
+
+	hide(){
+		this.input.blur();
+		this.input.substituteText = true;
+	}
+
+	unhide(){
+		this.input.substituteText = false;
 	}
 
 	static colors = {
@@ -856,37 +1088,50 @@ class LSS_TextBox extends PIXI.Container{
 	};
 
 	setMessage(text, color, time=3000){
-		if (typeof(color) == "string")
-			color = LSS_TextBox.colors[color];
-		let message = this.message;
-		message.visible = true;
-		message.text = text;
-		message.tint = color;
-		this.messageTimer = time;
+		// if (typeof(color) == "string")
+		// 	color = LSS_TextBox.colors[color];
+		// let message = this.message;
+		// message.visible = true;
+		// message.text = text;
+		// message.tint = color;
+		// this.messageTimer = time;
 	}
 
 	update(delta){
-		if (this.message.visible){
-			this.messageTimer -= delta;
-			if (this.messageTimer <= 0)
-				this.message.visible = false;
-		}
+		// if (this.message.visible){
+		// 	this.messageTimer -= delta;
+		// 	if (this.messageTimer <= 0)
+		// 		this.message.visible = false;
+		// }
 	}
 }
 
 //keeps track of stuff
 class FileDatabase{
-	constructor(list, map=null){
-		//when isPlaylist is true, dynamically group levels into playlists
-		if (map){
-			this.list = list;
+	constructor(list, isPlaylist=false){
+		if (isPlaylist){
+			//group levels in playlists based on presence of "/" in name
+			//map format: Map(playlist_name -> [playlist_name, Array of [full_level_name, level_object]])
+			let map = new Map();
 			this.map = map;
+			for (let pair of list){
+				let full_name = pair[0];
+				let tokens = full_name.split("/");
+				if (tokens.length == 1)
+					continue;
+				let playlist_name = tokens[0];
+				if (!map.has(playlist_name))
+					map.set(playlist_name, [playlist_name, []]);
+				map.get(playlist_name)[1].push(pair);
+			}
+			this.list = Array.from(map.entries());
 		}
 		else{
 			this.list = list;
 			this.map = new Map();
-			for (let arr of list)
-				this.map.set(arr[0], arr);
+			for (let pair of list){
+				this.map.set(pair[0], pair);
+			}
 		}
 	}
 

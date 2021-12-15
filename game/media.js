@@ -81,6 +81,11 @@ function playSound(name, loop=false, object=null){
 	queue.push(new SoundWrapper(name, loop, object));
 }
 
+//Play sound immediately without any wrappers or restrictions
+function playSound2(name){
+	PIXI.sound._sounds[name].play();
+}
+
 //stops all queued and playing sounds
 //if object is passed, then only stop sound wrappers
 //	with specified object
@@ -227,6 +232,9 @@ let recursive_texture_names = [
 		"no_bg",
 		"control_crosshair",
 		"assist",
+		"campaign_bg",
+		"campaign_letters",
+		"otakuball",
 	]],
 
 	["enemy/", [
@@ -442,7 +450,7 @@ let recursive_sound_names = [
 		"enemy_death",
 	]],
 	["etc/", [
-		"board_saved.ogg",
+		"board_saved.mp3",
 	]],
 ]
 
@@ -807,6 +815,13 @@ media.processTextures = function(){
 	this.textures["assist_gun"] = this.makeTexture(
 		"assist", 23, 10, 6, 8);
 
+	//campaign stuff
+	partition("campaign_letters", "campaign_letter", 26, 26);
+	this.textures["campaign_edge"] = this.makeTexture(
+		"campaign_letters", 52, 52, 1, 5);
+
+	//Otakuball character sprite
+	partition("otakuball", "otakuball", 21, 16);
 }
 
 media.processSounds = function(){
@@ -1034,6 +1049,26 @@ media.createAnimations = function(){
 	//particles
 	//invert
 	create2("invert", "invert", 0, 5);
+
+	//Otakuball Character
+	//idle animation will have blinking every few cycles
+	//will have to be played at 3x speed compared to others
+	arr = [];
+	let gen = (i, j) => {arr.push(this.textures[`otakuball_${i}_${j}`])};
+	for (let i = 0; i < 4; i++){
+		gen(0, 0);
+		gen(0, (i == 3) ? 2 : 0); //blink frame
+		gen(0, 0);
+		gen(0, 1);
+		gen(0, 1);
+		gen(0, 1);
+	}
+	this.animations["otakuball_idle"] = arr;
+	create("otakuball_fist_pump", "otakuball", 1, 0, 1, 3);
+	arr = create("otakuball_walk_down", "otakuball", 2, 0, 1, 3);
+	arr.push(arr[1]);
+	arr = create("otakuball_walk_up", "otakuball", 3, 0, 1, 3);
+	arr.push(arr[1]);
 }
 
 //draws a lightning bolt to a PIXI.Graphics object

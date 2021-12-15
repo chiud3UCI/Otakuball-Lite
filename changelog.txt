@@ -1,3 +1,7 @@
+[12/15/21]
+-Implemented Campaign
+-Implemented Level Manager that allows for copying, moving, and deleting levels
+
 [08/27/21]
 -Added experimental playlist feature
     -Levels with "playlist/name" format will automatically be

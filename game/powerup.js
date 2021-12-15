@@ -61,7 +61,7 @@ class PowerupSpawner{
 	//randomly decide if powerup should spawn
 	//will be false if all weights are 0
 	canSpawn(){
-		if (cheats.disable_powerup_spawning)
+		if (cheats.get("disable_powerup_spawning"))
 			return false;
 		return (
 			this.sum > 0 &&
@@ -6212,17 +6212,20 @@ f[6] = function(){
 }
 
 //Blackout
-f[7] = function(){
-	let black = new Special(PIXI.Texture.WHITE);
-	black.anchor.set(0, 0);
-	black.setPos(DIM.lwallx, DIM.ceiling);
-	//PIXI.Texture.WHITE has a base size of 16x16
-	black.scale.set(DIM.boardw/16, DIM.boardh/16);
-	black.tint = 0x000000;
-	black.alpha = 0;
+class Blackout extends Special{
+	constructor(){
+		super(PIXI.Texture.WHITE);
+		this.anchor.set(0, 0);
+		this.setPos(DIM.lwallx, DIM.ceiling);
+		//PIXI.Texture.WHITE has a base size of 16x16
+		this.scale.set(DIM.boardw/16, DIM.boardh/16);
+		this.tint = 0x000000;
+		this.alpha = 0;
 
-	black.timer = 10000;
-	black.update = function(delta){
+		this.timer = 10000;
+	}
+
+	update(delta){
 		this.timer -= delta;
 		if (this.timer <= 0){
 			this.kill();
@@ -6236,8 +6239,11 @@ f[7] = function(){
 			this.alpha = 1;
 		else
 			this.alpha = 1 - (t-9000)/1000;
-	};
+	}
+}
 
+f[7] = function(){
+	let black = new Blackout();
 	game.emplace("specials2", black);
 	playSound("blackout_collected");
 };

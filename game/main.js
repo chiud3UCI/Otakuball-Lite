@@ -30,21 +30,25 @@ var keycode;
 var game;
 var ENABLE_RIGHT_CLICK = false;
 
-//default levels and playlists are loaded from PIXI loader assets
-//user levels and playlists are loaded from localstorage
 var levels = {
-	default: {list: null, lookup: {}},
-	// user: {list: null, lookup: {}},
-	user: null
+	//Will be initialized as a FileDatabase during setup(). Will not be modified afterwards.
+	default: null,
+	//Will be initialized as a FileDatabase during setup(). Can be modified as the user saves levels.
+	user: null,
 };
 var playlists = {
-	default: {list: null, lookup: {}},
-	user: {list: null, lookup: {}},
+	//Will be initialized as a FileDatabase during setup(). Will not be modified afterwards.
+	default: null,
+	//SHOULD NOT EXIST. User playlist will be generated during LevelSelectState init.
+	user: null, //this should stay null
 };
-//loaded form localstorage
+//loaded from localstorage
 var options = {
 
 };
+
+//loaded from localstorage
+var campaign_save = null;
 
 var alert_record = {};
 function ALERT_ONCE(message, id = 0){
@@ -67,10 +71,11 @@ class Game {
 		this.stage.position.set(DIM.offx + x, DIM.offy + y);
 	}
 	
+	//supports negative indexing
 	getState(i){
 		if (i < 0)
 			i += this.states.length;
-		return this.states[i];
+		return this.states[i] ?? null;
 	}
 
 	push(state){
@@ -79,7 +84,7 @@ class Game {
 		this.states.push(state);
 		this.switchStage();
 	}
-	pop(){
+	pop(suppressReEnter=false){
 		let states = this.states;
 		let state = states.pop();
 		if (state.destructor)
@@ -88,15 +93,25 @@ class Game {
 			this.top = null;
 		else
 			this.top = states[states.length-1];
-		this.top?.onEnter?.();
+		if (!suppressReEnter)
+			this.top?.onReEnter?.();
 		this.switchStage();
 	}
 	//switch rendering to the top layer
+	//also supports underlay rendering
 	switchStage(){
 		this.stage.removeChildren();
 		if (this.top){
 			let top = this.top;
+			if (top.showUnderlay){
+				let underlay = this.getState(-2);
+				if (underlay){
+					this.stage.addChild(underlay.stage);
+					underlay.stage.interactiveChildren = false;
+				}
+			}
 			this.stage.addChild(top.stage);
+			top.stage.interactiveChildren = true;
 			if (top.windowTitle){
 				let text = `Otaku-Ball - ${top.windowTitle}`;
 				this.windowTitle.text = text;
@@ -109,6 +124,7 @@ class Game {
 
 	update(delta){
 		mouse.updatePos();
+		this.debugPrintMousePos();
 		this.top.update(delta);
 		mouse.updateButton();
 		keyboard.update();
@@ -134,7 +150,22 @@ class Game {
 	get(name, includeNew){
 		return this.top.get(name, includeNew);
 	}
-	
+
+	debugPrintMousePos(){
+		if (keyboard.isPressed(keycode.SPACE)){
+			let mx = Math.floor(mouse.x);
+			let my = Math.floor(mouse.y);
+			let dx = null;
+			let dy = null;
+			if (this.old_mx !== undefined)
+				dx = mx - this.old_mx;
+			if (this.old_my !== undefined)
+				dy = my - this.old_my;
+			console.log(`mouse = [${mx}, ${my}], delta = [${dx}, ${dy}]`);
+			this.old_mx = mx;
+			this.old_my = my;
+		}
+	}
 }
 
 //custom mask class that takes in account of the window offset
@@ -249,39 +280,28 @@ function setup(){
 	media.processSounds();
 	media.createAnimations();
 
-	//load default levels & playlists from loaded assets
+	//load default levels from the loaded assets
 	let list = PIXI.Loader.shared.resources.default_levels.data;
-	levels.default = new FileDatabase(list); 
-	//the playlist FileDatabse will be generated in LevelSelectState instead
-	
-	// levels.default.list = PIXI.Loader.shared.resources.default_levels.data;
-	// for (let [name, level] of levels.default.list){
-	// 	levels.default.lookup[name] = level;
-	// }
+	levels.default = new FileDatabase(list, false);
+	//generate default playlist from the default levels
+	playlists.default = new FileDatabase(list, true);
 
-	// playlists.default.list = PIXI.Loader.shared.resources.default_playlists.data;
-	// for (let [name, playlist] of playlists.default.list){
-	// 	playlists.default.lookup[name] = playlist;
-	// }
-
-	//load user levels & playlists from localStorage
-	//TODO: make both lookups a map?
+	//load user levels from local storage
 	let str = localStorage.getItem("user_levels");
-	// let arr = [];
-	// if (str !== null)
-	// 	arr = JSON.parse(str);
-	// levels.user.list = arr;
-	// for (let [name, level] of arr){
-	// 	levels.user.lookup[name] = level;
-	// }
-	// sortLevels();
-	levels.user = new FileDatabase((str === null) ? [] : JSON.parse(str));
+	levels.user = new FileDatabase((str === null) ? [] : JSON.parse(str), false);
+	//user playlists will be generated in LevelSelectState
+
+	//load campaign save from localStorage
+	campaign_save = new CampaignSave();
 
 	game = new Game();
 
 	let [box, title] = 
 		createOuterBorder(DIM.w + DIM.outerx, DIM.h + DIM.outery);
 	app.stage.addChild(box);
+
+	// createErrorDisplay();
+
 	game.windowTitle = title;
 	game.setPos(0, 0);
 	//create a 800 x 600 mask
@@ -331,6 +351,23 @@ function createOuterBorder(w, h){
 function getTrueGlobalPosition(obj){
 	let p = obj.getGlobalPosition();
 	return new PIXI.Point(p.x-DIM.offx, p.y-DIM.offy);
+}
+
+//DOES NOT WORK
+//Error counter will be displayed on the top right corner if there is at least 1 error
+function createErrorDisplay(){
+	let count = 0;
+	let text = printText("Errors: 0", "arcade", 0xFF0000, 1, DIM.w - 160, 8);
+	text.visible = true;
+	app.stage.addChild(text);
+
+	//some errors will freeze the game 
+	window.onerror = function(){
+		count++;
+		text.text = "Errors: " + count;
+		text.visible = true;
+		return false;
+	};
 }
 
 //when cursor is in game window:

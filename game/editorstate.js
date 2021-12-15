@@ -746,10 +746,12 @@ class EditorState{
 		let width = 400, height = 250;
 		let dialogue = new DialogueBox(width, height, title, this);
 
+		let textAreaWidth = dialogue.bodyWidth - 20;
+
 		let textArea = new PIXI.TextInput({
 			input: {
 				fontSize: "12px",
-				width: "350px",
+				width: `${textAreaWidth}px`,
 				height: "120px",
 				color: 0x000000,
 				multiline: true,
@@ -765,11 +767,11 @@ class EditorState{
 		textArea.substituteText = false;
 		textArea.isTextInput = true; //used in state's destructor
 		textArea.htmlInput.readOnly = !isImport;
-		let rect = textArea.getBounds();
+		// let rect = textArea.getBounds();
 		// textArea.text = `width: ${rect.width}, height: ${rect.height}`;
 		//center the text area within the dialogue box
-		let dx = width - rect.width;
-		textArea.position.set(dx/2 - 4, 20);
+		// let dx = width - rect.width;
+		textArea.position.set(10 - 2, 10);
 		dialogue.add(textArea);
 
 		if (isImport){
@@ -779,24 +781,11 @@ class EditorState{
 			errorText.visible = false;
 			dialogue.add(errorText);
 
-			let cancelButton = new Button(
-				width - 115, height - 80, 95, 40
-			);
-			cancelButton.add(printText(
-				"Cancel", "arcade", 0x000000, 1, 7, 10
-			));
-			cancelButton.onClick = function(){
+			dialogue.addButton("Cancel", 95, 40, () => {
 				game.pop();
-			}
-			dialogue.add(cancelButton);
+			});
 
-			let importButton = new Button(
-				width - 220, height - 80, 95, 40
-			);
-			importButton.add(printText(
-				"Import", "arcade", 0x000000, 1, 5, 10
-			));
-			importButton.onClick = function(){
+			dialogue.addButton("Import", 95, 40, () => {
 				let str = textArea.text;
 				let level = null;
 				try{
@@ -809,22 +798,15 @@ class EditorState{
 					editorstate.loadLevel(level);
 					game.pop();
 				}
-			}
-			dialogue.add(importButton);
+			});
 		}
 		else{
 			let level = this.createLevel();
 			textArea.text = JSON.stringify(level);
-			let closeButton = new Button(
-				width - 100, height - 80, 80, 40
-			);
-			closeButton.add(printText(
-				"Close", "arcade", 0x000000, 1, 5, 10
-			));
-			closeButton.onClick = function(){
+
+			dialogue.addButton("Close", 80, 40, () => {
 				game.pop();
-			}
-			dialogue.add(closeButton);
+			});
 		}
 
 		return dialogue;

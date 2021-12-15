@@ -99,8 +99,8 @@ class MainMenuState{
 		}
 
 		makeButton("menu_button_0", "Play Campaign", function(){
-			console.log("Campaign not implemented yet");
-		}, true);
+			game.push(new CampaignState());
+		});
 		makeButton("menu_button_1", "Play Playlist", function(){
 			game.push(new LevelSelectState(true, "play"));
 		});
@@ -110,9 +110,9 @@ class MainMenuState{
 		makeButton("menu_button_3", "Options", function(){
 			console.log("Options not implemented yet");
 		}, true);
-		makeButton("menu_button_4", "Playlist Editor", function(){
-			console.log("Playlist Editor not implemented yet");
-		}, true);
+		makeButton("menu_button_4", "Level Manager", function(){
+			game.push(new LevelSelectState(false, "manager"));
+		});
 		makeButton("menu_button_5", "Level Editor", function(){
 			game.push(new EditorState());
 		});

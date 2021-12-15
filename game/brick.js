@@ -520,7 +520,7 @@ class ForbiddenBrick extends Brick{
 
 	updateAppearance(){
 		this.setTexture(
-			cheats.show_forbidden ? "brick_main_12_12" : "brick_invis"
+			cheats.get("show_forbidden") ? "brick_main_12_12" : "brick_invis"
 		);
 	}
 
@@ -2506,7 +2506,7 @@ class ParachuteBrick extends Brick{
 			pos[1] += this.speed * delta;
 			let r = ball.shape.radius;
 
-			let disable_pit = cheats.disable_pit;
+			let disable_pit = cheats.get("disable_pit");
 			if ((disable_pit && pos[1] + r > DIM.h) ||
 				(!disable_pit && pos[1] - r > DIM.h))
 			{

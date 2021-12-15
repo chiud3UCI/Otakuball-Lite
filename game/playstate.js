@@ -1401,6 +1401,12 @@ PlayState.states = {
 			let round = 1;
 			if (ps.mode == "playlist")
 				round = ps.playlistIndex + 1;
+			else if (ps.mode == "campaign"){
+				let index = campaign_save.data.zone_index;
+				let name = campaign_save.playlist[1][index][0];
+				let level_name = name.split("/")[1];
+				round = Number(level_name.substring(5));
+			}
 
 			let text = printText(`ROUND ${round}\nREADY`,
 				"arcade", 0xFFFFFF, 2, DIM.w/2, DIM.h*3/4);

@@ -1,3 +1,6 @@
+[01/07/22]
+-Added Options
+
 [12/15/21]
 -Implemented Campaign
 -Implemented Level Manager that allows for copying, moving, and deleting levels

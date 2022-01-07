@@ -27,7 +27,7 @@ function importCampaignSave(str){
         return;
     }
 
-    campaign_save.load(str);
+    campaign_save.importStr(str);
     if (game.top instanceof CampaignState)
         game.top.load();
 }
@@ -41,16 +41,16 @@ function exportCampaignSave(){
     return JSON.stringify(campaign_save.data);
 }
 
-class CampaignState{
+class CampaignState extends State{
     constructor(){
+        super();
         this.windowTitle = "Campaign";
 
         let stage = new PIXI.Container();
         this.stage = stage;
 
         let bg = new PIXI.Graphics();
-        bg.beginFill(0xAAAAAA)
-            .drawRect(0, 0, DIM.w, DIM.h);
+        fillRect(bg, "main0", 0, 0, DIM.w, DIM.h);
         stage.addChild(bg);
 
         const pad = 30;
@@ -78,7 +78,8 @@ class CampaignState{
         this.load();
     }
 
-    onReEnter(){
+    onEnter(){
+        super.onEnter();
         this.starting = false;
         this.blackout.alpha = 0;
         this.load();
@@ -619,7 +620,7 @@ class CampaignSave{
         this.initializing = true;
         this.playlist = null;
         this.reset();
-        this.load(localStorage.getItem("campaign"));
+        this.importStr(localStorage.getItem("campaign"));
         this.initializing = false;
     }
 
@@ -644,13 +645,18 @@ class CampaignSave{
         this.updateZone("A");
     }
 
-    load(str){
+    importStr(str){
         if (str === null)
             return;
         let obj = JSON.parse(str);
+
+        //this will make sure any new fields will not get removed
+        //by an old save with less fields
         Object.assign(this.data, obj);
 
         this.playlist = playlists.default.get("Zone"+this.data.current_zone);
+
+        this.save();
     }
 
     /*

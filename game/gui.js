@@ -1,12 +1,75 @@
-function fillRect(graphics, grey, x, y, w, h){
+//TOOD: - normalize fillRect for the full color param
+//      - if fillRect arg is type string, then retreive the hex from PALETTE
+
+
+//these 2-digit hex digits will be repeated to get the full color value
+var PALETTE_GREY = {
+	main0: 0xA0,
+	main1: 0xC8,
+	main2: 0x90,
+	border0: 0x00,
+	border_special: 0xC0,
+	border1: 0xFF,
+	border2: 0x64,
+	border3: 0x30, //for over + down
+};
+
+var PALETTE = {
+	status_red: 0xFF0000,
+	status_green: 0x00BB00,
+};
+
+for (let [key, value] of Object.entries(PALETTE_GREY))
+	PALETTE[key] = value * 0x010101;
+
+function fillRect(graphics, color, x, y, w, h){
+	if (typeof(color) == "string")
+		color = PALETTE[color];
+	graphics.beginFill(color)
+		.drawRect(x, y, w, h);
+}
+
+function fillRectGrey(graphics, grey, x, y, w, h){
+	if (typeof(grey) == "string")
+		grey = PALETTE_GREY[grey];
 	let color = grey * 0x010101;
 	graphics.beginFill(color)
 		.drawRect(x, y, w, h);
 }
 
-function fillRect2(graphics, color, x, y, w, h){
-	graphics.beginFill(color)
-		.drawRect(x, y, w, h);
+//moves a PIXI.Container so that the center is at the target coordinates
+function moveCenterTo(obj, x, y){
+	let {width, height} = obj.getLocalBounds();
+	obj.position.set(x - width/2, y - height/2);
+}
+
+//draw horizontal or veritical dividers
+function drawDivider(graphics, mode, x, y, mag, mag2){
+	if (mode == "vertical"){
+		graphics.beginFill(0x909090)
+			.drawRect(x, y, 2, mag)
+			.beginFill(0xFFFFFF)
+			.drawRect(x+2, y, 2, mag);
+	}
+	else if (mode == "horizontal"){
+		graphics.beginFill(0x909090)
+			.drawRect(x, y, mag, 2)
+			.beginFill(0xFFFFFF)
+			.drawRect(x, y+2, mag, 2);
+	}
+	else if (mode == "box"){
+		// console.log(`box before: ${mag}, ${mag2}`);
+		let w = mag - 4;
+		let h = mag2 - 4;
+		drawDivider(graphics, "vertical"  , x  , y  , h  );
+		drawDivider(graphics, "horizontal", x+2  , y  , w-2  );
+		drawDivider(graphics, "vertical"  , x+w, y  , h  );
+		drawDivider(graphics, "horizontal", x  , y+h, w+4);
+		//add a white pixel to the bottom right corner for the finishing touches
+		graphics.beginFill(0xFFFFFF).drawRect(x+w+2, y+h, 2, 2);
+		// let {width, height} = graphics.getBounds();
+		// console.log(`box after: ${width}, ${height}`);
+	}
 }
 
 //Base is just a regular windows98 box (without title bar);
@@ -17,10 +80,10 @@ class Base extends PIXI.Container{
 		this.position.set(x, y);
 		let gr = new PIXI.Graphics();
 		let fr = fillRect;
-		fr(gr, 0x00, 0, 0, w,   h);
-		fr(gr, 0xFF, 0, 0, w-2, h-2);
-		fr(gr, 0x64, 2, 2, w-4, h-4);
-		fr(gr, 0xDC, 2, 2, w-6, h-6);
+		fr(gr, "border0", 0, 0, w,   h);
+		fr(gr, "border1", 0, 0, w-2, h-2);
+		fr(gr, "border2", 2, 2, w-4, h-4);
+		fr(gr, "main1", 2, 2, w-6, h-6);
 		this.addChild(gr);
 
 		if (title === null){
@@ -29,7 +92,7 @@ class Base extends PIXI.Container{
 		}
 		else{
 			this.titleBar = new PIXI.Graphics();
-			fillRect2(this.titleBar, 0x000080, 4, 4, w-10, 22);
+			fillRect(this.titleBar, 0x000080, 4, 4, w-10, 22);
 			this.title = printText(title, "arcade", 0xFFFFFF, 1, 8, 6);
 			this.titleBar.addChild(this.title);
 			this.addChild(this.titleBar);
@@ -39,37 +102,33 @@ class Base extends PIXI.Container{
 
 class Button extends PIXI.Container{
 	//TODO: create a global ui palette object to keep ui colors consistent
-	static colors = {
-		dark: [0x90, 0xA0, 0xDC],
-		light: [0xDC, 0xDC, 0xDC],
-		disabled: 0x80,
-	}
+	static disabledTint = 0x80 * 0x010101;
 
-	constructor(x, y, w, h, color="dark"){
+	constructor(x, y, w, h, color="light"){
 		super();
 		this.position.set(x, y);
 
-		let arr = Button.colors[color];
+		let face = (color == "dark") ? "main0" : "main1";
 
 		let fr = fillRect;
 		//give it a Windows 95 feel
 		let up = new PIXI.Graphics();
-		fr(up, 0x00, 0, 0, w,   h);
-		fr(up, 0xFF, 0, 0, w-2, h-2);
-		fr(up, 0x64, 2, 2, w-4, h-4);
-		fr(up, arr[0], 2, 2, w-6, h-6);
+		fr(up, "border0", 0, 0, w,   h);
+		fr(up, "border1", 0, 0, w-2, h-2);
+		fr(up, "border2", 2, 2, w-4, h-4);
+		fr(up, face, 2, 2, w-6, h-6);
 
 		let over = new PIXI.Graphics();
-		fr(over, 0x20, 0, 0, w,    h);
-		fr(over, 0xFF, 2, 2, w-6,  h-6);
-		fr(over, 0x40, 4, 4, w-8,  h-8);
-		fr(over, arr[1], 4, 4, w-10, h-10);
+		fr(over, "border0", 0, 0, w,    h);
+		fr(over, "border1", 2, 2, w-6,  h-6);
+		fr(over, "border2", 4, 4, w-8,  h-8);
+		fr(over, face, 4, 4, w-10, h-10);
 
 		let down = new PIXI.Graphics();
-		fr(down, 0xFF, 0, 0, w,   h);
-		fr(down, 0x20, 0, 0, w-2, h-2);
-		fr(down, 0x64, 2, 2, w-4, h-4);
-		fr(down, arr[2], 4, 4, w-6, h-6);
+		fr(down, "border1", 0, 0, w,   h);
+		fr(down, "border0", 0, 0, w-2, h-2);
+		fr(down, "border2", 2, 2, w-4, h-4);
+		fr(down, face, 4, 4, w-6, h-6);
 
 		this.addChild(up);
 		this.addChild(over);
@@ -122,7 +181,7 @@ class Button extends PIXI.Container{
 			this.over = false;
 			for (let obj of this.stage.children){
 				if (obj instanceof PIXI.BitmapText)
-					obj.tint = Button.colors["disabled"] * 0x010101;
+					obj.tint = Button.disabledTint;
 			}
 		}
 		else{
@@ -188,19 +247,19 @@ class TabButton extends PIXI.Container{
 		super();
 		this.position.set(x, y);
 
-		let fr = fillRect;
+		let fr = fillRectGrey;
 
 		let on = new PIXI.Graphics();
-		fr(on, 0x00, 0, 0, w  , h-6);
-		fr(on, 0xFF, 0, 0, w-2, h-4);
-		fr(on, 0x64, 2, 2, w-4, h-6);
-		fr(on, 0xDC, 2, 2, w-6, h-6);
+		fr(on, "border0", 0, 0, w  , h-6);
+		fr(on, "border1", 0, 0, w-2, h-4);
+		fr(on, "border2", 2, 2, w-4, h-6);
+		fr(on, "main1", 2, 2, w-6, h-6);
 
 		let off = new PIXI.Graphics();
-		fr(off, 0x00, 2, 2, w-4, h-4);
-		fr(off, 0xFF, 2, 2, w-6, h-6);
-		fr(off, 0x64, 4, 4, w-8, h-8);
-		fr(off, 0xBB, 4, 4, w-10, h-10);
+		fr(off, "border0", 2, 2, w-4, h-4);
+		fr(off, "border1", 2, 2, w-6, h-6);
+		fr(off, "border2", 4, 4, w-8, h-8);
+		fr(off, "main0", 4, 4, w-10, h-10);
 
 		this.addChild(on);
 		this.addChild(off);
@@ -268,46 +327,158 @@ class TabButton extends PIXI.Container{
 	}
 }
 
-// class DialogueBox{
-// 	constructor(w, h, title=null, message=null){
-// 		this.showUnderlay = true;
+class Checkbox extends PIXI.Container{
+	constructor(x, y, initialValue, func=null){
+		super();
+		this.x = x;
+		this.y = y;
+		this.checkState = initialValue;
 
-// 		this.boxWidth = w;
-// 		this.boxHeight = h;
+		//create checkbox graphic
+		let side = 16;
+		this.sideLength = 16;
+		let pad = 4;
+		let side2 = side - pad*2;
+		let outer = new PIXI.Graphics();
+		let inner = new PIXI.Graphics();
+		outer.beginFill(0xFFFFFF);
+		outer.drawRect(0, 0, side, side);
+		inner.beginFill(0x000000);
+		inner.drawRect(pad, pad, side2, side2);
+		inner.visible = this.checkState;
+		this.addChild(outer, inner);
+		this.outer = outer;
+		this.inner = inner;
 
-// 		let stage = new PIXI.Container();
-// 		this.stage = stage;
-// 		stage.addChild(underlayState.stage);
+		this.activateFunc = func;
 
-// 		let box = new PIXI.Graphics();
-// 		this.box = box;
-// 		box.position.set(DIM.w/2 - w/2, DIM.h/2 - h/2);
-// 		let fr = fillRect;
-// 		fr(box, 0x00, 0, 0, w  , h  );
-// 		fr(box, 0xC0, 0, 0, w-2, h-2);
-// 		fr(box, 0x64, 2, 2, w-4, h-4);
-// 		fr(box, 0xFF, 2, 2, w-6, h-6);
-// 		fr(box, 0xAA, 4, 4, w-8, h-8);
-// 		//blue title bar
-// 		fillRect2(box, 0x000080, 6, 6, w-12, 22);
-// 		stage.addChild(box);
+		//hitbox should be based on outer box
+		outer.interactive = true;
+		outer.on("pointerdown", (e) => {this.pointerDown(e);});
+	}
 
-// 		this.title = printText(title ?? "Title", "arcade", 0xFFFFFF, 1, 8, 8);
-// 		this.message = printText(message ?? "Message", "arcade", 0x000000, 1, 8, 32);
-// 		this.message.maxWidth = w;
+	pointerDown(e){
+		if (this.checkState){
+			this.checkState = false;
+			this.inner.visible = false;
+		}
+		else{
+			this.checkState = true;
+			this.inner.visible = true;
+		}
+		this.activateFunc?.(this.checkState);
+	}
 
-// 	}
+	//textObject should be a PIXI.Text or PIXI.BitmapText
+	addLabel(textObject, xoff=4, yoff=0){
+		textObject.x = this.sideLength + xoff;
+		textObject.y = yoff;
+		this.addChild(textObject);
+		this.label = textObject;
+	}
+}
 
-// 	setTitle(title="Title"){
-// 		this.title.text = title;
-// 	}
+class Slider extends PIXI.Container{
+	//"r", "g", "b"
+	constructor(parentState, x, y, sw, sh, maxVal, initialVal=0){
+		super();
+		this.position.set(x, y);
+		this.parentState = parentState;
+		this.maxVal = maxVal; //minVal will always be 0 (for now)
 
-// 	setMessage(message="Message"){
-// 		this.message.text = message;
-// 	}
+		this.onSliderChange = null; //put a custom function here
 
-// 	//places buttons starting from bottom right to left
-// 	addButton(name, callback){
+		//slider width and height
+		let markings = new PIXI.Graphics()
+			.lineStyle(2, 0)
+			.lineTo(0, sh)
+			.moveTo(0, sh/2)
+			.lineTo(sw, sh/2)
+			.moveTo(sw, 0)
+			.lineTo(sw, sh);
+		this.addChild(markings);
+		this.sw = sw;
 
-// 	}
-// }
+		//"draggable" bar
+		const bw = 16;
+		const bh = sh;
+		let fr = fillRect;
+		let bar = new PIXI.Graphics();
+		fr(bar, "border0", 0-bw/2, 0, bw,   bh);
+		fr(bar, "border1", 0-bw/2, 0, bw-2, bh-2);
+		fr(bar, "border2", 2-bw/2, 2, bw-4, bh-4);
+		fr(bar, "main1"  , 2-bw/2, 2, bw-6, bh-6);
+		this.bar = bar;
+		this.bw = bw;
+		this.addChild(bar);
+
+		//invisible slider hitbox
+		//the color value can be set by clicking
+		//anyhwhere in the hitbox
+		//Make the hitbox slightly wider than the slider
+		//to make setting 0 and 255 easier
+		let hitbox = new PIXI.Graphics()
+			.beginFill(0xFFFFFF)
+			.drawRect(-bw/2, 0, sw+bw, sh)
+		hitbox.alpha = 0;
+		hitbox.interactive = true;
+		hitbox.on("pointerdown", (e) => {
+			hitbox.down = true;
+			hitbox.updateBar();
+		});
+		hitbox.on("pointerup", (e) => {hitbox.down = false;});
+		hitbox.on("pointerupoutside", (e) => {hitbox.down = false;});
+		hitbox.on("pointermove", (e) => {
+			if (hitbox.down)
+				hitbox.updateBar();
+		});
+		hitbox.updateBar = () => {
+			let mx = mouse.x;
+			let x = getTrueGlobalPosition(hitbox).x;
+			let dx = mx - x;
+			let ratio = dx / sw;
+			ratio = Math.max(0, Math.min(1, ratio));
+			let val = Math.floor(ratio * this.maxVal);
+			this.setValue(val);
+
+			this.onSliderChange?.();
+		};
+		this.addChild(hitbox);
+
+		//text input
+		let input = parentState.createTextInput(40, 14, 2);
+		input.position.set(sw + 20, 0);
+		input.restrict = "0123456789";
+		input.text = 0;
+		input.on("input", (text) => {
+			this.setValue(Number(text));
+			this.onSliderChange?.();
+		});
+		this.addChild(input);
+		this.input = input;
+
+		//set both slider and input at the same time
+		this.setValue(initialVal);
+	}
+
+	destructor(){
+		this.input.destroy();
+	}
+
+	//set color value from 0 to maxVal
+	//and adjusts both the slider and textinput
+	setValue(val){
+		let maxVal = this.maxVal;
+		val = Math.max(0, Math.min(maxVal, val));
+		this.value = val;
+		let ratio = val/maxVal;
+		let dx = ratio * this.sw;
+		this.bar.x = dx;
+
+		this.input.text = val;
+	}
+
+	update(delta){
+
+	}
+}

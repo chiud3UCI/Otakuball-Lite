@@ -11,8 +11,9 @@ var title_layout = [
 
 ];
 
-class MainMenuState{
+class MainMenuState extends State{
 	constructor(){
+		super();
 		let layerNames = [
 			"background",
 			"bricks",
@@ -108,8 +109,8 @@ class MainMenuState{
 			game.push(new LevelSelectState(false, "play"));
 		});
 		makeButton("menu_button_3", "Options", function(){
-			console.log("Options not implemented yet");
-		}, true);
+			game.push(new OptionsState());
+		});
 		makeButton("menu_button_4", "Level Manager", function(){
 			game.push(new LevelSelectState(false, "manager"));
 		});
@@ -211,45 +212,25 @@ class ChangelogState extends DialogueBox{
 	constructor(underlay){
 		super(700, 520, "Changelog", underlay);
 
-		let box = this.box;
 		let w = 90;
 		let h = 40;
-
-		let close = new Button(box.width - w - 8, box.height - h - 8, w, h);
+		let close = new Button(this.bodyWidth - w - 8, this.bodyHeight - h - 8, w, h);
 		close.onClick = function(){
 			game.pop();
 		};
 		close.stage.addChild(printText("Close", "windows", 0x000000, 2, 6, 6));
-		box.addChild(close);
+		this.body.addChild(close);
 
-		let textArea = new PIXI.TextInput({
-			input: {
-				fontSize: "16px",
-				width: "650px",
-				height: "420px",
-				color: 0x000000,
-				multiline: true,
-			},
-			box: {
-				fill: 0xFFFFFF,
-				stroke: {
-					color: 0x000000,
-					width: 2,
-				}
-			}
-		});
-		textArea.x = (700 - 650)/2 - 2;
-		textArea.y = 40;
+		let tw = 650;
+		let th = 400;
+		let textArea = this.createTextArea(tw, th, 16);
+		textArea.x = (this.bodyWidth - tw)/2 - 2;
+		textArea.y = 16;
 		textArea.substituteText = false;
 		textArea.htmlInput.readOnly = true;
 		let changelog = PIXI.Loader.shared.resources.changelog.data;
 		textArea.text = changelog;
 		this.textArea = textArea;
-		box.addChild(textArea);
-	}
-
-	destructor(){
-		super.destructor();
-		this.textArea.destroy();
+		this.body.addChild(textArea);
 	}
 }

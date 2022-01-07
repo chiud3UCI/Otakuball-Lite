@@ -20,22 +20,36 @@ function sortLevels(list=null){
 	list.sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-class LevelSelectState{
+class LevelSelectState extends State{
 	//mode is one of ["play", "load", "save", "manager"]
 	constructor(isPlaylist, mode){
+		super();
 		ENABLE_RIGHT_CLICK = true;
 
 		this.isPlaylist = isPlaylist;
 		this.mode = mode;
-		this.windowTitle = isPlaylist ? "Playlist Select" : "Level Select";
+		let title = "null";
+		if (mode == "play"){
+			if (isPlaylist)
+				title = "Playlist Select";
+			else
+				title = "Level Select";
+		}
+		else if (mode == "load")
+			title = "Load Level";
+		else if (mode == "save")
+			title = "Save Level";
+		else if (mode == "manager")
+			title = "Level Manager";
 
+		this.windowTitle = title;
+		
 		let stage = new PIXI.Container();
 		stage.sortableChildren = true;
 		this.stage = stage;
 
 		let bg = new PIXI.Graphics();
-		bg.beginFill(0xAAAAAA)
-			.drawRect(0, 0, DIM.w, DIM.h);
+		fillRect(bg, "main0", 0, 0, DIM.w, DIM.h);
 		bg.zIndex = -2;
 		stage.addChild(bg);
 
@@ -80,8 +94,8 @@ class LevelSelectState{
 				let panels = this.parentState.panels;
 				for (let [i, panel] of panels.entries()){
 					if (i !== index){
-						panel.visible = false;
 						panel.hideTextInput();
+						panel.visible = false;
 					}
 				}
 				let panel = panels[index];
@@ -131,25 +145,17 @@ class LevelSelectState{
 		let x = base.width/2;
 		let y = 8;
 		let height = base.height - 90 - y*2; //gap from horizontal line
-		
-		dividers.beginFill(0xFFFFFF)
-			.drawRect(x+1, y, 2, height)
-			.beginFill(0x909090)
-			.drawRect(x-1, y, 2, height);
+		drawDivider(dividers, "vertical", x, y, height);
 		//horizontal
 		x = 8;
 		y = base.height - 90;
 		let width = base.width - x*2 - 2;
-		dividers.beginFill(0xFFFFFF)
-			.drawRect(x, y+1, width, 2)
-			.beginFill(0x909090)
-			.drawRect(x, y-1, width, 2);
+		drawDivider(dividers, "horizontal", x, y, width);
 	}
 
 	destructor(){
+		super.destructor();
 		ENABLE_RIGHT_CLICK = false;
-		for (let panel of this.panels)
-			panel.textBox.input.destroy();
 	}
 
 	initButtons(x, y, w, h){
@@ -182,25 +188,23 @@ class LevelSelectState{
 
 	//when a new state gets pushed on top of this state
 	onExit(){
+		super.onExit();
 		ENABLE_RIGHT_CLICK = false;
-		for (let panel of this.panels)
-			panel.hideTextInput();
 	}
 
 	//when this state becomes the top state again after the above state was popped
-	onReEnter(){
+	onEnter(){
+		super.onEnter();
 		ENABLE_RIGHT_CLICK = true;
-		for (let panel of this.panels)
-			panel.showTextInput();
 	}
 
 	//can also use "red" and "green" for shortcuts
 	setMessage(message, color=0x000000, timer=3000){
 		// console.log(`set message="${message}", color=${color}, timer=${timer}"`);
 		if (color === "red")
-			color = 0xFF0000;
+			color = PALETTE["status_red"];
 		else if (color === "green")
-			color = 0x00CC00;
+			color = PALETTE["status_green"];
 		this.message.text = message;
 		this.message.tint = color;
 		this.message.visible = true;
@@ -548,7 +552,7 @@ class LSS_FileList extends PIXI.Container{
 		this.panel = panel;
 		this.position.set(16, 16);
 
-		let fr = fillRect;
+		let fr = fillRectGrey;
 		let text_w = 300;
 		let text_h = 400;
 		let box_w = text_w + 4;
@@ -556,7 +560,7 @@ class LSS_FileList extends PIXI.Container{
 		let whiteBox = new PIXI.Graphics(); //300 400
 		// fr(whiteBox, 0xF0, 0, 0, box_w, box_h); //bottom right
 		fr(whiteBox, 0x64, 0, 0, box_w-0, box_h-0); //top left
-		fr(whiteBox, 0xC0, 2, 2, box_w-2, box_h-2); //inner bottom right
+		// fr(whiteBox, 0xC0, 2, 2, box_w-2, box_h-2); //inner bottom right
 		fr(whiteBox, 0xFF, 2, 2, box_w-4, box_h-4); //middle white box
 		this.addChild(whiteBox);
 		this.whiteBox = whiteBox;
@@ -744,9 +748,11 @@ class LSS_ScrollBar extends PIXI.Container{
 		this.baseHeight = h;
 
 		//the long grey space the scroll bar can move in
-		let base = new PIXI.Graphics()
-			.beginFill(0xC0C0C0)
-			.drawRect(0, 0, w, h);
+		// let base = new PIXI.Graphics()
+		// 	.beginFill(0xC0C0C0)
+		// 	.drawRect(0, 0, w, h);
+		let base = new PIXI.Graphics();
+		fillRectGrey(base, 0xDC, 0, 0, w, h);
 		this.addChild(base);
 
 		//the actual scroll bar
@@ -764,7 +770,7 @@ class LSS_ScrollBar extends PIXI.Container{
 	}
 
 	resize(){
-		let fr = fillRect;
+		let fr = fillRectGrey;
 		let bar = this.bar;
 		let bw = this.baseWidth;
 		let bh = this.baseHeight;
@@ -980,6 +986,10 @@ class LSS_PlaylistPreview extends PIXI.Container{
 		this.playlistPreview = text;
 	}
 
+	clear(){
+		this.playlistPreview.text = "Select a Playlist";
+	}
+
 	setPlaylist(playlist){
 		let names = playlist[1].map(arr => arr[0]);
 		names = names.map(str => str.substring(str.indexOf("/")+1));
@@ -1013,21 +1023,8 @@ class LSS_TextBox extends PIXI.Container{
 		this.panel = panel;
 		this.position.set(x0 + dx, y0 + dy);
 
-		let input = new PIXI.TextInput({
-			input: {
-				fontSize: "18px",
-				width: `${w}px`,
-				padding: "2px",
-				color: 0x000000,
-			},
-			box: {
-				fill: 0xFFFFFF,
-				stroke: {
-					color: 0x000000,
-					width: 2
-				}
-			}
-		});
+		let parentState = panel.base.parentState;
+		let input = parentState.createTextInput(w, 18, 2);
 		input.substituteText = false;
 		input.position.set(0, 0);
 		this.addChild(input);
@@ -1127,6 +1124,8 @@ class FileDatabase{
 			this.list = Array.from(map.entries());
 		}
 		else{
+			//map format: Map(name -> [name, level object])
+			//yes, name is redundant
 			this.list = list;
 			this.map = new Map();
 			for (let pair of list){
@@ -1169,6 +1168,11 @@ class FileDatabase{
 		return true;
 	}
 
+	clear(){
+		this.list = [];
+		this.map = new Map();
+	}
+
 	at(index){
 		return this.list[index];
 	}
@@ -1177,8 +1181,42 @@ class FileDatabase{
 		return this.map.get(name);
 	}
 
+	//if prettyPrint is true, separate each list element by a newline
+	toString(prettyPrint=false){
+		if (!prettyPrint)
+			return JSON.stringify(this.list);
+		
+		let buffer = "[\n";
+		let lines = this.list.map((x) => JSON.stringify(x));
+		buffer += lines.join(",\n");
+		buffer += "\n]";
+
+		return buffer;
+	}
+
 	save(key){
-		let string = JSON.stringify(this.list);
-		localStorage.setItem(key, string);
+		localStorage.setItem(key, this.toString());
+	}
+
+	//for OptionsState level import
+	//check for conflicts
+	mergeConflicts(newList){
+		let conflicts = [];
+		for (let [name, object] of newList){
+			if (this.map.has(name))
+				conflicts.push(name);
+		}
+		return conflicts;
+	}
+
+	merge(newList){
+		//update the map first
+		for (let [name, object] of newList)
+			this.map.set(name, [name, object]);
+		//reconstruct the internal list
+		this.list = [];
+		for (let [name, [name2, object]] of this.map.entries())
+			this.list.push([name, object]);
+		this.sort();
 	}
 }

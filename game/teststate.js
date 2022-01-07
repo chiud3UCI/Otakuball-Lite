@@ -1,8 +1,9 @@
 //temporary
 //for testing collision related stuff
 
-class TestState{
+class TestState extends State{
 	constructor(){
+		super();
 		this.stage = new PIXI.Container();
 		this.mode = "CIRCLE";
 

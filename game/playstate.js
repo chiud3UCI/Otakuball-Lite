@@ -11,6 +11,11 @@ var cheats = {
 		disable_powerup_spawning: false,
 	},
 
+	setEnabled(value){
+		this.enabled = value;
+		game.cheatText.visible = value;
+	},
+
 	isEnabled(){
 		return this.enabled || this.enabled2;
 	},
@@ -21,11 +26,11 @@ var cheats = {
 };
 
 function enableCheats(){
-	cheats.enabled = true;
+	cheats.setEnabled(true);
 }
 
 function disableCheats(){
-	cheats.enabled = false;
+	cheats.setEnabled(false);
 }
 
 function printObjectCounts(){
@@ -71,7 +76,7 @@ function beatZone(){
 //I chose to use a class approach instead of a singleton
 //because I want to make sure everything in this instance
 //is cleared when the player exits the playstate
-class PlayState{
+class PlayState extends State{
 	/**
 	 * Converts a list of level names to a list of level objects
 	 * 
@@ -100,6 +105,7 @@ class PlayState{
 			"campaign": no args needed; global campaign_save will be used instead
 	*/
 	constructor(mode, ...args){
+		super();
 		this.mode = mode;
 
 		if (mode == "test")
@@ -217,7 +223,7 @@ class PlayState{
 
 		//create walls
 		let walls = new PIXI.Graphics();
-		walls.beginFill(0xAAAAAA);
+		walls.beginFill(PALETTE["main0"]);
 		//take in account of borders
 		let bw = 16; //border width
 		walls.drawRect(0, 0, DIM.wallw-bw, DIM.h);
@@ -321,6 +327,8 @@ class PlayState{
 	}
 
 	destructor(){
+		super.destructor();
+
 		if (this.mode == "test")
 			cheats.enabled2 = false;
 		stopAllSounds();
@@ -346,8 +354,7 @@ class PlayState{
 			let playlist = this.playlist;
 			let index = this.playlistIndex;
 			if (index < playlist.length - 1){
-				game.pop(true);
-				game.push(new PlayState("playlist", playlist, index+1, this));
+				game.replace(new PlayState("playlist", playlist, index+1, this));
 			}
 			else
 				game.pop();
@@ -359,8 +366,7 @@ class PlayState{
 				game.pop();
 			}
 			else{
-				game.pop(true);
-				game.push(new PlayState("campaign"));
+				game.replace(new PlayState("campaign"));
 			}
 		}
 	}
@@ -677,8 +683,10 @@ class PlayState{
 				cheats.flags[flag_name] = val;
 				func?.();
 			};
-			let cb = new Checkbox(x, y, text, curr_val, func2);
-			cb.label.style.fontSize = font_size;
+			let cb = new Checkbox(x, y, curr_val, func2);
+			cb.addLabel(
+				new PIXI.Text(text, {fontSize: font_size, fill: 0x000000})
+			);
 			ps.add("hud", cb);
 			y += dy;
 		}
@@ -2221,60 +2229,8 @@ class EnemyButton extends PlayButton{
 	
 }
 
-//TODO: move this to gui.js
-class Checkbox extends PIXI.Container{
-	constructor(x, y, text, initialValue, func){
-		super();
-		this.x = x;
-		this.y = y;
-		this.checkState = initialValue;
-
-		//create checkbox graphic
-		let side = 16;
-		let pad = 4;
-		let side2 = side - pad*2;
-		let outer = new PIXI.Graphics();
-		let inner = new PIXI.Graphics();
-		outer.beginFill(0xFFFFFF);
-		outer.drawRect(0, 0, side, side);
-		inner.beginFill(0x000000);
-		inner.drawRect(pad, pad, side2, side2);
-		inner.visible = this.checkState;
-		this.addChild(outer, inner);
-		this.outer = outer;
-		this.inner = inner;
-
-		//create label
-		let label = new PIXI.Text(text, {
-			fontSize: 16,
-			fill: 0x000000
-		});
-		label.x = side + 4;
-		label.y = 0;
-		this.addChild(label);
-		this.label = label;
-
-		this.activateFunc = func;
-
-		//hitbox should be based on outer box
-		outer.interactive = true;
-		outer.on("pointerdown", (e) => {this.pointerDown(e);});
-	}
-
-	pointerDown(e){
-		if (this.checkState){
-			this.checkState = false;
-			this.inner.visible = false;
-		}
-		else{
-			this.checkState = true;
-			this.inner.visible = true;
-		}
-		this.activateFunc(this.checkState);
-	}
-}
-
 //GridSet is a Set that reserves pairs of ints
+//Might be deprecated since I can just use a string.
 //TODO: find a use for this or delete this
 class GridSet{
 	//increase this if the board size somehow becomes larger

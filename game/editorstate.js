@@ -1,5 +1,6 @@
-class EditorState{
+class EditorState extends State{
 	constructor(){
+		super();
 		//create more layers if necessary
 		let layerNames = [
 			"background",
@@ -27,7 +28,7 @@ class EditorState{
 
 		//create walls
 		let walls = new PIXI.Graphics();
-		walls.beginFill(0xAAAAAA);
+		walls.beginFill(PALETTE["main0"]);
 		walls.drawRect(0, 0, DIM.wallw, DIM.h);
 		walls.drawRect(DIM.rwallx, 0, DIM.wallw, DIM.h);
 		walls.drawRect(DIM.lwallx, 0, DIM.boardw, DIM.ceiling);
@@ -196,11 +197,6 @@ class EditorState{
 		this.stateName = "editorstate";
 	}
 
-	destructor(){
-		for (let input of this.enemySpawnInputs)
-			input.destroy();
-	}
-
 	setBackground(color=0x000080, tile=null){
 		let bg = this.bg;
 		bg.color = color;
@@ -359,7 +355,7 @@ class EditorState{
 				}
 				else{
 					panel.visible = false;
-					panel.onOutOfFocus?.();
+					panel.onHide?.();
 				}
 			}
 		}
@@ -571,21 +567,7 @@ class EditorState{
 		panel.addChild(this.brickButtonHighlight2);
 
 		//laser gate brick channel
-		let input = new PIXI.TextInput({
-			input: {
-				fontSize: "14px",
-				width: "36px",
-				padding: "2px",
-				color: 0x000000,
-			},
-			box: {
-				fill: 0xFFFFFF,
-				stroke: {
-					color: 0x000000,
-					width: 2
-				}
-			}
-		});
+		let input = this.createTextInput(36, 14, 2);
 		input.restrict = "0123456789";
 		input.text = 0;
 		input.on("input", (text) => {
@@ -602,7 +584,6 @@ class EditorState{
 				this.selectedBrick = id;
 			}
 		});
-		input.focusOnce = false;
 		input.on("focus", () => {
 			mouse.m1 = 0;
 		});
@@ -663,21 +644,7 @@ class EditorState{
 		for (let [i, [x, y]] of positions.entries()){
 			y += yoff;
 
-			let input = new PIXI.TextInput({
-				input: {
-					fontSize: "14px",
-					width: "36px",
-					padding: "2px",
-					color: 0x000000,
-				},
-				box: {
-					fill: 0xFFFFFF,
-					stroke: {
-						color: 0x000000,
-						width: 2
-					}
-				}
-			});
+			let input = this.createTextInput(36, 14, 2);
 			input.restrict = ".0123456789";
 			input.text = this.defaultSpawn[i]/1000;
 			input.on("input", (text) => {
@@ -697,7 +664,6 @@ class EditorState{
 				let val = Number(text);
 				this.enemySpawn[i] = Math.floor(val*1000);
 			});
-			input.focusOnce = false;
 			input.on("focus", () => {
 				mouse.m1 = 0;
 			});
@@ -706,10 +672,13 @@ class EditorState{
 			this.enemySpawnInputs.push(input);
 		}
 
-		panel.onOutOfFocus = () => {
-			for (let input of this.enemySpawnInputs)
+		panel.onHide = () => {
+			for (let input of this.enemySpawnInputs){
 				input.blur();
+				input.substituteText = true;
+			}
 			this.laserChannelInput.blur();
+			this.laserChannelInput.substituteText = true;
 		};
 		
 		return panel;
@@ -748,29 +717,8 @@ class EditorState{
 
 		let textAreaWidth = dialogue.bodyWidth - 20;
 
-		let textArea = new PIXI.TextInput({
-			input: {
-				fontSize: "12px",
-				width: `${textAreaWidth}px`,
-				height: "120px",
-				color: 0x000000,
-				multiline: true,
-			},
-			box: {
-				fill: 0xFFFFFF,
-				stroke: {
-					color: 0x000000,
-					width: 2
-				}
-			}
-		});
-		textArea.substituteText = false;
-		textArea.isTextInput = true; //used in state's destructor
+		let textArea = dialogue.createTextArea(textAreaWidth, 120, 12);
 		textArea.htmlInput.readOnly = !isImport;
-		// let rect = textArea.getBounds();
-		// textArea.text = `width: ${rect.width}, height: ${rect.height}`;
-		//center the text area within the dialogue box
-		// let dx = width - rect.width;
 		textArea.position.set(10 - 2, 10);
 		dialogue.add(textArea);
 

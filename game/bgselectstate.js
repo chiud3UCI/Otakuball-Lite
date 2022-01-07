@@ -1,4 +1,4 @@
-const color_presets = [
+var BG_COLOR_PRESETS = [
 	0x000080, 0x800000, 0x008000, 0x808000, 0x008080, 0x800080,
 	0x808080, 0x404040, 0x804000, 0x400080, 0x800040, 0x008040,
 	0x0000FF, 0xFF0000, 0x00FF00, 0xFFFF00, 0x00FFFF, 0xFF00FF,
@@ -7,8 +7,9 @@ const color_presets = [
 	0xBAAF71, 0xFCC58E, 0x744C28, 0xA57C55, 0x726258, 0xC7B29B
 ];
 
-class BackgroundSelectState{
+class BackgroundSelectState extends State{
 	constructor(editorstate){
+		super();
 		this.editorstate = editorstate;
 		//import bg from editorstate
 		let editbg = editorstate.bg;
@@ -67,7 +68,7 @@ class BackgroundSelectState{
 		//Color Presets
 		let presets = new PIXI.Container();
 		presets.position.set(300, 150);
-		for (let [n, color] of color_presets.entries()){
+		for (let [n, color] of BG_COLOR_PRESETS.entries()){
 			let i = Math.floor(n/12);
 			let j = n % 12;
 			presets.addChild(new ColorPresetButton(
@@ -122,11 +123,6 @@ class BackgroundSelectState{
 		stage.addChild(patterns);
 	}
 
-	destructor(){
-		for (let slider of this.sliders)
-			slider.destructor();
-	}
-
 	setColor(color){
 		this.bg.color = color;
 		let arr = splitColor(color);
@@ -164,6 +160,7 @@ class BackgroundSelectState{
 	}
 }
 
+//TODO: make this class extend from the new Slider class in gui.js
 class ColorSlider extends PIXI.Container{
 	//"r", "g", "b"
 	constructor(parentState, colorStr, initialVal){
@@ -228,21 +225,7 @@ class ColorSlider extends PIXI.Container{
 		this.addChild(hitbox);
 
 		//text input
-		let input = new PIXI.TextInput({
-			input: {
-				fontSize: "14px",
-				width: "40px",
-				padding: "2px",
-				color: 0x000000,
-			},
-			box: {
-				fill: 0xFFFFFF,
-				stroke: {
-					color: 0x000000,
-					width: 2
-				}
-			}
-		});
+		let input = parentState.createTextInput(40, 14, 2);
 		input.position.set(sw + 20, 0);
 		input.restrict = "0123456789";
 		input.text = 0;

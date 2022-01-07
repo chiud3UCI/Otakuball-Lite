@@ -42,10 +42,8 @@ var playlists = {
 	//SHOULD NOT EXIST. User playlist will be generated during LevelSelectState init.
 	user: null, //this should stay null
 };
-//loaded from localstorage
-var options = {
 
-};
+var DEFAULT_VOLUME = 15;
 
 //loaded from localstorage
 var campaign_save = null;
@@ -55,6 +53,108 @@ function ALERT_ONCE(message, id = 0){
 	if (!alert_record[id]){
 		alert_record[id] = true;
 		alert(message);
+	}
+}
+
+//base State class for PIXI.TextInputs
+//if handling
+class State{
+	constructor(){
+		this._textInputs = [];
+	}
+
+	//called when this state gets popped from the stack
+	destructor(){
+		for (let input of this._textInputs){
+			input.blur();
+			input.destroy();
+		}
+	}
+
+	//called when another state gets pushed on top of this state
+	onExit(){
+		this.stage.interactiveChildren = false;
+		for (let input of this._textInputs){
+			input.blur();
+			input.substituteText = true; //will prevent text from bleeding between states
+		}
+	}
+
+	//called when another state gets popped, making this state the top state
+	onEnter(){
+		this.stage.interactiveChildren = true;
+		for (let input of this._textInputs){
+			input.substituteText = false;
+		}
+	}
+
+	//all text inputs must be registered to the state
+	createTextInput(width, fontSize, padding=0){
+		let input = new PIXI.TextInput({
+			input: {
+				fontSize: `${fontSize}px`,
+				width: `${width}px`,
+				padding: `${padding}px`,
+				color: 0x000000
+			},
+			box: {
+				fill: 0xFFFFFF,
+				stroke: {
+					color: 0x000000,
+					width: 2
+				}
+			}
+		});
+
+		input.isTextArea = false;
+		input.substituteText = true;
+
+		this._textInputs.push(input);
+		return input;
+	}
+
+	createTextArea(width, height, fontSize){
+		let input = new PIXI.TextInput({
+			input: {
+				fontSize: `${fontSize}px`,
+				width: `${width}px`,
+				height: `${height}px`,
+				color: 0x000000,
+				multiline: true,
+				wrap: "soft",
+			},
+			box: {
+				fill: 0xFFFFFF,
+				stroke: {
+					color: 0x000000,
+					width: 2
+				}
+			}
+		});
+		input.isTextArea = true;
+		input.substituteText = false;
+	
+		this._textInputs.push(input);
+		return input;
+	}
+
+	//TODO: implement destroyTextInput() if needed
+
+	// registerInput(input){
+	// 	this._textInputs.push(input);
+	// }
+
+	//always allow right click when mouse is inside a textbox
+	//mx and my are global mouse positions
+	canRightClick(mx, my){
+		if (ENABLE_RIGHT_CLICK)
+			return true;
+
+		for (let input of this._textInputs){
+			if (input.getBounds().contains(mx, my))
+				return true;
+		}
+		return false;
 	}
 }
 
@@ -78,23 +178,34 @@ class Game {
 		return this.states[i] ?? null;
 	}
 
-	push(state){
-		this.top?.onExit?.();
-		this.top = state;
-		this.states.push(state);
+	push(newState){
+		this.top?.onExit();
+		this.top = newState;
+		this.states.push(newState);
 		this.switchStage();
 	}
-	pop(suppressReEnter=false){
+	pop(){
 		let states = this.states;
 		let state = states.pop();
-		if (state.destructor)
-			state.destructor();
-		if (states.length == 0)
+		state.destructor();
+		if (states.length == 0){
 			this.top = null;
-		else
+		}
+		else{
 			this.top = states[states.length-1];
-		if (!suppressReEnter)
-			this.top?.onReEnter?.();
+			this.top.onEnter();
+		}
+		this.switchStage();
+	}
+	//pop the current state and push the new state
+	//will not trigger the underlying state's onEnter() or onExit()
+	replace(newState){
+		let states = this.states;
+		let state = states.pop();
+		state.destructor();
+
+		this.states.push(newState);
+		this.top = newState;
 		this.switchStage();
 	}
 	//switch rendering to the top layer
@@ -104,14 +215,15 @@ class Game {
 		if (this.top){
 			let top = this.top;
 			if (top.showUnderlay){
-				let underlay = this.getState(-2);
-				if (underlay){
+				let n = top.showUnderlay;
+				//show n amount of underlays
+				for (let i = 0; i < n; i++){
+					let index = -1 - n + i;
+					let underlay = this.getState(index);
 					this.stage.addChild(underlay.stage);
-					underlay.stage.interactiveChildren = false;
 				}
 			}
 			this.stage.addChild(top.stage);
-			top.stage.interactiveChildren = true;
 			if (top.windowTitle){
 				let text = `Otaku-Ball - ${top.windowTitle}`;
 				this.windowTitle.text = text;
@@ -124,7 +236,6 @@ class Game {
 
 	update(delta){
 		mouse.updatePos();
-		this.debugPrintMousePos();
 		this.top.update(delta);
 		mouse.updateButton();
 		keyboard.update();
@@ -151,21 +262,6 @@ class Game {
 		return this.top.get(name, includeNew);
 	}
 
-	debugPrintMousePos(){
-		if (keyboard.isPressed(keycode.SPACE)){
-			let mx = Math.floor(mouse.x);
-			let my = Math.floor(mouse.y);
-			let dx = null;
-			let dy = null;
-			if (this.old_mx !== undefined)
-				dx = mx - this.old_mx;
-			if (this.old_my !== undefined)
-				dy = my - this.old_my;
-			console.log(`mouse = [${mx}, ${my}], delta = [${dx}, ${dy}]`);
-			this.old_mx = mx;
-			this.old_my = my;
-		}
-	}
 }
 
 //custom mask class that takes in account of the window offset
@@ -180,6 +276,67 @@ class Mask extends PIXI.Graphics{
 		this.clear();
 		this.beginFill(0xFFFFFF);
 		this.drawRect(x + DIM.offx, y + DIM.offy, w, h);
+	}
+}
+
+var debugKeyPressedObject = {};
+//key commands for debug and cheat stuff
+function debugKeyPressed(key){
+	let obj = debugKeyPressedObject;
+
+	//ignore key commands when focused on a textinput or textarea
+	let element = document.activeElement;
+	if (element !== null){
+		let name = element.nodeName;
+		// console.log(name);
+		if (name == "INPUT" || name == "TEXTAREA")
+			return;
+	}
+
+	//print out the mouse position for debugging purposes
+	if (key == keycode.SPACE || key == keycode.M){
+		let mx = Math.floor(mouse.x);
+		let my = Math.floor(mouse.y);
+		let dx = null;
+		let dy = null;
+		if (obj.old_mx !== undefined)
+			dx = mx - obj.old_mx;
+		if (obj.old_my !== undefined)
+			dy = my - obj.old_my;
+		console.log(`mouse = [${mx}, ${my}], delta = [${dx}, ${dy}]`);
+		obj.old_mx = mx;
+		obj.old_my = my;
+	}
+
+	//activate cheats only when the correct cheat phrase has been typed in
+	function newCheatCode(){
+		const code = "cheat";
+		let arr = code.toUpperCase().split("").reverse();
+		return arr.map(char => keycode[char]);
+	}
+	if (!cheats.enabled){
+		//detect cheat code
+		if (!obj.cheatCode)
+		obj.cheatCode = newCheatCode();
+
+		let len = obj.cheatCode.length;
+		if (obj.cheatCode.length > 0){
+			if (key == obj.cheatCode[len-1]){
+				obj.cheatCode.pop();
+				if (obj.cheatCode.length == 0)
+					cheats.setEnabled(true);
+			}
+			else
+				obj.cheatCode = newCheatCode();
+		}
+	}
+	else{
+		if (key == keycode._1)
+			beatLevel();
+		else if (key == keycode._2)
+			beatZone();
+		else if (key == keycode._3)
+			resetCampaignSave();
 	}
 }
 
@@ -280,6 +437,26 @@ function setup(){
 	media.processSounds();
 	media.createAnimations();
 
+	//load user volume setting from local storage
+	let volume = localStorage.getItem("volume");
+	if (volume === null){
+		localStorage.setItem("volume", String(DEFAULT_VOLUME));
+		volume = DEFAULT_VOLUME;
+	}
+	else{
+		volume = clamp(Number(volume), 0, 100);
+	}
+	PIXI.sound.volumeAll = volume / 100;
+
+	//load ENABLE_RIGHT_CLICK from local storage
+	let enable = localStorage.getItem("enable_right_click");
+	if (enable === null){
+		localStorage.setItem("enable_right_click", "0");
+		enable = "0";
+	}
+	ENABLE_RIGHT_CLICK = enable === "1";
+
+
 	//load default levels from the loaded assets
 	let list = PIXI.Loader.shared.resources.default_levels.data;
 	levels.default = new FileDatabase(list, false);
@@ -300,9 +477,15 @@ function setup(){
 		createOuterBorder(DIM.w + DIM.outerx, DIM.h + DIM.outery);
 	app.stage.addChild(box);
 
-	// createErrorDisplay();
+	//create cheat display
+	let cheatText = printText("CHEATS ENABLED", "arcade", 0xFF0000, 1, 0, 8);
+	cheatText.x = DIM.w - cheatText.width;
+	cheatText.visible = false;
+	box.addChild(cheatText);
+	game.cheatText = cheatText;
 
 	game.windowTitle = title;
+	game.outerBox = box;
 	game.setPos(0, 0);
 	//create a 800 x 600 mask
 	game.stage.mask = new Mask(0, 0, DIM.w, DIM.h);
@@ -322,20 +505,21 @@ function setup(){
 		game.update(ticker.deltaMS);
 	}
 	ticker.add(update);
+
+	//debug/cheat keyboard commands
+	keyboard.on("pressed", debugKeyPressed);
 }
 
 function createOuterBorder(w, h){
-	let fr = function(graphics, color, x, y, w, h){
-		graphics.beginFill(color);
-		graphics.drawRect(x, y, w, h);
-	}
+
+	let fr = fillRect;
 
 	let box = new PIXI.Graphics();
-	fr(box, 0x000000, 0, 0, w  , h  );
-	fr(box, 0xC0C0C0, 0, 0, w-2, h-2);
-	fr(box, 0x646464, 2, 2, w-4, h-4);
-	fr(box, 0xFFFFFF, 2, 2, w-6, h-6);
-	fr(box, 0xAAAAAA, 4, 4, w-8, h-8);
+	fr(box, 0x000000, 0, 0, w  , h  ); //outer bottom right
+	fr(box, 0xC0C0C0, 0, 0, w-2, h-2); //outer upper left
+	fr(box, 0x646464, 2, 2, w-4, h-4); //inner bottom right
+	fr(box, 0xFFFFFF, 2, 2, w-6, h-6); //inner upper left
+	fr(box, "main0", 4, 4, w-8, h-8); //center
 	//blue title bar
 	fr(box, 0x000080, 6, 6, w-12, 22);
 
@@ -370,38 +554,46 @@ function createErrorDisplay(){
 	};
 }
 
+//check if the the player can right-click at the current mouse position
+//return true if right click is allowed
+function checkRightClick(){
+	let mx = appMouse.global.x;
+	let my = appMouse.global.y;
+
+	//can right click if mouse is outside of the game window
+	if (!(
+		mx > DIM.offx &&
+		mx < DIM.offx + DIM.w &&
+		my > DIM.offy &&
+		my < DIM.offy + DIM.h
+	))
+	{
+		return true;
+	};
+
+	//check conditions for current state
+	return game.top.canRightClick(mx, my);
+}
+
 //when cursor is in game window:
 //	-disable right click context menu
 //	-disable left click (to prevent double click highlighting)
 //	-disable scroll wheel (to prevent scrolling the page while scrolling Level Select)
 //can be temporarily disabled if ENABLE_RIGHT_CLICK is set to true.
 function alterMouseEvents(){
-	function mouseInWindow(){
-		if (ENABLE_RIGHT_CLICK)
-			return false;
-		let mx = appMouse.global.x;
-		let my = appMouse.global.y;
-		return (
-			mx > DIM.offx &&
-			mx < DIM.offx + DIM.w &&
-			my > DIM.offy &&
-			my < DIM.offy + DIM.h
-		);
-	}
-
 	if (document.addEventListener) {
         document.addEventListener('contextmenu', function (e) {
-        	if (mouseInWindow())
+        	if (!checkRightClick())
             	e.preventDefault();
         }, false);
          document.addEventListener('mousedown', function (e) {
-        	if (mouseInWindow())
+        	if (!checkRightClick())
             	e.preventDefault();
         }, false);
+		//doesn't work
 		// document.addEventListener(`scroll`, function(e){
-		// 	if (mouseInWindow())
+		// 	if (!checkRightClick())
 		// 		e.preventDefault();
-		// 	console.log("scroll");
 		// });
 		document.addEventListener(`wheel`, function(e){
 			// console.log("wheel " + e.deltaY);
@@ -411,11 +603,11 @@ function alterMouseEvents(){
     }
     else {
         document.attachEvent('oncontextmenu', function () {
-        	if (mouseInWindow())
+        	if (!checkRightClick())
             	window.event.returnValue = false;
         });
         document.attachEvent('mousedown', function () {
-        	if (mouseInWindow())
+        	if (!checkRightClick())
             	window.event.returnValue = false;
         });
         // console.log("attachevent");

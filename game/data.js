@@ -148,25 +148,39 @@ var brickData = {
 		* 	DO NOT modify the order of existing bricks. *
 		*************************************************/
 
-		//new experimental b ricks
+
+		//Reset Brick + Laser Gate Brick
+		let flip2 = [];
+		
+		for (let i = 0; i < 5; i++){
+			flip2.push([8+i, 6, "ResetBrick", [i]]);
+		}
+
+		for (let i = 0; i < 2; i++){
+			for (let j = 0; j < 5; j++){
+				flip2.push([13+i, j, "LaserGateBrick", [j, i==0]]);
+			}
+		}
+
+		//new experimental bricks
 		let other2 = [
 			[7, 3, "FuseBrick", []],
-			[8, 6, "ResetBrick", [0]],
-			[9, 6, "ResetBrick", [1]],
-			[10, 6, "ResetBrick", [2]],
-			[11, 6, "ResetBrick", [3]],
-			[12, 6, "ResetBrick", [4]],
 			[12, 20, "CometBrick", ["up"]],
 			[12, 21, "CometBrick", ["down"]],
 			[6, 20, "SlimeBrick", []],
 			[12, 22, "ScatterBombBrick", []],
 		];
 
+
+		//Generate ids for all of the above bricks
+		//These ids will be in range 0 to 9999
+
 		let allGroups = [
 			["normal", normal],
 			["nonbrick", nonbrick],
 			["flip", flip],
 			["other", other],
+			["flip2", flip2],
 			["other2", other2],
 		];
 
@@ -203,6 +217,7 @@ var brickData = {
 		}
 		this.group.other.push(this.lookup[1000]);
 
+		/*
 		//Laser Gate Bricks ids 2000 to 2999
 		//there are 5 colors * 100 channels * on/off state = 1000 bricks?
 		let laser = [];
@@ -215,7 +230,7 @@ var brickData = {
 					let id = 2000 + i*500 + j*100 + k;
 					let data = {
 						tex: `brick_laser_${i}_${j}`,
-						brickType: "LaserWallBrick",
+						brickType: "LaserGateBrick",
 						args: [j, k, i == 0],
 						id: id,
 					};
@@ -227,6 +242,7 @@ var brickData = {
 			}
 		}
 		this.group.laser = laser;
+		*/
 		
 	}
 };

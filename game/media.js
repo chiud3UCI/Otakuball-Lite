@@ -1,3 +1,5 @@
+var FORCE_RELOAD = false;
+
 //media handles the loading of assets(textures, sounds) as well
 //as dividing spritesheet textures into individual sprite textures
 
@@ -464,10 +466,12 @@ let font_names = [
 media.load = function(callback){
 	let loader = PIXI.Loader.shared;
 
+	//will force textures to reload (untested)
+	if (FORCE_RELOAD)
+		loader.defaultQueryString = '' + Math.random();
+
 	//load ALL the levels
 	loader.add("default_levels", "levels/default_levels.json");
-	//can be accessed at loader.resources.default_levels.data
-	loader.add("default_playlists", "levels/default_playlists.json");
 	
 	//load changelog
 	loader.add("changelog", "changelog.txt");
@@ -669,7 +673,7 @@ media.processTextures = function(){
 
 	//tool textures
 	tex = this.textures.tools;
-	for (let i = 0; i < 10; i++){
+	for (let i = 0; i < 16; i++){
 		let rect = new PIXI.Rectangle(16*i, 0, 16, 16);
 		let tex2 = new PIXI.Texture(tex, rect);
 		let str = "tool_" + i;

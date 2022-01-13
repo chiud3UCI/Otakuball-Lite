@@ -81,7 +81,16 @@ class EditorState extends State{
 		this.allNodes = allNodes;
 		this.cycler = new PatchCycler(this);
 
-		this.initTools();
+		//create layer for Laser Gate Block's lasers + turrets
+		this.lasers = new PIXI.Container();
+		this.add("game", this.lasers);
+
+		//another laser layer for thew link laser tool
+		this.newLaser = new PIXI.Container();
+		this.add("game", this.newLaser);
+
+		this.laserEdges = [];
+
 		this.initToolButtons();
 		this.initRightWidget();
 		this.initPowerupButtons();
@@ -214,94 +223,6 @@ class EditorState extends State{
 			sprite.scale.set(2);
 			sprite.position.set(DIM.lwallx, DIM.ceiling);
 			bg.addChild(sprite);
-		}
-	}
-
-	initTools(){
-		let grid = this.grid;
-		let cycler = this.cycler;
-
-		let tools = {};
-		this.tools = tools;
-
-		//will make custom tools for copy/paste later
-		tools.free = {
-			// flag (bool) is whether mouse is down or not
-			// isPatch (bool) is whether we're in patch mode
-			// value (num or arr) is the value to set the nodes
-			update(i, j, flag, isPatch, value){
-				if (flag){
-					let node = grid[i][j];
-					node.set(value);
-					cycler.onToolUpdate(value);
-				}
-				else
-					grid[i][j].setHighlight(true);
-			},
-			//other tools will need a cancel function
-			cancel() {},
-		};
-
-		tools.fillRect = {
-			start: null,
-
-			selectNodes(i0, j0, i1, j1){
-				if (i1 < i0)
-					[i0, i1] = [i1, i0];
-				if (j1 < j0)
-					[j0, j1] = [j1, j0];
-				let nodes = [];
-				for (let i = i0; i <= i1; i++){
-					for (let j = j0; j <= j1; j++)
-						nodes.push(grid[i][j]);
-				}
-				return nodes;
-			},
-			update(i, j, flag, isPatch, value){
-				if (flag){
-					if (!this.start)
-						this.start = {i, j, value};
-					let start = this.start;
-					let nodes = this.selectNodes(start.i, start.j, i, j);
-					for (let node of nodes)
-						node.setHighlight(true);
-				}
-				else{
-					if (this.start){
-						let start = this.start;
-						let nodes = this.selectNodes(start.i, start.j, i, j);
-						for (let node of nodes)
-							node.set(start.value);
-						cycler.onToolUpdate(start.value);
-						this.start = null;
-					}
-					grid[i][j].setHighlight(true);
-				}
-			},
-			//cancel selection if cursor goes out of bounds
-			cancel(){
-				this.start = null;
-			}
-		}
-
-		tools.lineRect = {
-			__proto__: tools.fillRect,
-
-			selectNodes(i0, j0, i1, j1){
-				if (i1 < i0)
-					[i0, i1] = [i1, i0];
-				if (j1 < j0)
-					[j0, j1] = [j1, j0];
-				let nodes = [];
-				for (let i = i0; i <= i1; i++){
-					for (let j = j0; j <= j1; j++){
-						if (i == i0 || i == i1 || 
-							j == j0 || j == j1)
-							nodes.push(grid[i][j]);
-					}
-				}
-				return nodes;
-			}
 		}
 	}
 
@@ -561,12 +482,13 @@ class EditorState extends State{
 			}
 		};
 
-		placeButtons("other2", 0, 10, 6, 1.5);
-		placeButtons("laser", 0, 50, 5, 1.5);
+		placeButtons("flip2", 0, 10, 5, 1.5);
+		placeButtons("other2", 0, 100, 6, 1.5);
 
 		panel.addChild(this.brickButtonHighlight2);
 
-		//laser gate brick channel
+		/*
+		//laser gate brick channel (DEPRECATED)
 		let input = this.createTextInput(36, 14, 2);
 		input.restrict = "0123456789";
 		input.text = 0;
@@ -596,6 +518,66 @@ class EditorState extends State{
 		});
 		channelText.position.set(0, 80);
 		panel.addChild(channelText);
+		*/
+
+		/* OLD LINK BUTTON
+		//link laser button
+		let linkButton = new EditorButton(this, null, 2, 50);
+
+		//need to add an invisible rectangle for it to be clickable
+		let box = new PIXI.Graphics()
+			.beginFill(0xFFFFFF)
+			.drawRect(0, 0, 82, 32);
+		box.alpha = 0;
+		linkButton.addChild(box);
+
+		let linkText = printText("Link Lasers\n(Click Me)", "windows", 0x000000, 1, 2, 2);
+		linkButton.addChild(linkText);
+		panel.addChild(linkButton);
+
+		linkButton.getBounds(); //update its width and height
+
+		linkButton.pointerDown = function(e){
+			let state = this.parentState;
+
+			state.toolButtonHighlight.visible = false;
+			let gr = state.linkLaserButtonHighlight;
+			gr.visible = true;
+
+			gr.clear();
+			gr.lineStyle(2, 0xFFFF00);
+			let {width, height} = this.getLocalBounds();
+			gr.drawRect(this.x-1, this.y-1, width, height);
+
+			state.selectedTool = new EditorState.tools.linkLaser(state);
+		};
+
+		this.linkLaserButtonHighlight = new PIXI.Graphics();
+		panel.addChild(this.linkLaserButtonHighlight);
+		*/
+
+		let linkButton = new ToolButton(this, 2, 54, 10, null);
+		panel.addChild(linkButton);
+
+		linkButton.pointerDown = function(e){
+			let state = this.parentState;
+
+			state.toolButtonHighlight.visible = false;
+			let gr = state.linkLaserButtonHighlight;
+			gr.visible = true;
+
+			gr.clear();
+			gr.lineStyle(2, 0xFFFF00);
+			gr.drawRect(this.x-1, this.y-1, this.width, this.height);
+
+			state.selectedTool = new EditorState.tools.linkLaser(state);
+		};
+
+		this.linkLaserButtonHighlight = new PIXI.Graphics();
+		panel.addChild(this.linkLaserButtonHighlight);
+
+		let linkText = printText("Link Lasers\nTool", "windows", 0x000000, 1, 42, 54);
+		panel.addChild(linkText);
 
 
 		/* TODO: Move all enemy stuff to a new window + button */
@@ -677,8 +659,6 @@ class EditorState extends State{
 				input.blur();
 				input.substituteText = true;
 			}
-			this.laserChannelInput.blur();
-			this.laserChannelInput.substituteText = true;
 		};
 		
 		return panel;
@@ -734,10 +714,10 @@ class EditorState extends State{
 			});
 
 			dialogue.addButton("Import", 95, 40, () => {
-				let str = textArea.text;
+				let levelStr = textArea.text;
 				let level = null;
 				try{
-					level = JSON.parse(str);
+					level = JSON.parse(levelStr);
 				} catch (err) {
 					errorText.visible = true;
 				}
@@ -749,9 +729,7 @@ class EditorState extends State{
 			});
 		}
 		else{
-			let level = this.createLevel();
-			textArea.text = JSON.stringify(level);
-
+			textArea.text = this.createLevel();
 			dialogue.addButton("Close", 80, 40, () => {
 				game.pop();
 			});
@@ -762,11 +740,14 @@ class EditorState extends State{
 
 	//resets the level to its default state
 	reset(){
+		this.clearLaserEdges();
+		this.redrawLaserEdges();
+
 		for (let node of this.allNodes)
 			node.setBrick(null);
 		for (let butt of this.enemyButtons)
 			butt.setState(false);
-
+		
 		this.cycler.setCurrentSlot(0);
 	}
 
@@ -793,7 +774,7 @@ class EditorState extends State{
 		let hasChanged = (
 			i !== this.old_i ||
 			j !== this.old_j ||
-			flag != this.old_flag
+			!!flag != !!this.old_flag
 		);
 		if (hasChanged){
 			for (let node of this.allNodes)
@@ -809,10 +790,9 @@ class EditorState extends State{
 				}
 				let select = {
 					mode: this.selectMode,
-					value: value
+					value: value,
 				}
-				//if flag is false, then isPatch and value shouldn't matter
-				tool.update(i, j, flag, false, select);
+				tool.update(i, j, flag, select);
 			}
 			else if (flag == 0){
 				tool.cancel();
@@ -823,8 +803,14 @@ class EditorState extends State{
 		this.old_flag = flag;
 
 		this.cycler.update(delta);
+
+		for (let node of this.allNodes){
+			node.update(delta);
+		}
 	}
 
+	//don't worry about mutating objects since this will
+	//return an immutable JSON string
 	createLevel(){
 		let level = {};
 
@@ -883,13 +869,25 @@ class EditorState extends State{
 		if (slotCheck)
 			level.slotPowerups = this.slotPowerups;
 
-		return level;
+		//same for Laser Gate Brick lasers
+		if (this.laserEdges.length > 0)
+			level.lasers = this.laserEdges;
+		
+		return JSON.stringify(level);
 	}
 
-	loadLevel(level){
+	//level can either be a JSON string or object
+	//JSON string is preferred as it prevents accidental mutations
+	loadLevel(levelStr){
+		let level = null;
+		if (typeof(levelStr) === "string")
+			level = JSON.parse(levelStr);
+		else
+			level = levelStr;
 		//needs to take in account of optional properties
 		//reset the level first
 		this.reset();
+
 		//apply bricks and patches
 		for (let [i, j, id, patch] of level.bricks){
 			let node = this.grid[i][j];
@@ -919,14 +917,255 @@ class EditorState extends State{
 		//slot machine powerups
 		if (level.slotPowerups)
 			this.slotPowerups = level.slotPowerups;
+
+		//Laser Gate Brick lasers
+		if (level.lasers){
+			this.laserEdges = level.lasers;
+			this.redrawLaserEdges();
+		}
 	}
 
 	startGame(){
-		let level = this.createLevel();
-		game.push(new PlayState("test", level));
+		let levelStr = this.createLevel();
+		game.push(new PlayState("test", levelStr));
+	}
+
+	//return false is this edge is a duplicate
+	addLaserEdge(i0, j0, i1, j1){
+		//make sure i0 <= i1
+		let newEdge = (i0 > i1) ? [i1, j1, i0, j0] : [i0, j0, i1, j1];
+
+		for (let edge of this.laserEdges){
+			if (arrayEqual(edge, newEdge))
+				return false;
+		}
+
+		this.laserEdges.push(newEdge);
+		return true;
+	}
+
+	redrawLaserEdges(){
+		this.lasers.removeChildren();
+		for (let [i0, j0, i1, j1] of this.laserEdges){
+			//both nodes should have the same brick id
+			let switchId = this.grid[i0][j0].getLaserId(); //should always be non-null
+			if (switchId === null)
+				console.error("Invalid Laser Gate Edge");
+			let laser = LaserGateBrick.editorDrawLaser(i0, j0, i1, j1, switchId);
+			this.lasers.addChild(laser);
+		}
+	}
+
+	//remove all edges at a grid position
+	//return true if 1 or more edges were removed
+	removeLaserEdges(i, j){
+		let removed = remove_if(this.laserEdges, (e) => {
+			return (e[0] == i && e[1] == j) || (e[2] == i && e[3] == j);
+		});
+		return removed.length > 0;
+	}
+
+	clearLaserEdges(){
+		this.laserEdges = [];
 	}
 }
 
+let tools = {};
+EditorState.tools = tools;
+
+//this is an abstract class (not an actual tool)
+tools.base = class{
+	constructor(editorstate){
+		this.es = editorstate;
+	}
+	destructor(){
+
+	}
+	update(){}
+	cancel(){}
+};
+tools.free = class extends tools.base{
+	// flag (bool) is whether mouse is down or not
+	// isPatch (bool) is whether we're in patch mode
+	// value (num or arr) is the value to set the nodes
+	update(i, j, flag, select){
+		let grid = this.es.grid;
+		let cycler = this.es.cycler;
+
+		if (flag){
+			let node = grid[i][j];
+			node.set(select);
+			cycler.onToolUpdate(select);
+		}
+		else
+			grid[i][j].setHighlight(true);
+	}
+	//other tools will need a cancel function
+	cancel() {
+
+	}
+};
+
+tools.fillRect = class extends tools.base{
+	constructor(editorstate){
+		super(editorstate);
+		this.start = null;
+	}
+
+	selectNodes(i0, j0, i1, j1){
+		let grid = this.es.grid;
+
+		if (i1 < i0)
+			[i0, i1] = [i1, i0];
+		if (j1 < j0)
+			[j0, j1] = [j1, j0];
+		let nodes = [];
+		for (let i = i0; i <= i1; i++){
+			for (let j = j0; j <= j1; j++)
+				nodes.push(grid[i][j]);
+		}
+		return nodes;
+	}
+
+	update(i, j, flag, select){
+		let grid = this.es.grid;
+		let cycler = this.es.cycler;
+
+		if (flag){
+			if (!this.start)
+				this.start = {i, j, select};
+			let start = this.start;
+			let nodes = this.selectNodes(start.i, start.j, i, j);
+			for (let node of nodes)
+				node.setHighlight(true);
+		}
+		else{
+			if (this.start){
+				let start = this.start;
+				let nodes = this.selectNodes(start.i, start.j, i, j);
+				for (let node of nodes)
+					node.set(start.select);
+				cycler.onToolUpdate(start.select);
+				this.start = null;
+			}
+			grid[i][j].setHighlight(true);
+		}
+	}
+	//cancel selection if cursor goes out of bounds
+	cancel(){
+		this.start = null;
+	}
+};
+
+tools.lineRect = class extends tools.fillRect{
+	selectNodes(i0, j0, i1, j1){
+		let grid = this.es.grid;
+
+		if (i1 < i0)
+			[i0, i1] = [i1, i0];
+		if (j1 < j0)
+			[j0, j1] = [j1, j0];
+		let nodes = [];
+		for (let i = i0; i <= i1; i++){
+			for (let j = j0; j <= j1; j++){
+				if (i == i0 || i == i1 || 
+					j == j0 || j == j1)
+					nodes.push(grid[i][j]);
+			}
+		}
+		return nodes;
+	}
+};
+
+tools.linkLaser = class extends tools.base{
+	constructor(editorstate){
+		super(editorstate);
+		this.start = null;
+		this.down = false;
+
+		//set all the nodes with LaserGateBricks flashing
+		for (let node of this.es.allNodes){
+			if (this.isLaser(node))
+				node.setFlashing(true);
+		}
+	}
+
+	destructor(){
+		super.destructor();
+		for (let node of this.es.allNodes){
+			node.setFlashing(false);
+		}
+	}
+
+	isLaser(node){
+		return node.dat?.brickType === "LaserGateBrick";
+	}
+
+	isMatching(node0, node1){
+		if (!this.isLaser(node0) || !this.isLaser(node1))
+			return false;
+		let args0 = node0.dat.args;
+		let args1 = node1.dat.args;
+		return args0[0] == args1[0] && args0[1] == args1[1];
+	}
+
+	update(i, j, flag, select){
+		let grid = this.es.grid;
+		
+		if (flag){
+			//select.mode will always be "brick"
+			if (select.value === null){
+				if (this.isLaser(grid[i][j])){
+					if (this.es.removeLaserEdges(i, j))
+						this.es.redrawLaserEdges();
+				}
+				return;
+			}
+			//make sure the starting brick is a laser gate brick
+			if (!this.start && flag === 1){
+				let node0 = grid[i][j];
+				if (this.isLaser(node0)){
+					this.start = node0;
+				}
+				for (let node1 of this.es.allNodes){
+					if (!this.isMatching(node0, node1))
+						node1.setFlashing(false);
+				}
+			}
+			if (this.start){
+				let node0 = this.start;
+				let newLaser = this.es.newLaser;
+				newLaser.removeChildren();
+				if (node0 !== grid[i][j]){
+					let arr = [node0.i, node0.j, i, j, node0.getLaserId()];
+					let sprite = LaserGateBrick.editorDrawLaser(...arr);
+					newLaser.addChild(sprite);
+				}
+			}
+			this.down = true;
+		}
+		else{
+			if (this.start){
+				let node0 = this.start;
+				let node1 = grid[i][j];
+				if (node0 !== node1 && this.isMatching(node0, node1)){
+					this.es.addLaserEdge(node0.i, node0.j, i, j);
+					this.es.redrawLaserEdges();
+				}
+				this.es.newLaser.removeChildren();
+				this.start = null;
+			}
+			if (this.down){
+				this.down = false;
+				for (let node of this.es.allNodes){
+					if (this.isLaser(node))
+						node.setFlashing(true);
+				}
+			}
+		}
+	}
+
+};
 class GridNode{
 	constructor(parent, i, j){
 		this.parent = parent;
@@ -946,6 +1185,7 @@ class GridNode{
 		sprite.visible = false;
 		stage.addChild(sprite);
 		this.brickId = null;
+		this.dat = null;
 
 		//currently this overlay is for PowerupBrick only
 		let overlay = new Sprite("brick_main_7_4");
@@ -970,6 +1210,15 @@ class GridNode{
 			stage.addChild(sprite);
 		}
 
+		//flashing rect
+		let fl = new PIXI.Graphics();
+		fl.beginFill(0xFFFFFF, 0.3);
+		fl.drawRect(-16, -8, 32, 16);
+		fl.visible = false;
+		fl.flashTimer = 0;
+		this.fl = fl;
+		stage.addChild(fl);
+
 		//highlight rect
 		let hl = new PIXI.Graphics();
 		hl.beginFill(0xFFFFFF, 0.5);
@@ -983,6 +1232,18 @@ class GridNode{
 		this.hl.visible = value;
 	}
 
+	setFlashing(value){
+		let fl = this.fl;
+		if (value){
+			fl.visible = true;
+			fl.flashTimer = 0;
+			fl.alpha = 0;
+		}
+		else{
+			fl.visible = false;
+		}
+	}
+
 	//set either brick or patch based on select
 	//select is {mode, value}
 	set(select){
@@ -994,6 +1255,12 @@ class GridNode{
 
 	//no args to clear the brick
 	setBrick(id){
+		//remove all edges when the brick is replaced
+		if (this.dat?.brickType == "LaserGateBrick"){
+			if (this.parent.removeLaserEdges(this.i, this.j))
+				this.parent.redrawLaserEdges();
+		}
+		
 		if (id === undefined || id === null){
 			//Erase Brick
 			this.brickId = null;
@@ -1042,11 +1309,30 @@ class GridNode{
 		for (let sprite of this.patchSprites)
 			sprite.texture = null;
 	}
+
+	//return the switchId if the contained brick is a LaserGateBrick
+	//return null otherwise
+	getLaserId(){
+		if (this.brickId === null)
+			return null;
+		if (this.dat.brickType != "LaserGateBrick")
+			return null;
+		return this.dat.args[0];
+	}
+
+	update(delta){
+		let fl = this.fl;
+		if (fl.visible){
+			fl.flashTimer += delta;
+			fl.alpha = (Math.sin(fl.flashTimer/200) + 1) * 0.5;
+		}
+	}
 }
 
 class EditorButton extends PIXI.Sprite{
-	constructor(parentState, texstr, x, y, scale){
-		super(media.textures[texstr]);
+	constructor(parentState, texstr, x, y, scale=1){
+		let tex = (texstr === null) ? null : media.textures[texstr];
+		super(tex);
 		this.position.set(x, y);
 		this.scale.set(scale);
 		this.parentState = parentState;
@@ -1102,9 +1388,13 @@ class ToolButton extends EditorButton{
 
 	pointerDown(e){
 		let state = this.parentState;
+		//have to take in account of the special Link Laser tool button
+		state.linkLaserButtonHighlight.visible = false;
+		state.toolButtonHighlight.visible = true;
+
 		this.highlight(state.toolButtonHighlight);
-		// console.log("select " + this.toolstr);
-		state.selectedTool = state.tools[this.toolstr];
+		state.selectedTool?.destructor();
+		state.selectedTool = new EditorState.tools[this.toolstr](state);
 	}
 }
 

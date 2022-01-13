@@ -10,7 +10,7 @@ class DialogueBox extends State{
 		let stage = new PIXI.Container();
 		this.stage = stage;
 
-		this.showUnderlay = true;
+		this.showUnderlay = 1;
 
 		let box = new Base(DIM.w/2 - w/2, DIM.h/2 - h/2, w, h, title);
 

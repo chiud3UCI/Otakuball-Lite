@@ -1,3 +1,7 @@
+[01/13/22]
+-Changed how Laser Gate Bricks are linked
+-Instead of channels, these bricks can be manually linked using a special tool.
+
 [01/07/22]
 -Added Options
 

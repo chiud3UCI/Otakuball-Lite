@@ -917,7 +917,9 @@ class LSS_LevelPreview extends PIXI.Container{
 		this.enemyDisplay = display;
 	}
 
-	static generate(level){
+	static generate(levelStr){
+		let level = JSON.parse(levelStr);
+
 		let bw = 16*13;
 		let bh = 8*32;
 		let preview = PIXI.RenderTexture.create(
@@ -1105,10 +1107,22 @@ class LSS_TextBox extends PIXI.Container{
 
 //keeps track of stuff
 class FileDatabase{
+	//Backwards Compatibility: Convert each level object back to JSON string
+	//	if not already done.
+	//Remove this function before release
+	static convert_level_object_to_string(list){
+		for (let pair of list){
+			let level = pair[1];
+			if (typeof(level) === "string")
+				return;
+			pair[1] = JSON.stringify(level);
+		}
+	}
+
 	constructor(list, isPlaylist=false){
 		if (isPlaylist){
 			//group levels in playlists based on presence of "/" in name
-			//map format: Map(playlist_name -> [playlist_name, Array of [full_level_name, level_object]])
+			//map format: Map(playlist_name -> [playlist_name, Array of [full_level_name, level_JSON_string]])
 			let map = new Map();
 			this.map = map;
 			for (let pair of list){
@@ -1124,8 +1138,8 @@ class FileDatabase{
 			this.list = Array.from(map.entries());
 		}
 		else{
-			//map format: Map(name -> [name, level object])
-			//yes, name is redundant
+			//map format: Map(name -> [name, level_JSON_string])
+			//yes, name is redundant, but it makes life easier
 			this.list = list;
 			this.map = new Map();
 			for (let pair of list){
@@ -1146,10 +1160,10 @@ class FileDatabase{
 		this.list.sort((a, b) => a[0].localeCompare(b[0]));
 	}
 	
-	set(name, object){
+	set(name, value){
 		let list = this.list;
 		let map = this.map;
-		let newArr = [name, object];
+		let newArr = [name, value];
 		if (map.has(name)){
 			list[this.indexOf(name)] = newArr;
 		}
@@ -1195,6 +1209,7 @@ class FileDatabase{
 	}
 
 	save(key){
+		// console.log("saving: " + this.toString());
 		localStorage.setItem(key, this.toString());
 	}
 

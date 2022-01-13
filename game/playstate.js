@@ -77,25 +77,6 @@ function beatZone(){
 //because I want to make sure everything in this instance
 //is cleared when the player exits the playstate
 class PlayState extends State{
-	/**
-	 * Converts a list of level names to a list of level objects
-	 * 
-	 * @param {boolean} isUser if the levels are default or user-made
-	 * @param {string[]} playlist array of level names
-	 * @return list of level objects
-	 */
-	static convertPlaylist(isUser, playlist){
-		let lookup = levels[isUser ? "user" : "default"].lookup;
-		let newPlaylist = [];
-		for (let name of playlist){
-			let level = lookup[name];
-			if (!level)
-				ALERT_ONCE(`level "${name}" does not exist!`, "level_not_found");
-			else
-				newPlaylist.push(level);
-		}
-		return newPlaylist;
-	}
 	/*
 		mode can be one of ["test", "play", "playlist", "campaign"]
 		args will vary based on mode:
@@ -120,15 +101,15 @@ class PlayState extends State{
 		this.windowTitle = titles[mode];
 
 		//initializing starting values
-		let level;
+		let levelStr;
 		let lives = 3;
 		let score = 0;
 		if (mode == "test" || mode == "play")
-			level = args[0];
+			levelStr = args[0];
 		else if (mode == "playlist"){
 			this.playlist = args[0];
 			this.playlistIndex = args[1];
-			level = this.playlist[this.playlistIndex];
+			levelStr = this.playlist[this.playlistIndex];
 			//get the score and lives from the previous PlayState
 			if (args[2]){
 				lives = args[2].lives;
@@ -137,7 +118,7 @@ class PlayState extends State{
 		}
 		else if (mode == "campaign"){
 			let {data, playlist} = campaign_save;
-			level = playlist[1][data.zone_index][1];
+			levelStr = playlist[1][data.zone_index][1];
 			score = data.score;
 			lives = data.lives;
 		}
@@ -247,8 +228,9 @@ class PlayState extends State{
 		this.add("paddles", paddle);
 
 		//create bricks
-		this.loadLevel(level);
+		this.loadLevel(levelStr);
 		this.initBrickGrid();
+		this.brickGrid.refresh();
 
 		//create ball
 		let ball = new Ball(0, 0, 0.4, 0);
@@ -256,8 +238,13 @@ class PlayState extends State{
 		paddle.attachBall(ball, true);
 
 		this.state = null;
-		if (mode == "test")
+		if (mode == "test"){
+			//call each brickClass's static activate function if it exists
+			for (let brickClass of Object.values(brickClasses)){
+				brickClass.activate?.(this);
+			}
 			this.setState("playing");
+		}
 		else
 			this.setState("intro");
 
@@ -512,7 +499,7 @@ class PlayState extends State{
 				br.gridDat = {};
 				this.grid[i][j].push(br);
 			}
-		}
+		};
 	}
 
 	initGates(){
@@ -891,7 +878,11 @@ class PlayState extends State{
 	}
 
 
-	loadLevel(level){
+	loadLevel(levelStr){
+		let level = JSON.parse(levelStr);
+		this.level = level;
+		this.levelStr = levelStr;
+
 		let x = DIM.lwallx;
 		let y = DIM.ceiling;
 		let w = DIM.boardw;
@@ -918,18 +909,17 @@ class PlayState extends State{
 			let brickClass = brickClasses[brickType];
 			let pos = getGridPosInv(i, j);
 			let args2 = pos.concat(args);
-			if (brickType == "SlotMachineBrick")
-				args2.push(level.slotPowerups);
 			let br = new brickClass(...args2);
+			br.initialParams = {i, j, id};
 			if (patch)
 				br.initPatches(patch);
 			this.add("bricks", br);
 		}
 		//after creating all the bricks, call each
-		//brick class's static activate() function if it exists
+		//brick class's static initialize() function if it exists
+		//activate() will be called right before the start of the game
 		for (let brickClass of Object.values(brickClasses)){
-			if (brickClass.activate)
-				brickClass.activate(this);
+			brickClass.initialize?.(this);
 		}
 
 		let enemy = level.enemies;
@@ -1337,6 +1327,11 @@ PlayState.states = {
 			ps.borders.removeChild(...this.introBorders);
 			ps.walls.removeChild(this.sweeper);
 			ps.bricks.mask = this.oldBrickMask;
+
+			//call each brickClass's static activate function if it exists
+			for (let brickClass of Object.values(brickClasses)){
+				brickClass.activate?.(ps);
+			}
 		}
 		update(delta){
 			let ps = this.ps;

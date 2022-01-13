@@ -1,3 +1,5 @@
+// var hasTraced = false;
+
 class Particle extends Sprite{
 	constructor(texture, x, y, vx, vy, angle, sx, sy){
 		super(texture, x, y, vx, vy, angle, sx, sy);
@@ -7,6 +9,21 @@ class Particle extends Sprite{
 		this.dieOnFade = false;
 		this.dieOnShrink = false;
 		this.dieOnAniFinish = false;
+	}
+
+	// onDeath(){
+	// 	super.onDeath();
+	// }
+
+	kill(){
+		super.kill();
+		let [x0, y0, x1, y1] = this.getAABB();
+		// if (!hasTraced){
+		// 	hasTraced = true;
+		// 	console.log("AABB: " + [x0, y0, x1, y1]);
+		// 	console.log("position: " + [this.x, this.y]);
+		// 	console.trace();
+		// }
 	}
 
 	isDead(){

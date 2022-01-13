@@ -49,7 +49,7 @@ function initBrickClasses(){
 		SlimeBrick,
 		ScatterBombBrick,
 		ScatterBrick,
-		LaserWallBrick,
+		LaserGateBrick,
 	};
 }
 
@@ -79,6 +79,9 @@ class Brick extends Sprite{
 			antilaser: null,
 			snapper: null
 		}
+
+		//will be set and used by PlayState during level loading
+		this.initialParams = {};
 
 		//keeps track of recently collided sprites
 		this.disableOverlapCheck = false;
@@ -2223,16 +2226,40 @@ class SlotMachineBrick extends Brick{
 	//but must vary between brick
 	static globalIndex = 0;
 
-	//slotPowerups is a special argument given by the playstate
-	constructor(x, y, isYellow, slotPowerups){
+	static initialize(playstate){
+		let slotPowerups = playstate.level.slotPowerups;
+		if (!slotPowerups)
+			return;
+
+		let blueIndex = 0;
+		let yellowIndex = 0;
+		for (let br of playstate.get("bricks")){
+			if (!(br instanceof SlotMachineBrick))
+				continue;
+			if (br.isYellow){
+				br.powIds = slotPowerups[1];
+				br.powIndex = yellowIndex;
+				yellowIndex = (yellowIndex + 1) % 3;
+			}
+			else{
+				br.powIds = slotPowerups[0];
+				br.powIndex = blueIndex;
+				blueIndex = (blueIndex + 1) % 3;
+			}
+			br.setTurn();
+		}
+	}
+
+	//must be activated by calling SlotMachineBrick.initialize() right before the game starts
+	constructor(x, y, isYellow){
 		super("brick_invis", x, y);
 
 		this.health = 1000;
 		this.armor = 2;
 		this.isYellow = isYellow;
-		this.powIds = slotPowerups[isYellow ? 1 : 0];
-		this.powIndex = SMB.globalIndex;
-		SMB.globalIndex = (SMB.globalIndex+1) % 3;
+		// this.powIds = slotPowerups[isYellow ? 1 : 0];
+		// this.powIndex = SMB.globalIndex;
+		// SMB.globalIndex = (SMB.globalIndex+1) % 3;
 		this.turnTime = 500;
 		this.checkTime = 500;
 
@@ -2245,7 +2272,7 @@ class SlotMachineBrick extends Brick{
 		this.top.scale.set(1);
 		this.bottom.scale.set(1);
 		powerups.addChild(this.top, this.bottom);
-		this.setTurn();
+		// this.setTurn();
 
 		powerups.mask = new Mask(this.x-16, this.y-8, 32, 16);
 		this.addChild(powerups);
@@ -2901,60 +2928,32 @@ class ScatterBrick extends Brick{
 	}
 }
 
-class LaserWallBrick extends Brick{
+class LaserGateBrick extends Brick{
 	static thickness = 10;
 	static hitboxThickness = 10;
 
+	//link bricks based on playstate.level.edgess
 	static activate(playstate){
-		//link bricks with same color and channel together
-		let groups = {};
+		let edges = playstate.level.lasers;
+		if (!edges)
+			return;
+
+		//create lookup table for all LaserGateBricks
+		let lookup = new Map();
 		for (let br of playstate.get("bricks")){
-			if (br.brickType != "laserwall")
-				continue;
-			let key = `${br.switchId}_${br.channel}_${br.flipState}`;
-			if (!groups[key])
-				groups[key] = [];
-			groups[key].push(br);
+			if (br instanceof LaserGateBrick){
+				let {i, j} = br.initialParams;
+				lookup.set(`${i}_${j}`, br);
+			}
 		}
 
-		for (let arr of Object.values(groups))
-			LaserWallBrick.linkAll(playstate, arr);
-	}
-
-	//link all bricks together
-	static linkAll(playstate, arr){
-		let link = LaserWallBrick.link;
-		const n = arr.length;
-		if (n <= 1)
-			return;
-		if (n == 2){
-			link(playstate, arr[0], arr[1]);
-			return;
-		}
-		if (n == 3){
-			link(playstate, arr[0], arr[1]);
-			link(playstate, arr[1], arr[2]);
-			link(playstate, arr[2], arr[0]);
-			return;
-		}
-		//for n > 3, link the bricks together in the shape of a polygon
-		//calculate the midpoint of all the bricks
-		let x = 0;
-		let y = 0;
-		for (let br of arr){
-			x += br.x;
-			y += br.y;
-		}
-		x /= n;
-		y /= n;
-		//sort the bricks based on their angle relative to midpoint
-		let angles = arr.map(br => [br, Math.atan2(br.y - y, br.x - x)]);
-		angles.sort((p0, p1) => p0[1] - p1[1]);
-		//link each edge of the polygon
-		for (let i = 0; i < n; i++){
-			let br1 = angles[i][0];
-			let br2 = angles[(i+1)%n][0];
-			link(playstate, br1, br2);
+		//link all edges
+		for (let [i0, j0, i1, j1] of edges){
+			let br0 = lookup.get(`${i0}_${j0}`);
+			let br1 = lookup.get(`${i1}_${j1}`);
+			if (!br0 || !br1)
+				console.error("Invalid Laser Gate Edges!");
+			LaserGateBrick.link(playstate, br0, br1);
 		}
 	}
 
@@ -2983,7 +2982,7 @@ class LaserWallBrick extends Brick{
 			0,
 			0,
 			0,
-			Math.max(4, length - LaserWallBrick.laserOffset),
+			Math.max(4, length - LaserGateBrick.laserOffset),
 			2,
 		);
 		laser.update = function(delta){
@@ -3024,8 +3023,40 @@ class LaserWallBrick extends Brick{
 		br2.lasers.push(laser);
 	}
 
+	//for use in EditorState only
+	static editorDrawLaser(i0, j0, i1, j1, switchId){
+		if (i0 > i1)
+			[i0, j0, i1, j1] = [i1, j1, i0, j0];
+
+		let [x1, y1] = getGridPosInv(i0, j0);
+		let [x2, y2] = getGridPosInv(i1, j1);
+		
+		//get midpoint
+		const off = -1;
+		x1 += off;
+		y1 += off;
+		x2 += off;
+		y2 += off;
+		let length = Vector.dist(x1, y1, x2, y2);
+		let angle = Vector.angleBetween(1, 0, x2-x1, y2-y1);
+
+		//first create sprite without any rotation
+		let laser = new Sprite(
+			"laser_laser_" + switchId,
+			(x1+x2) / 2,
+			(y1+y2) / 2,
+			0,
+			0,
+			angle,
+			Math.max(4, length),
+			2,
+		);
+		
+		return laser;
+	}
+
 	//switchId is same as Switch/Trigger/Flip bricks
-	constructor(x, y, switchId, channel, initialState){
+	constructor(x, y, switchId, initialState){
 		let index = switchId * 2;
 		let textures = {
 			core_on: "laser_core_" + index,
@@ -3043,13 +3074,12 @@ class LaserWallBrick extends Brick{
 		
 		this.switchId = switchId;
 		this.laserState = true;
-		this.channel = channel;
 		this.flipState = !!initialState;
 
-		//add a circular hitbox right at the center
-		let radius = LaserWallBrick.thickness/2;
-		let circle = new CircleShape(this.x-2, this.y-2, radius);
-		this.circleHitbox = circle;
+		//add a circular hitbox right at the center (DEPRECATED?)
+		// let radius = LaserGateBrick.thickness/2;
+		// let circle = new CircleShape(this.x-2, this.y-2, radius);
+		// this.circleHitbox = circle;
 
 		this.turrets = new PIXI.Container();
 		this.addChild(this.turrets);
@@ -3088,9 +3118,9 @@ class LaserWallBrick extends Brick{
 	}
 
 	update(delta){
-		if (this.flipState){
+		if (this.flipState && this.lasers.length > 0){
 			for (let ball of game.get("balls")){
-				let [check, norm, mag] = ball.shape.collide(this.circleHitbox);
+				let [check, norm, mag] = ball.shape.collide(this.shape);
 				if (check){
 					let offset = norm.scale(mag);
 					ball.translate(offset.x, offset.y);

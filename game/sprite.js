@@ -316,8 +316,11 @@ class Sprite extends PIXI.Sprite{
 		if (!spriteOnly && this.shape)
 			return this.shape.getAABB();
 
-		let {x, y, width: w, height: h} = this.getBounds();
-		return [x, y, x+w, y+h];
+		let {x, y, width, height} = this.getBounds();
+		//don't forget to take in account of the global offset
+		x -= DIM.offx;
+		y -= DIM.offy;
+		return [x, y, x+width, y+height];
 	}
 
 	//returns [width, height] of the sprite

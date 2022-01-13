@@ -456,16 +456,18 @@ function setup(){
 	}
 	ENABLE_RIGHT_CLICK = enable === "1";
 
-
 	//load default levels from the loaded assets
-	let list = PIXI.Loader.shared.resources.default_levels.data;
-	levels.default = new FileDatabase(list, false);
+	let default_list = PIXI.Loader.shared.resources.default_levels.data;
+	FileDatabase.convert_level_object_to_string(default_list); //Backwards Compatibility
+	levels.default = new FileDatabase(default_list, false);
 	//generate default playlist from the default levels
-	playlists.default = new FileDatabase(list, true);
+	playlists.default = new FileDatabase(default_list, true);
 
 	//load user levels from local storage
 	let str = localStorage.getItem("user_levels");
-	levels.user = new FileDatabase((str === null) ? [] : JSON.parse(str), false);
+	let user_list = (str === null) ? [] : JSON.parse(str);
+	FileDatabase.convert_level_object_to_string(user_list); //Backwards Compatibility
+	levels.user = new FileDatabase(user_list, false);
 	//user playlists will be generated in LevelSelectState
 
 	//load campaign save from localStorage
@@ -704,6 +706,19 @@ function randRangeFloat(a, b){
 
 function deltaEqual(a, b, epsilon=0.001){
 	return (Math.abs(a-b) < epsilon);
+}
+
+/**
+ * returns true if both arrays have the same length and elements
+ */
+function arrayEqual(arr1, arr2){
+	if (arr1.length != arr2.length)
+		return false;
+	for (let i = 0; i < arr1.length; i++){
+		if (arr1[i] != arr2[i])
+			return false;
+	}
+	return true;
 }
 
 //Remove all dead Sprites from a PIXI.Container

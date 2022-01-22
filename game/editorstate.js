@@ -1,6 +1,7 @@
 class EditorState extends State{
 	constructor(){
 		super();
+		this.allowRightClick = false;
 		//create more layers if necessary
 		let layerNames = [
 			"background",
@@ -100,6 +101,16 @@ class EditorState extends State{
 			[0, 1, 2]  //yellow
 		];
 
+		//create a table for powerup chances
+		this.powerupChances = {
+			global: GLOBAL_POWERUP_CHANCE,
+			weights: [...DEFAULT_WEIGHTS],
+		};
+
+		//enemy spawn
+		this.enemySpawn = new Array(9).fill(0); //should only contain 1s or 0s
+		this.enemySpawnTimes = [...DEFAULT_SPAWN_TIMES];
+
 		//initial selection
 		this.selectedTool = null;
 		this.selectedBrick = null;
@@ -160,8 +171,25 @@ class EditorState extends State{
 			game.push(new BackgroundSelectState(state));
 		};
 		this.add("hud", butt);
+		this.bgSelectButton = butt;
 
-		
+		//Powerup Chances Button
+		butt = new Button(60, 240, 44, 44);
+		butt.add(makeSprite("editorbutton_0_1", 2, 5, 5));
+		butt.onClick = function(){
+			game.push(new PowerupChancesState(state));
+		};
+		this.add("hud", butt);
+		this.configPowerupButton = butt;
+
+		//Enemy Spawn Button
+		butt = new Button(110, 240, 44, 44);
+		butt.add(makeSprite("editorbutton_1_2", 2, 5, 5));
+		butt.onClick = function(){
+			game.push(new EnemySpawnState(state));
+		};
+		this.add("hud", butt);
+		this.enemySpawnButton = butt;
 
 		//Import/Export buttons
 		butt = new Button(2, 440, 96, 36);
@@ -243,7 +271,7 @@ class EditorState extends State{
 		//initialize panels
 		let panels = [
 			this.initBrickButtons(),
-			this.initEnemyButtons(),
+			this.initBrickButtons2(),
 			this.initPatchButtons(),
 		]
 		for (let panel of panels){
@@ -259,7 +287,7 @@ class EditorState extends State{
 		widget.tabs = [];
 		let textures = [
 			"editorbutton_1_0",
-			"editorbutton_1_2",
+			"editorbutton_1_0",
 			"editorbutton_1_1",
 		]
 		for (let i = 0; i < 3; i++){
@@ -329,6 +357,67 @@ class EditorState extends State{
 		//Brick Button Highlight (yellow border)
 		panel.addChild(this.brickButtonHighlight1);
 
+		return panel;
+	}
+
+	initBrickButtons2(){
+		let panel = new PIXI.Container();
+		panel.x = 5;
+		panel.y = 5;
+
+		/* TEMPORARY BRICK BUTTONS SOLUTION */
+		this.brickButtonHighlight2 = new PIXI.Graphics();
+		let state = this;
+		function placeButtons(name, x0, y0, wrap, scale, flip=false){
+			let group = brickData.group[name];
+			let dx = 16 * scale;
+			let dy = 8 * scale;
+			for (let [n, dat] of group.entries()){
+				let i = Math.floor(n/wrap);
+				let j = n % wrap;
+				if (flip)
+					[i, j] = [j, i];
+				let x = x0 + j * dx;
+				let y = y0 + i * dy;
+				let butt = new BrickButton(state, x, y, scale, dat.id);
+				butt.highlightGraphic = state.brickButtonHighlight2;
+				panel.addChild(butt);
+				state.brickButtons.push(butt);
+				if (dat.brickType == "SlotMachineBrick")
+					state.slotButtons.push(butt);
+				if (dat.brickType == "PowerupBrick")
+					state.powerupButton = butt;
+			}
+		};
+
+		placeButtons("flip2", 0, 10, 5, 1.5);
+		placeButtons("other2", 0, 100, 6, 1.5);
+
+		panel.addChild(this.brickButtonHighlight2);
+
+		let linkButton = new ToolButton(this, 2, 54, 10, null);
+		panel.addChild(linkButton);
+
+		linkButton.pointerDown = function(e){
+			let state = this.parentState;
+
+			state.toolButtonHighlight.visible = false;
+			let gr = state.linkLaserButtonHighlight;
+			gr.visible = true;
+
+			gr.clear();
+			gr.lineStyle(2, 0xFFFF00);
+			gr.drawRect(this.x-1, this.y-1, this.width, this.height);
+
+			state.selectedTool = new EditorState.tools.linkLaser(state);
+		};
+
+		this.linkLaserButtonHighlight = new PIXI.Graphics();
+		panel.addChild(this.linkLaserButtonHighlight);
+
+		let linkText = printText("Link Lasers\nTool", "windows", 0x000000, 1, 42, 54);
+		panel.addChild(linkText);
+		
 		return panel;
 	}
 
@@ -452,218 +541,6 @@ class EditorState extends State{
 		return panel;
 	}
 
-	initEnemyButtons(){
-		let panel = new PIXI.Container();
-		panel.x = 5;
-		panel.y = 5;
-
-		/* TEMPORARY BRICK BUTTONS SOLUTION */
-		this.brickButtonHighlight2 = new PIXI.Graphics();
-		let state = this;
-		function placeButtons(name, x0, y0, wrap, scale, flip=false){
-			let group = brickData.group[name];
-			let dx = 16 * scale;
-			let dy = 8 * scale;
-			for (let [n, dat] of group.entries()){
-				let i = Math.floor(n/wrap);
-				let j = n % wrap;
-				if (flip)
-					[i, j] = [j, i];
-				let x = x0 + j * dx;
-				let y = y0 + i * dy;
-				let butt = new BrickButton(state, x, y, scale, dat.id);
-				butt.highlightGraphic = state.brickButtonHighlight2;
-				panel.addChild(butt);
-				state.brickButtons.push(butt);
-				if (dat.brickType == "SlotMachineBrick")
-					state.slotButtons.push(butt);
-				if (dat.brickType == "PowerupBrick")
-					state.powerupButton = butt;
-			}
-		};
-
-		placeButtons("flip2", 0, 10, 5, 1.5);
-		placeButtons("other2", 0, 100, 6, 1.5);
-
-		panel.addChild(this.brickButtonHighlight2);
-
-		/*
-		//laser gate brick channel (DEPRECATED)
-		let input = this.createTextInput(36, 14, 2);
-		input.restrict = "0123456789";
-		input.text = 0;
-		input.on("input", (text) => {
-			if (text === "")
-				text = "0";
-			let n = Number(text);
-			n = clamp(n, 0, 99);
-			input.text = n;
-			//if a Laser Gate Brick button is already selected,
-			//update the id to be this channel
-			let id = this.selectedBrick;
-			if (id >= 2000 && id < 3000){
-				id = 100 * Math.floor(id / 100) + n;
-				this.selectedBrick = id;
-			}
-		});
-		input.on("focus", () => {
-			mouse.m1 = 0;
-		});
-		input.position.set(80, 80);
-		panel.addChild(input);
-		this.laserChannelInput = input;
-
-		let channelText = new PIXI.Text("laser channel:", {
-			fontSize: 12,
-		});
-		channelText.position.set(0, 80);
-		panel.addChild(channelText);
-		*/
-
-		/* OLD LINK BUTTON
-		//link laser button
-		let linkButton = new EditorButton(this, null, 2, 50);
-
-		//need to add an invisible rectangle for it to be clickable
-		let box = new PIXI.Graphics()
-			.beginFill(0xFFFFFF)
-			.drawRect(0, 0, 82, 32);
-		box.alpha = 0;
-		linkButton.addChild(box);
-
-		let linkText = printText("Link Lasers\n(Click Me)", "windows", 0x000000, 1, 2, 2);
-		linkButton.addChild(linkText);
-		panel.addChild(linkButton);
-
-		linkButton.getBounds(); //update its width and height
-
-		linkButton.pointerDown = function(e){
-			let state = this.parentState;
-
-			state.toolButtonHighlight.visible = false;
-			let gr = state.linkLaserButtonHighlight;
-			gr.visible = true;
-
-			gr.clear();
-			gr.lineStyle(2, 0xFFFF00);
-			let {width, height} = this.getLocalBounds();
-			gr.drawRect(this.x-1, this.y-1, width, height);
-
-			state.selectedTool = new EditorState.tools.linkLaser(state);
-		};
-
-		this.linkLaserButtonHighlight = new PIXI.Graphics();
-		panel.addChild(this.linkLaserButtonHighlight);
-		*/
-
-		let linkButton = new ToolButton(this, 2, 54, 10, null);
-		panel.addChild(linkButton);
-
-		linkButton.pointerDown = function(e){
-			let state = this.parentState;
-
-			state.toolButtonHighlight.visible = false;
-			let gr = state.linkLaserButtonHighlight;
-			gr.visible = true;
-
-			gr.clear();
-			gr.lineStyle(2, 0xFFFF00);
-			gr.drawRect(this.x-1, this.y-1, this.width, this.height);
-
-			state.selectedTool = new EditorState.tools.linkLaser(state);
-		};
-
-		this.linkLaserButtonHighlight = new PIXI.Graphics();
-		panel.addChild(this.linkLaserButtonHighlight);
-
-		let linkText = printText("Link Lasers\nTool", "windows", 0x000000, 1, 42, 54);
-		panel.addChild(linkText);
-
-
-		/* TODO: Move all enemy stuff to a new window + button */
-		let yoff = 220;
-		
-		this.enemyButtons = [];
-		for (let i = 0; i < 9; i++){		
-			let x = Math.floor(i/5) * 60;
-			let y = (i % 5) * 24 + yoff;
-			let butt = new EnemyCheckbox(this, x, y, i);
-			panel.addChild(butt);
-			this.enemyButtons.push(butt);
-		}
-
-		this.defaultSpawn = [2000, 2000, 8000];
-		this.enemySpawn = this.defaultSpawn.slice();
-		let positions = [
-			[0, 320],
-			[35, 395],
-			[95, 395]
-		];
-
-		//Enemy Spawn Timer Config
-		let strings = [
-			[0, 300, "Initial Spawn Delay :"],
-			[50, 325, "seconds"],
-			[0, 360, "Subsequent Spawn Delay :", true],
-			[0, 400, "From"],
-			[78, 400, "to"],
-			[0, 420, "seconds"]
-		];
-
-		yoff = 60;
-
-		for (let [x, y, string, wrap] of strings){
-			y += yoff;
-
-			let text = printText(
-				string, "windows", 0x000000, 1, x, y);
-			if (wrap)
-				text.maxWidth = 120;
-			panel.addChild(text);
-		}
-
-		this.enemySpawnInputs = [];
-		for (let [i, [x, y]] of positions.entries()){
-			y += yoff;
-
-			let input = this.createTextInput(36, 14, 2);
-			input.restrict = ".0123456789";
-			input.text = this.defaultSpawn[i]/1000;
-			input.on("input", (text) => {
-				let last = text[text.length-1];
-				if (last == "."){
-					let period = text.indexOf(".");
-					//revert input if user entered a second period
-					if (period >= 0 && period < text.length-1){
-						input.text = text.slice(0, -1);
-						return;
-					}
-				}
-				if (text.length == 0)
-					text = "0";
-				if (last == ".")
-					text += "0";
-				let val = Number(text);
-				this.enemySpawn[i] = Math.floor(val*1000);
-			});
-			input.on("focus", () => {
-				mouse.m1 = 0;
-			});
-			input.position.set(x, y);
-			panel.addChild(input);
-			this.enemySpawnInputs.push(input);
-		}
-
-		panel.onHide = () => {
-			for (let input of this.enemySpawnInputs){
-				input.blur();
-				input.substituteText = true;
-			}
-		};
-		
-		return panel;
-	}
-
 	initToolButtons(){
 		let arr = [
 			["free", 0],
@@ -740,13 +617,19 @@ class EditorState extends State{
 
 	//resets the level to its default state
 	reset(){
+		this.powerupChances = {
+			global: GLOBAL_POWERUP_CHANCE,
+			weights: [...DEFAULT_WEIGHTS]
+		};
+
+		this.enemySpawn = new Array(9).fill(0);
+		this.enemySpawnTimes = [...DEFAULT_SPAWN_TIMES];
+
 		this.clearLaserEdges();
 		this.redrawLaserEdges();
 
 		for (let node of this.allNodes)
 			node.setBrick(null);
-		for (let butt of this.enemyButtons)
-			butt.setState(false);
 		
 		this.cycler.setCurrentSlot(0);
 	}
@@ -760,6 +643,7 @@ class EditorState extends State{
 	}
 
 	update(delta){
+		//escape will NOT pop the state; instead it will start the game
 		if (keyboard.isPressed(keycode.ESCAPE)){
 			this.startGame();
 			return;
@@ -809,7 +693,7 @@ class EditorState extends State{
 		}
 	}
 
-	//don't worry about mutating objects since this will
+	//don't worry about mutating objects or arrays since this function will
 	//return an immutable JSON string
 	createLevel(){
 		let level = {};
@@ -838,30 +722,11 @@ class EditorState extends State{
 
 		//level.enemies can be omitted if all enemies
 		//are disabled
-		let enemyCheck = false;
-		let enemyArr = [];
-		for (let butt of this.enemyButtons){
-			if (butt.checkState){
-				enemyArr.push(1);
-				enemyCheck = true;
-			}
-			else
-				enemyArr.push(0);
-		}
-		if (enemyCheck){
-			let enemies = [];
-			enemies.push(enemyArr);
-			//the second array can be omitted if the
-			//spawn times are default
-			let times = this.enemySpawn;
-			let isDefault = true;
-			for (let [i, t] of times.entries()){
-				if (t != this.defaultSpawn[i])
-					isDefault = false;
-			}
-			if (!isDefault)
-				enemies.push(times.slice());
-			level.enemies = enemies;
+		if (this.enemySpawn.includes(1)){
+			level.enemies = [this.enemySpawn];
+			//the spawn times array can be omitted if they are equal to default
+			if (!arrayEqual(this.enemySpawnTimes, DEFAULT_SPAWN_TIMES))
+				level.enemies.push(this.enemySpawnTimes);
 		}
 
 		//Slot Machine Powerups should appear iff
@@ -872,6 +737,20 @@ class EditorState extends State{
 		//same for Laser Gate Brick lasers
 		if (this.laserEdges.length > 0)
 			level.lasers = this.laserEdges;
+
+		//include powerup chances if they are different from the default chances
+		let powerupChances = {};
+		let isCustom = false;
+		if (this.powerupChances.global != GLOBAL_POWERUP_CHANCE){
+			powerupChances.global = this.powerupChances.global;
+			isCustom = true;
+		}
+		if (!arrayEqual(this.powerupChances.weights, DEFAULT_WEIGHTS)){
+			powerupChances.weights = this.powerupChances.weights;
+			isCustom = true;
+		}
+		if (isCustom)
+			level.powerupChances = powerupChances;
 		
 		return JSON.stringify(level);
 	}
@@ -885,6 +764,7 @@ class EditorState extends State{
 		else
 			level = levelStr;
 		//needs to take in account of optional properties
+
 		//reset the level first
 		this.reset();
 
@@ -903,16 +783,11 @@ class EditorState extends State{
 
 		//set enemy spawning
 		if (level.enemies){
-			let butts = this.enemyButtons;
 			let [values, times] = level.enemies;
-			for (let [i, val] of values.entries())
-				butts[i].setState(val); //implicit cast to boolean
-
-			times = times ?? this.defaultSpawn;
-			for (let i = 0; i < 3; i++){
-				this.enemySpawnInputs[i].text = times[i]/1000;
-				this.enemySpawn[i] = times[i];
-			}
+			//values should always exists
+			this.enemySpawn = values;
+			if (times)
+				this.enemySpawnTimes = times;
 		}
 		//slot machine powerups
 		if (level.slotPowerups)
@@ -922,6 +797,14 @@ class EditorState extends State{
 		if (level.lasers){
 			this.laserEdges = level.lasers;
 			this.redrawLaserEdges();
+		}
+
+		if (level.powerupChances){
+			let {global, weights} = level.powerupChances;
+			if (global !== undefined)
+				this.powerupChances.global = global;
+			if (weights !== undefined)
+				this.powerupChances.weights = weights;
 		}
 	}
 
@@ -1412,55 +1295,6 @@ class PatchButton extends EditorButton{
 		state.selectedPatch = [this.slot, this.value];
 	}
 }
-
-//similar to a Checkbox but with differnt sprites
-class EnemyCheckbox extends EditorButton{
-	constructor(parentState, x, y, id){
-		let i = 2;
-		let j = 2;
-		if (id > 0){
-			i = Math.floor((id+1)/6);
-			j = (id+1) % 6;
-		}
-		let tex = `editorenemy_${i}_${j}`;
-		super(parentState, tex, x, y, 2);
-		this.enemyId = id;
-
-		let cross = makeSprite("editorenemy_2_0");
-		cross.x = 12;
-		cross.visible = true;
-		this.addChild(cross);
-		this.cross = cross;
-
-		let check = makeSprite("editorenemy_2_1");
-		check.x = 12;
-		check.visible = false;
-		this.addChild(check);
-		this.check = check;
-
-		this.checkState = false;
-
-		// let check = new Sprite("editorenemy_2_1");
-	}
-
-	setState(value){
-		if (value){
-			this.cross.visible = false;
-			this.check.visible = true;
-		}
-		else{
-			this.cross.visible = true;
-			this.check.visible = false;
-		}
-		this.checkState = value;
-	}
-
-	pointerDown(e){
-		this.setState(!this.checkState);
-	}
-
-}
-
 class PatchCycler{
 	constructor(parentState){
 		this.parentState = parentState;

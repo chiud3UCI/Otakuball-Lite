@@ -29,8 +29,6 @@ class DialogueBox extends State{
 		this.defaultButtonHeight = 40;
 		this.defaultButtonGap = 10;
 		this.buttons = [];
-
-		ENABLE_RIGHT_CLICK = true;
 	}
 
 	destructor(){
@@ -38,8 +36,6 @@ class DialogueBox extends State{
 
 		if (this.underlayStage)
 			this.underlayStage.interactiveChildren = true;
-
-		ENABLE_RIGHT_CLICK = false;
 	}
 
 	setMessage(message){
@@ -94,12 +90,5 @@ class DialogueBox extends State{
 		this.add(input);
 
 		return input;
-	}
-
-	update(delta){
-		if (keyboard.isPressed(keycode.ESCAPE)){
-			game.pop();
-			return;
-		}
 	}
 };

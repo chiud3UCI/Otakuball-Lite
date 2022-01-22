@@ -1,3 +1,8 @@
+[01/21/22]
+-Added "Edit Powerup Chances" menu
+-Moved enemy spawn config to a separate menu
+-Improved Background Select menu by adding titles
+
 [01/13/22]
 -Changed how Laser Gate Bricks are linked
 -Instead of channels, these bricks can be manually linked using a special tool.

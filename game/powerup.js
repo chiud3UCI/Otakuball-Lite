@@ -1,5 +1,5 @@
 //There are a total of 135 powerups
-var powerupNames = [ 
+var POWERUP_NAMES = [ 
 	"Acid", "AntiGravity", "Assist", "Attract", "Autopilot", "Ball Cannon", "Barrier", "Blackout", "Beam", "Blossom",
 	"Bomber", "Bulk", "Bypass", "Cannon", "Catch", "Change", "Chaos", "Column Bomber", "Combo", "Control",
 	"Disarm", "Disrupt", "Domino", "Drill Missile", "Drop", "EMP Ball", "Energy", "Erratic Missile", "Extend", "Fast",
@@ -16,9 +16,10 @@ var powerupNames = [
 	"Yoga", "Y-Return", "Buzzer", "Zeal", "Zen Shove"
 ];
 
-// for (let [i, name] of powerupNames.entries()){
-// 	powerupNames[i] = i + " " + name;
-// }
+var POWERUP_ID_LOOKUP = {};
+for (let [index, name] of POWERUP_NAMES.entries()){
+	POWERUP_ID_LOOKUP[name] = index;
+}
 
 var badPowerups = [
 	7, 11, 15, 29, 30, 36, 38, 39, 43, 47, 50, 52, 74, 75, 76, 84, 90,
@@ -44,7 +45,7 @@ var badPowerupsLookup = generateLookup(badPowerups);
 
 class PowerupSpawner{
 	constructor(globalRate, weights){
-		this.globalRate = globalRate;
+		this.globalRate = globalRate / 100;
 		//don't modify the original weights
 		weights = weights.slice();
 
@@ -68,17 +69,20 @@ class PowerupSpawner{
 			Math.random() < this.globalRate
 		);
 	}
-
+  
 	//get a random powerup id or null if all weights are 0
 	getId(){
 		if (this.sum == 0)
 			return null;
-		let n = randRange(this.sum);
-		for (let [i, w] of this.weights.entries()){
-			n -= w;
+		let n = randRange(1, this.sum + 1);
+		for (let [id, weight] of this.weights.entries()){
+			n -= weight;
 			if (n <= 0)
-				return i;
+				return id;
 		}
+		//this should never happen
+		console.log("reached end of loop?");
+		return 0;
 	}
 }
 
@@ -124,7 +128,7 @@ class Powerup extends Sprite{
 		this.storedAABB = null;
 
 		//add label to the left (or right) of it
-		let label = printText(powerupNames[id], "pokemon");
+		let label = printText(POWERUP_NAMES[id], "pokemon");
 		label.tint = 0xFFFFFF;
 		label.scale.set(0.5);
 		label.y = -5;

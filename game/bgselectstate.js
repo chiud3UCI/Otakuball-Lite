@@ -11,6 +11,7 @@ class BackgroundSelectState extends State{
 	constructor(editorstate){
 		super();
 		this.editorstate = editorstate;
+		this.windowTitle = "Background Select";
 		//import bg from editorstate
 		let editbg = editorstate.bg;
 		this.bg = {
@@ -22,36 +23,36 @@ class BackgroundSelectState extends State{
 		this.stage = stage;
 
 		stage.addChild(new PIXI.Graphics()
-			.beginFill(0x888888)
+			.beginFill(PALETTE["main0"])
 			.drawRect(0, 0, DIM.w, DIM.h)
 		);
 
 		//Back Button
-		let butt = new Button(DIM.w - 100, DIM.h - 50, 80, 35);
-		butt.add(printText(
-			"Back", "arcade", 0x000000, 1, 7, 8
-		));
-		butt.onClick = () => {
+		let bw = 100;
+		let bh = 40;
+		let bgap = 10;
+		let backButton = new Button(DIM.w - bw - bgap, DIM.h - bh - bgap, bw, bh);
+		backButton.addCentered(printText("Back", "arcade", 0x000000, 1));
+		backButton.onClick = () => {
 			game.pop();
 		}
-		stage.addChild(butt);
+		stage.addChild(backButton);
 
 		//Apply Button
-		butt = new Button(DIM.w - 200, DIM.h - 50, 80, 35);
-		butt.add(printText(
-			"Apply", "arcade", 0x000000, 1, 7, 8
-		));
-		butt.onClick = () => {
+		let applyButton = new Button(backButton.x - bw - bgap, backButton.y, bw, bh);
+		applyButton.addCentered(printText("Apply", "arcade", 0x000000, 1));
+		applyButton.onClick = () => {
 			editorstate.setBackground(this.bg.color, this.bg.tile);
 			game.pop();
 		}
-		stage.addChild(butt);
+		stage.addChild(applyButton);
 
 		//Preview
 		this.preview = new PIXI.Graphics();
 		this.preview.position.set(50, 50);
 		stage.addChild(this.preview);
 		this.updatePreview();
+		stage.addChild(printText("Preview", "arcade", 0x000000, 1, this.preview.x, this.preview.y - 22));
 
 		//Sliders
 		let [r, g, b] = splitColor(this.bg.color);
@@ -64,22 +65,25 @@ class BackgroundSelectState extends State{
 			slider.position.set(300, 50 + i*25);
 			stage.addChild(slider);
 		}
+		stage.addChild(printText("RGB Sliders", "arcade", 0x000000, 1, this.sliders[0].x, this.sliders[0].y - 22));
 
 		//Color Presets
 		let presets = new PIXI.Container();
-		presets.position.set(300, 150);
+		presets.position.set(300, 160);
 		for (let [n, color] of BG_COLOR_PRESETS.entries()){
 			let i = Math.floor(n/12);
 			let j = n % 12;
 			presets.addChild(new ColorPresetButton(
 				this, i, j, color));
 		}
+		presets.addChild(printText("Color Presets", "arcade", 0x000000, 1, 0, -22));
 		stage.addChild(presets);
 
 		//Patterns
 		let patterns = new PIXI.Container();
 		let n = 5 * 13 - 0; //columns * rows - missing
-		let wrap = 24;
+		let wrap = 22;
+		let gap = 32*4.5; //offset between opaque and transparent
 		for (let type of ["opaque", "transparent"]){
 			for (let index = 0; index < n; index++){
 				let i = Math.floor(index/5);
@@ -89,7 +93,7 @@ class BackgroundSelectState extends State{
 				let x = ((index + 1) % wrap) * 32;
 				let y = Math.floor((index + 1) / wrap) * 32;
 				if (type == "transparent"){
-					y += 150;
+					y += gap;
 					let rect = new PIXI.Graphics()
 						.beginFill(0xFFFFFF)
 						.drawRect(x, y, 32, 32);
@@ -105,7 +109,7 @@ class BackgroundSelectState extends State{
 			}
 		}
 		for (let i = 0; i < 2; i++){
-			let nullPattern = makeSprite("no_bg", 1, 0, i*150);
+			let nullPattern = makeSprite("no_bg", 1, 0, i*gap);
 			//add transparent hitbox
 			nullPattern.addChild(new PIXI.Graphics()
 				.beginFill(0xFFFFFF)
@@ -119,8 +123,12 @@ class BackgroundSelectState extends State{
 			});
 			patterns.addChild(nullPattern);
 		}
-		patterns.position.set(20, 300);
+		patterns.position.set((DIM.w - patterns.width)/2, 290);
 		stage.addChild(patterns);
+		stage.addChild(printText(
+			"Opaque Color Patterns", "arcade", 0x000000, 1, patterns.x, patterns.y - 22));
+		stage.addChild(printText(
+			"Transparent Black Patterns", "arcade", 0x000000, 1, patterns.x, patterns.y + gap - 22));
 	}
 
 	setColor(color){
@@ -155,6 +163,10 @@ class BackgroundSelectState extends State{
 	}
 
 	update(delta){
+		if (keyboard.isPressed(keycode.ESCAPE)){
+			game.pop();
+			return;
+		}
 		for (let slider of this.sliders)
 			slider.update(delta);
 	}

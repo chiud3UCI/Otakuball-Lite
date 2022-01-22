@@ -8,12 +8,15 @@ function enemy_log(message){
 class EnemySpawner{
 	//there should be at least 1 enemy enabled in enemyArgs
 	//otherwise, just set playstate.spawner to null
-	constructor(playstate, enemyArgs, timeArgs=[2000, 2000, 8000]){
+	constructor(playstate, enemyArgs, times){
 		this.playstate = playstate;
+		if (!times)
+			times = [...DEFAULT_SPAWN_TIMES];
 
-		this.timer = timeArgs[0];
-		this.minDelay = timeArgs[1];
-		this.maxDelay = timeArgs[2];
+		//don't forget to convert from seconds to milliseconds
+		this.timer    = times[0] * 1000;
+		this.minDelay = times[1] * 1000;
+		this.maxDelay = times[2] * 1000;
 
 		//can't make this static because classes may
 		//not be defined yet

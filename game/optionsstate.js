@@ -124,6 +124,7 @@ class OptionsState extends State{
             let input = dialogue.addTextArea(550, 250, 12);
             input.htmlInput.readOnly = true;
             input.text = levels.user.toString(true);
+            // input.text = levels.default.toString(true); //for debugging
             dialogue.addButton("Back", 100, 40, () => {
                 game.pop();
             });
@@ -302,12 +303,5 @@ class OptionsState extends State{
         let volume = this.volumeSlider.value;
         PIXI.sound.volumeAll = volume / 100;
         localStorage.setItem("volume", String(volume));
-    }
-
-    update(delta){
-        if (keyboard.isPressed(keycode.ESCAPE)){
-			game.pop();
-			return;
-		}
     }
 }

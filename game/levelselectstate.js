@@ -24,7 +24,6 @@ class LevelSelectState extends State{
 	//mode is one of ["play", "load", "save", "manager"]
 	constructor(isPlaylist, mode){
 		super();
-		ENABLE_RIGHT_CLICK = true;
 
 		this.isPlaylist = isPlaylist;
 		this.mode = mode;
@@ -153,11 +152,6 @@ class LevelSelectState extends State{
 		drawDivider(dividers, "horizontal", x, y, width);
 	}
 
-	destructor(){
-		super.destructor();
-		ENABLE_RIGHT_CLICK = false;
-	}
-
 	initButtons(x, y, w, h){
 		let index = 0;
 		let makeButton = (name, func) => {
@@ -186,18 +180,6 @@ class LevelSelectState extends State{
 		}
 	}
 
-	//when a new state gets pushed on top of this state
-	onExit(){
-		super.onExit();
-		ENABLE_RIGHT_CLICK = false;
-	}
-
-	//when this state becomes the top state again after the above state was popped
-	onEnter(){
-		super.onEnter();
-		ENABLE_RIGHT_CLICK = true;
-	}
-
 	//can also use "red" and "green" for shortcuts
 	setMessage(message, color=0x000000, timer=3000){
 		// console.log(`set message="${message}", color=${color}, timer=${timer}"`);
@@ -216,6 +198,7 @@ class LevelSelectState extends State{
 			game.pop();
 			return;
 		}
+
 		if (this.message.visible){
 			this.messageTimer -= delta;
 			if (this.messageTimer <= 0)
@@ -252,8 +235,10 @@ class LSS_Panel extends PIXI.Container{
 		//right widget
 		if (isPlaylist)
 			this.preview = new LSS_PlaylistPreview(this);
-		else
-			this.preview = new LSS_LevelPreview(this, "default");
+		else{
+			let mode = base.parentState.mode;
+			this.preview = new LSS_LevelPreview(this, (mode == "play") ? "default" : "detailed");
+		}
 		this.addChild(this.preview);
 		//bottom left textbox
 		if (base.parentState.mode == "manager"){
@@ -907,9 +892,9 @@ class LSS_LevelPreview extends PIXI.Container{
 					this.sprites[i].tint = 0xFFFFFF;
 			}
 			if (arr[1]){
-				let seconds = arr[1].map(x => x/1000);
-				this.timerText.text = seconds.join("\n");
+				this.timerText.text = arr[1].join("\n");
 			}
+			console.log(this.timerText.text);
 		};
 
 		display.reset();
@@ -917,9 +902,7 @@ class LSS_LevelPreview extends PIXI.Container{
 		this.enemyDisplay = display;
 	}
 
-	static generate(levelStr){
-		let level = JSON.parse(levelStr);
-
+	static generate(level){
 		let bw = 16*13;
 		let bh = 8*32;
 		let preview = PIXI.RenderTexture.create(
@@ -957,7 +940,8 @@ class LSS_LevelPreview extends PIXI.Container{
 		this.enemyDisplay?.reset();
 	}
 
-	setLevel(name, level, replace=false){
+	setLevel(name, levelStr, replace=false){
+		let level = JSON.parse(levelStr);
 		if (replace || !this.cache.has(name)){
 			this.cache.set(name, LSS_LevelPreview.generate(level));
 		}
@@ -997,8 +981,6 @@ class LSS_PlaylistPreview extends PIXI.Container{
 		names = names.map(str => str.substring(str.indexOf("/")+1));
 		this.playlistPreview.text = names.join("\n");
 	}
-
-	
 }
 
 class LSS_TextBox extends PIXI.Container{
@@ -1115,6 +1097,21 @@ class FileDatabase{
 			let level = pair[1];
 			if (typeof(level) === "string")
 				return;
+			pair[1] = JSON.stringify(level);
+		}
+	}
+
+	static convert_to_seconds(list){
+		for (let pair of list){
+			let level_str = pair[1];
+			let level = JSON.parse(level_str);
+			if (!level.enemies)
+				continue;
+			let times = level.enemies[1];
+			if (!times)
+				continue;
+			for (let i = 0; i < 3; i++)
+				times[i] = Math.floor(times[i] / 1000);
 			pair[1] = JSON.stringify(level);
 		}
 	}

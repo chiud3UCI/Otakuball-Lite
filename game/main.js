@@ -60,6 +60,7 @@ function ALERT_ONCE(message, id = 0){
 //if handling
 class State{
 	constructor(){
+		this.allowRightClick = true;
 		this._textInputs = [];
 	}
 
@@ -68,6 +69,13 @@ class State{
 		for (let input of this._textInputs){
 			input.blur();
 			input.destroy();
+		}
+	}
+
+	update(delta){
+		if (keyboard.isPressed(keycode.ESCAPE)){
+			game.pop();
+			return;
 		}
 	}
 
@@ -113,6 +121,22 @@ class State{
 		return input;
 	}
 
+	createNumInput(width, fontSize, padding=0){
+		let input = this.createTextInput(width, fontSize, padding);
+		input.restrict = "0123456789";
+		input.range = [-Infinity, Infinity];
+		input.onInput = () => {};
+		input.on("input", (text) => {
+			input.onInput(clamp(Number(text), input.range[0], input.range[1]));
+		});
+		input.on("blur", () => {
+			let num = Number(input.text);
+			num = clamp(num, input.range[0], input.range[1]);
+			input.text = String(num);
+		});
+		return input;
+	}
+
 	createTextArea(width, height, fontSize){
 		let input = new PIXI.TextInput({
 			input: {
@@ -138,6 +162,17 @@ class State{
 		return input;
 	}
 
+	//returns true if the mouse is inside a text input
+	mouseInInput(){
+		let mx = appMouse.global.x;
+		let my = appMouse.global.y;
+		for (let input of this._textInputs){
+			if (input.getBounds().contains(mx, my))
+				return true;
+		}
+		return false;
+	}
+
 	//TODO: implement destroyTextInput() if needed
 
 	// registerInput(input){
@@ -146,15 +181,21 @@ class State{
 
 	//always allow right click when mouse is inside a textbox
 	//mx and my are global mouse positions
+	//As long as there are no text boxes in editorstate or playstate we don't need
+	//to check the input boxes as allowRightClick will be true for them
 	canRightClick(mx, my){
-		if (ENABLE_RIGHT_CLICK)
-			return true;
+		// if (ENABLE_RIGHT_CLICK)
+		// 	return true;
+		
+		// if (this.allowRightClick)
+		// 	return true;
 
-		for (let input of this._textInputs){
-			if (input.getBounds().contains(mx, my))
-				return true;
-		}
-		return false;
+		// for (let input of this._textInputs){
+		// 	if (input.getBounds().contains(mx, my))
+		// 		return true;
+		// }
+		// return false;
+		return (ENABLE_RIGHT_CLICK || this.allowRightClick);
 	}
 }
 
@@ -459,6 +500,7 @@ function setup(){
 	//load default levels from the loaded assets
 	let default_list = PIXI.Loader.shared.resources.default_levels.data;
 	FileDatabase.convert_level_object_to_string(default_list); //Backwards Compatibility
+	// FileDatabase.convert_to_seconds(default_list);
 	levels.default = new FileDatabase(default_list, false);
 	//generate default playlist from the default levels
 	playlists.default = new FileDatabase(default_list, true);
@@ -494,6 +536,8 @@ function setup(){
 
 	game.push(new MainMenuState());
 	// game.push(new EditorState());
+	// game.top.configPowerupButton.onClick();
+	// game.top.enemySpawnButton.onClick();
 	// game.push(new TestState());
 
 	app.stage.addChild(game.stage);

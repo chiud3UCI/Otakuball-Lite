@@ -87,6 +87,7 @@ class PlayState extends State{
 	*/
 	constructor(mode, ...args){
 		super();
+		this.allowRightClick = false;
 		this.mode = mode;
 
 		if (mode == "test")
@@ -227,15 +228,15 @@ class PlayState extends State{
 		let paddle = new Paddle();
 		this.add("paddles", paddle);
 
-		//create bricks
-		this.loadLevel(levelStr);
-		this.initBrickGrid();
-		this.brickGrid.refresh();
-
 		//create ball
 		let ball = new Ball(0, 0, 0.4, 0);
 		this.add("balls", ball);
 		paddle.attachBall(ball, true);
+
+		//load level
+		this.loadLevel(levelStr);
+		this.initBrickGrid();
+		this.brickGrid.refresh();
 
 		this.state = null;
 		if (mode == "test"){
@@ -252,12 +253,6 @@ class PlayState extends State{
 
 		//keep track of # of pit blockers
 		this.pit_blockers = 0;
-
-		//create powerup spawner
-		this.powerupSpawner = new PowerupSpawner(
-			GLOBAL_POWERUP_CHANCE,
-			DEFAULT_WEIGHTS,
-		);
 
 		//Text
 		let text = "";
@@ -922,11 +917,24 @@ class PlayState extends State{
 			brickClass.initialize?.(this);
 		}
 
+		//enemy spawining
 		let enemy = level.enemies;
 		if (!enemy)
 			this.spawner = null;
 		else
 			this.spawner = new EnemySpawner(this, enemy[0], enemy[1]);
+
+		//powerup chances
+		let globalChance, weights;
+		let powerupChances = level.powerupChances;
+		if (powerupChances){
+			globalChance = powerupChances.global;
+			weights = powerupChances.weights;
+		}
+		this.powerupSpawner = new PowerupSpawner(
+			globalChance ?? GLOBAL_POWERUP_CHANCE,
+			weights ?? DEFAULT_WEIGHTS
+		);
 	}
 
 	//special debug method that summons a ball and
@@ -2175,7 +2183,7 @@ class PowerupButton extends PlayButton{
 	pointerOver(e){
 		let tooltip = this.parentState.tooltip;
 		if (tooltip.powId === null){
-			tooltip.text = `${this.id} ${powerupNames[this.id]}`;
+			tooltip.text = `${this.id} ${POWERUP_NAMES[this.id]}`;
 			tooltip.powId = this.id;
 		}
 	}

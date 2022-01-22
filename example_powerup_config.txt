@@ -1,0 +1,14 @@
+Instructions: Change only the values inside the [] brackets, 
+then press "Update" to save and verify the powerup chances.
+
+These powerup chances will only apply to the current level.
+
+
+Global Spawn Rate: *[15]% | default is 15%
+--------------------------------------------------------
+Powerup Name       | Weights  | Chance   | Default Weight
+--------------------------------------------------------
+Intelligent Shadow | *   [42] | 3.1415%  | 
+Risky Mystery      | *    [8] | 3.1415%  | yes
+
+

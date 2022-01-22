@@ -124,7 +124,6 @@ class CampaignState extends State{
 			game.pop();
 			return;
 		}
-
         if (this.starting){
             this.startTimer += delta;
             this.blackout.alpha = clamp(

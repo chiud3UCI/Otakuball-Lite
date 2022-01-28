@@ -535,7 +535,7 @@ function setup(){
 	game.stage.mask = new Mask(0, 0, DIM.w, DIM.h);
 
 	game.push(new MainMenuState());
-	game.push(new EditorState());
+	// game.push(new EditorState());
 	// game.top.configPowerupButton.onClick();
 	// game.top.enemySpawnButton.onClick();
 	// game.push(new TestState());

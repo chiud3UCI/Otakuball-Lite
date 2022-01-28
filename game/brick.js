@@ -1002,6 +1002,14 @@ class FunkyBrick extends Brick{
 		this.brickType = "funky";
 	}
 
+	//special behavior when a Funky Brick has a Regen Patch (easter egg)
+	static superRegenCounter = 0;
+	initRegenPatch(){
+		this.superRegen = true;
+		this.superRegenTimer = randRange(2000, 4000);
+		this.superRegenIndex = FunkyBrick.superRegenCounter++;
+	}
+
 	shouldBeRemoved(){
 		return this.suppress && this.isRegenerating;
 	}
@@ -1046,6 +1054,34 @@ class FunkyBrick extends Brick{
 				this.isRegenerating = false;
 				this.health = this.storedHealth;
 				this.playAnim("regen");
+			}
+		}
+
+		//(easter egg)
+		if (this.superRegen){
+			if (this.superRegenIndex <= FunkyBrick.superRegenCounter - 5000){
+				this.suppress = true;
+				this.kill();
+			}
+			else{
+				this.superRegenTimer -= delta;
+				if (this.superRegenTimer <= 0){
+					this.superRegenTimer = randRange(1000, 2000);
+					let dist = randRangeFloat(8, 64);
+					let rad = randRangeFloat(2*Math.PI);
+					let [dx, dy] = Vector.rotate(dist, 0, rad);
+					let x1 = this.x + dx;
+					let y1 = this.y + dy;
+					if (x1 > DIM.lwallx && x1 < DIM.rwallx && y1 > DIM.ceiling && y1 < DIM.h){
+						let brick = new FunkyBrick(x1, y1, this.funkyLevel);
+						brick.superRegen = true;
+						brick.superRegenTimer = 1000;
+						brick.superRegenIndex = FunkyBrick.superRegenCounter++;
+						brick.kill();
+						brick.regenTimer = 0;
+						game.emplace("bricks", brick);
+					}
+				}
 			}
 		}
 
@@ -1727,6 +1763,8 @@ class TikiBrick extends Brick{
 
 		this.addAnim("shine", "tiki_shine", 0.25);
 
+		this.hitSound = "tiki_hit";
+
 		this.brickType = "tiki";
 	}
 
@@ -2287,7 +2325,9 @@ class SlotMachineBrick extends Brick{
 		this.addChild(this.frame0);
 		this.addChild(this.frame1);
 		this.aniTime = 150;
-		this.aniTimer = 0; 
+		this.aniTimer = 0;
+
+		this.hitSound = "slot_machine_hit";
 
 		this.brickType = "slotmachine";
 	}
@@ -2345,7 +2385,7 @@ class SlotMachineBrick extends Brick{
 				let sameBricks = [this];
 				let allSame = true;
 				for (let br of game.get("bricks")){
-					if (br === this)
+					if (br === this || br.isDead())
 						continue;
 					if (br.brickType != "slotmachine")
 						continue;
@@ -2364,6 +2404,7 @@ class SlotMachineBrick extends Brick{
 					let pow = new Powerup(
 						this.x, this.y, this.powIds[this.powIndex]);
 					game.emplace("powerups", pow);
+					playSound("slot_machine_match");
 				}
 			}
 		}
@@ -2721,6 +2762,15 @@ class SlimeBrick extends Brick{
 	static spreadDelay = 1000;
 	static spreadChance = 0.25;
 	static transformDelay = 100;
+
+	//update all Slime Bricks
+	// static update(delta){
+	// 	for (let br of game.get("bricks")){
+	// 		if (!(br instanceof SlimeBrick))
+	// 			continue;
+			
+	// 	}
+	// }
 
 	constructor(x, y){
 		super("brick_main_6_19", x, y);

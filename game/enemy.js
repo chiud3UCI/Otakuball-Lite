@@ -377,6 +377,7 @@ class Menacer extends Ball{
 		MetalBrick.setCoating(newBrick, brick);
 		brick.kill();
 		game.emplace("bricks", newBrick);
+		playSound("menacer_coating");
 	}
 
 	onEnemyHit(enemy){

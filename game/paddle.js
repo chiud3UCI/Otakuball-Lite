@@ -212,20 +212,31 @@ class Paddle extends Sprite{
 	}
 
 	releaseBalls(){
-		if (this.stuckBalls.length == 0)
-			return false;
-		//Only GLue does this
+		//Glue is the only powerup that prevents the release of balls
 		if (this.components.catch?.name == "glue")
 			return false;
 
-		for (let [ball, offset] of this.stuckBalls){
-			ball.stuckToPaddle = false;
-			ball.justReleased = true;
+		//release balls on the paddle first
+		let stuckBalls = this.stuckBalls;
+		if (stuckBalls.length > 0){
+			for (let [ball, offset] of this.stuckBalls){
+				ball.stuckToPaddle = false;
+				ball.justReleased = true;
+			}
+			stuckBalls.length = 0;
+			playSound(this.paddleHitSound);
+			return true;
 		}
 
-		this.stuckBalls = [];
-		playSound(this.paddleHitSound);
-		return true;
+		//release Orbit balls if there were no balls on the paddle
+		if (this.components.orbit){
+			let orbit = this.components.orbit;
+			let check = orbit.releaseBalls();
+			if (check)
+				return true;
+		}
+
+		return false;
 	}
 
 	checkSpriteHit(obj){
@@ -391,7 +402,6 @@ class Paddle extends Sprite{
 
 		//update stuck balls
 		this.updateStuckBalls();
-		
 		
 		if (!this.isRespawning && mouse.m1 && mouse.inBoard()){
 			//don't activate component click

@@ -894,7 +894,6 @@ class LSS_LevelPreview extends PIXI.Container{
 			if (arr[1]){
 				this.timerText.text = arr[1].join("\n");
 			}
-			console.log(this.timerText.text);
 		};
 
 		display.reset();
@@ -925,7 +924,7 @@ class LSS_LevelPreview extends PIXI.Container{
 		for (let [i, j, id, patch] of level.bricks){
 			let x = j * 16;
 			let y = i * 8;
-			let tex = brickData.lookup[id].tex;
+			let tex = brickData.lookup.get(id).tex;
 			let sprite = makeSprite(tex, 1, x, y);
 			// renderer.render(sprite, preview);
 			cont.addChild(sprite);

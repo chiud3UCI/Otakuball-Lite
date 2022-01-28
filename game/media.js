@@ -333,6 +333,9 @@ let recursive_sound_names = [
 		"ultraviolet_pop",
 		"brick_speed_up",
 		"brick_speed_down",	
+		"tiki_hit",
+		"slot_machine_hit",
+		"slot_machine_match",
 	]],
 	["ball/", [
 		"ball_generator",
@@ -450,6 +453,7 @@ let recursive_sound_names = [
 	]],
 	["enemy/", [
 		"enemy_death",
+		"menacer_coating",
 	]],
 	["etc/", [
 		"board_saved.mp3",
@@ -672,12 +676,27 @@ media.processTextures = function(){
 	partition("bg2", "bg2", 32, 32);
 
 	//tool textures
+	let toolNames = [
+		"free",
+		"line",
+		"linerect",
+		"fillrect",
+		"fill",
+		"wand",
+		"cut",
+		"copy", 
+		"paste",
+		"eyedrop",
+		"linklaser",
+	];
 	tex = this.textures.tools;
-	for (let i = 0; i < 16; i++){
+	for (let [i, name] of toolNames.entries()){
 		let rect = new PIXI.Rectangle(16*i, 0, 16, 16);
 		let tex2 = new PIXI.Texture(tex, rect);
 		let str = "tool_" + i;
+		let str2 = "tool_" + name;
 		this.textures[str] = tex2;
+		this.textures[str2] = tex2;
 	}
 
 	//powerups
@@ -845,6 +864,7 @@ media.processSounds = function(){
 	setVol("laceration_collected", 0.25);
 	setVol("boulder_break", 0.5);
 	setVol("illusion_collected", 0.75);
+	setVol("tiki_hit", 0.75);
 }
 
 //some animations may be created outside of this method

@@ -286,6 +286,11 @@ class PlayState extends State{
 		this.setScoreMultiplier(0);
 		this.add("hud", this.scoreDisplay);
 
+		//tooltip display
+		this.tooltip = new ToolTipDisplay(this);
+		this.tooltip.position.set(DIM.lwallx, 0);
+		this.add("hud", this.tooltip);
+
 		//lives display
 		//TODO: figure out interface with campaign_save.data.lives
 		//lives will decrement at the start of the death state
@@ -612,26 +617,6 @@ class PlayState extends State{
 			}
 			yoff += 5 + (Math.floor((arr.length-1)/wrap) + 1) * dy;
 		}
-
-		//create tooltip
-		//TOODO: turn tooltip into a class
-		// let tooltip = new PIXI.Text("Tooltip", {
-		// 	fontSize: 24,
-		// 	fill: 0x000000
-		// });
-		let tooltip = printText(
-			"",
-			"arcade",
-			0x000000,
-			1,
-			DIM.w/2,
-			10
-		);
-		// tooltip.x = DIM.lwallx + 150;
-		// tooltip.y = 20;
-		tooltip.powId = null;
-		this.add("hud", tooltip);
-		this.tooltip = tooltip;
 	}
 
 	initEnemyButtons(){
@@ -900,7 +885,7 @@ class PlayState extends State{
 		this.add("background", bg);
 		
 		for (let [i, j, id, patch] of level.bricks){
-			let {brickType, args} = brickData.lookup[id];
+			let {brickType, args} = brickData.lookup.get(id);
 			let brickClass = brickClasses[brickType];
 			let pos = getGridPosInv(i, j);
 			let args2 = pos.concat(args);
@@ -1136,6 +1121,12 @@ class PlayState extends State{
 
 		//update brick movement patches
 		manageBrickMovement(delta);
+
+		//call static update() for brick classes if they exist
+		//todo: optimize this by storing all exiting functions first
+		for (let brickClass of Object.values(brickClasses)){
+			brickClass.update?.(delta);
+		}
 
 		//update enemy spawner
 		this.spawner?.update(delta);
@@ -1483,19 +1474,6 @@ PlayState.states = {
 
 			paddle.update(0);
 
-			//manually sync paddle's position to mouse
-			//because calling paddle.update() causes issues
-			// const mx = mouse.x;
-			// const pw = paddle.paddleWidth;
-			// const ph = 16;
-			// paddle.x = clamp(mx, DIM.lwallx + pw/2, DIM.rwallx - pw/2);
-
-			// for (let [ball, offset] of paddle.stuckBalls){
-			// 	let x = paddle.x + offset;
-			// 	let y = paddle.y - ph/2 - ball.r;
-			// 	ball.moveTo(x, y);
-			// }
-
 			return false;
 		}
 	},
@@ -1616,129 +1594,6 @@ PlayState.states = {
 			return false;
 		}
 	},
-
-	// death: class{
-	// 	constructor(ps){
-	// 		this.ps = ps;
-	// 		ps.lives--;
-
-	// 		this.timer = 3000;
-
-	// 		this.paddleExplode = false;
-
-	// 		ps.paddles.visible = false;
-	// 		ps.balls.visible = false;
-
-	// 		let paddle = ps.paddles.children[0];
-	// 		let deathPaddle = new Paddle();
-	// 		deathPaddle.setPos(paddle.x, paddle.y);
-	// 		ps.particles.addChild(deathPaddle);
-	// 		this.deathPaddle = deathPaddle;
-	// 		Object.assign(deathPaddle, {
-	// 			origin: [paddle.x, paddle.y],
-	// 			growAccel: -0.00075,
-	// 			growVel: 0.25,
-	// 			shakeTimer: 0,
-	// 			shakeTimerMax: 500,
-	// 			shakeMag: 3,
-	// 			shakeDelayMax: 30,
-	// 			shakeDelay: 0
-	// 		});
-
-	// 		let glow = media.shaders.paddleGlow;
-	// 		deathPaddle.filters = [glow];
-	// 		glow.uniforms.color = [1, 1, 1];
-	// 		glow.uniforms.mag = 0;
-	// 		this.glowShader = glow;
-
-	// 		let deathCircles = new PIXI.Graphics();
-	// 		deathCircles.position.set(paddle.x, paddle.y);
-	// 		deathCircles.time = 0;
-	// 		ps.particles.addChild(deathCircles);
-	// 		this.deathCircles = deathCircles;
-
-	// 		playSound("paddle_death_1");
-	// 	}
-	// 	destructor(){
-	// 		let ps = this.ps;
-
-	// 		ps.paddles.visible = true;
-	// 		ps.balls.visible = true;
-	// 		ps.particles.removeChild(this.deathPaddle);
-	// 		ps.particles.removeChild(this.deathCircles);
-	// 	}
-	// 	update(delta){
-	// 		let ps = this.ps;
-
-	// 		let dp = this.deathPaddle;
-	// 		let dc = this.deathCircles;
-
-	// 		if (!this.paddleExplode){
-	// 			let w = dp.paddleWidth;
-	// 			if (w > 40){
-	// 				w += delta*dp.growVel + delta*delta*dp.growAccel;
-	// 				dp.growVel += delta*dp.growAccel;
-	// 				w = Math.max(40, w);
-	// 				dp._setWidth(w);
-	// 			}
-	// 			else{
-	// 				dp.shakeTimer += delta;
-	// 				dp.shakeDelay -= delta;
-	// 				if (dp.shakeDelay <= 0){
-	// 					dp.shakeDelay = dp.shakeDelayMax;
-	// 					let [x0, y0] = dp.origin;
-	// 					let ratio = dp.shakeTimer / dp.shakeTimerMax;
-	// 					let mag = ratio * dp.shakeMag;
-	// 					let rad = Math.random() * 2 * Math.PI;
-	// 					let [dx, dy] = Vector.rotate(mag, 0, rad);
-	// 					dp.setPos(x0+dx, y0+dy);
-	// 				}
-
-	// 				if (dp.shakeTimer >= dp.shakeTimerMax){
-	// 					this.paddleExplode = true;
-	// 					dp.visible = false;
-	// 					playSound("paddle_death_2");
-	// 				}
-	// 			}
-	// 			let u = this.glowShader.uniforms;
-	// 			u.mag = Math.min(1, u.mag + delta/600);
-	// 		}
-	// 		else{
-	// 			let dc = this.deathCircles;
-	// 			dc.clear().beginFill(0xFFFFFF);
-	// 			dc.time += delta;
-	// 			let t = dc.time;
-	// 			//fast straight circles
-	// 			let mag1 = t*0.2 + t*t*0.001;
-	// 			for (let i = 0; i < 8; i++){
-	// 				let rad = 2*Math.PI * i/8;
-	// 				let [x, y] = Vector.rotate(mag1, 0, rad);
-	// 				dc.drawCircle(x, y, 8);
-	// 			}
-	// 			//slow spiral glowing circles
-	// 			let mag2 = t*0.6;
-	// 			for (let i = 0; i < 8; i++){
-	// 				let rad = 2*Math.PI * i/8;
-	// 				rad += (0.5/8) + t * 0.001;
-	// 				let r = 8 + t*0.03;
-	// 				let [x, y] = Vector.rotate(mag2, 0, rad);
-	// 				dc.drawCircle(x, y, r);
-	// 			}
-	// 		}
-
-	// 		this.timer -= delta;
-	// 		if (this.timer <= 0){
-	// 			if (ps.lives < 0)
-	// 				ps.setState("gameover");
-	// 			else{
-	// 				ps.updateLivesDisplay(ps.lives);
-	// 				ps.setState("respawn");
-	// 			}
-	// 		}
-
-	// 		return false;
-	// 	}
-	// },
 
 	gameover: class{
 		constructor(ps){
@@ -2164,6 +2019,7 @@ class PowerupButton extends PlayButton{
 		let tex = "powerup_default_" + id;
 		super(parentState, tex, x, y, scale);
 		this.id = id;
+		this.tooltipLayer = 0;
 
 		if (!powerupFunc[id])
 			this.tint = 0x777777;
@@ -2181,23 +2037,15 @@ class PowerupButton extends PlayButton{
 	}
 
 	pointerOver(e){
-		let tooltip = this.parentState.tooltip;
-		if (tooltip.powId === null){
-			tooltip.text = `${this.id} ${POWERUP_NAMES[this.id]}`;
-			tooltip.powId = this.id;
-		}
+		let state = this.parentState;
+		state.tooltip.set(this.tooltipLayer, "powerup", this.id, this.texture);
 	}
 
 	pointerOut(e){
-		let tooltip = this.parentState.tooltip;
-		if (tooltip.powId === this.id){
-			tooltip.text = "";
-			tooltip.powId = null;
-		}
+		let state = this.parentState;
+		state.tooltip.checkAndClear(this.tooltipLayer, "powerup", this.id);
 	}
 }
-
-var alt = 1;
 
 class EnemyButton extends PlayButton{
 	static data = [
@@ -2226,8 +2074,17 @@ class EnemyButton extends PlayButton{
 		let id = this.enemyId;
 		let build = EnemyButton.data[id];
 		state.spawnEnemy(new build[0](build[1]));
-		// state.spawnEnemy(new build[0](build[1]), alt);
-		// alt = (alt==1)?2:1;
+	}
+
+	pointerOver(e){
+		let state = this.parentState;
+		//offset enemyId by 1 to get the correct tooltip
+		state.tooltip.set(0, "enemy", this.enemyId + 1, this.texture);
+	}
+
+	pointerOut(e){
+		let state = this.parentState;
+		state.tooltip.checkAndClear(0, "enemy", this.enemyId + 1);
 	}
 	
 }

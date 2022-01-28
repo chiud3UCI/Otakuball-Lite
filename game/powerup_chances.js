@@ -1,4 +1,4 @@
-var GLOBAL_POWERUP_CHANCE = 15; //is a percentage
+var GLOBAL_POWERUP_CHANCE = 12; //is a percentage
 
 var DEFAULT_WEIGHTS = [
 	/* Acid */                  8,
@@ -213,7 +213,7 @@ class PowerupChancesState extends State{
 		//Global Text + Input
 		stage.addChild(printText("Global Spawn Rate: ", "arcade", 0x000000, 1, 20, 20));
 		stage.addChild(printText("-Chance a Normal Brick drops a Powerup on death.", "windows", 0x000000, 1, 20, 40));
-		stage.addChild(printText("%, Default: 15%", "arcade", 0x000000, 1, 315, 20));
+		stage.addChild(printText(`%, Default: ${GLOBAL_POWERUP_CHANCE}%`, "arcade", 0x000000, 1, 315, 20));
 		let globalTextBox = this.createNumInput(40, 18, 2);
 		this.globalTextBox = globalTextBox;
 		globalTextBox.position.set(264, 14);

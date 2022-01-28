@@ -530,6 +530,67 @@ f[96] = function(){
 /*==== Miscellaneous ====*/
 
 //Acid
+class Acid{
+	static particleConfig = {
+		//delay should not go under 16 ms because that will exceed 60 fps
+		delay: 16, //delay between particle spawn ticks
+		count: 5, //how many particles to spawn per tick
+	};
+
+	constructor(ball){
+		this.ball = ball;
+		this.timer = 0;
+	}
+	preUpdate(delta){
+		let config = Acid.particleConfig;
+		this.timer -= delta;
+		if (this.timer <= 0){
+			this.timer += config.delay;
+			for (let n = 0; n < config.count; n++){
+				let p = this.createParticle();
+				game.emplace("particles", p);
+			}
+		}
+	}
+
+	createParticle(){
+		const light_range = [255+64, 255+192];
+		const dark_threshold = 64;
+		const tint_decay_rate = 0.4;
+
+		let ball = this.ball;
+		let center = new Vector(...ball.getPos());
+		let norm = new Vector(1, 0).rotate(randRangeFloat(2*Math.PI));
+		let pos = center.add(norm.scale(randRangeFloat(ball.radius)));
+		let vel = norm.scale(randRangeFloat(0.005, 0.02));
+
+
+		//TODO: Make the particle start out light green
+		//	then make it decay to dark green and then disappear
+		let p = new Particle("white_pixel", pos.x, pos.y, vel.x, vel.y, 0, 3, 3);
+
+		p.update = function(delta){
+			this.acidTint -= delta * tint_decay_rate;
+			if (this.acidTint <= dark_threshold)
+				this.kill();
+			let tint = Math.floor(this.acidTint);
+			if (tint > 255){
+				tint = tint - 255;
+				this.tint = 0x010000*tint + 0x00FF00 + 0x000001*tint;
+			}
+			else{
+				this.tint = 0x000100*tint;
+			}
+			
+			Projectile.prototype.update.call(this, delta);
+		}
+
+		p.acidTint = randRange(...light_range);
+		p.update(0);
+
+		return p;
+	}
+}
 f[0] = function(){
 	playSound("acid_collected");
 	for (let ball of game.get("balls")){
@@ -544,6 +605,7 @@ f[0] = function(){
 				obj.isDead()
 			);
 		}
+		ball.components.acid = new Acid(ball);
 	}
 };
 
@@ -4312,6 +4374,8 @@ class Orbit{
 
 	destructor(){
 		this.paddle.removeChild(this.ring);
+		for (let arr of this.orbitBalls)
+				arr[0].stuckToPaddle = false;
 	}
 
 	onResize(width){
@@ -4320,6 +4384,22 @@ class Orbit{
 		ring.clear()
 			.lineStyle(2, 0xFFFFFF)
 			.drawCircle(0, 0, this.radius);
+	}
+
+	//will be called by Paddle.releaseBalls()
+	//return true if at least one ball was released
+	releaseBalls(){
+		let orbitBalls = this.orbitBalls;
+		if (orbitBalls.length == 0)
+			return false;
+
+		for (let arr of this.orbitBalls){
+			let ball = arr[0];
+			ball.stuckToPaddle = false;
+			ball.justReleased = true;
+		}
+		this.orbitBalls.length = 0;
+		return true;
 	}
 
 	update(delta){
@@ -4331,9 +4411,6 @@ class Orbit{
 
 		if (mouse.m1){
 			ring.alpha = 0.5;
-			for (let arr of orbitBalls)
-				arr[0].stuckToPaddle = false;
-			orbitBalls.length = 0;
 		}
 		else{
 			ring.alpha = 1;

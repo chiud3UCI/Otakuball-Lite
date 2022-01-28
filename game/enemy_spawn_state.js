@@ -82,6 +82,11 @@ class EnemySpawnState extends DialogueBox{
 			game.pop();
 		};
     }
+
+	destructor(){
+		super.destructor();
+		this.editorstate.tooltip.clear(2);
+	}
 }
 
 class EnemyCheckbox extends PIXI.Sprite{
@@ -100,6 +105,8 @@ class EnemyCheckbox extends PIXI.Sprite{
         this.editorstate = editorstate;
         this.interactive = true;
         this.on("pointerdown", (e) => {this.pointerDown(e);});
+        this.on("pointerover", (e) => {this.pointerOver(e);});
+        this.on("pointerout", (e) => {this.pointerOut(e);});
         
 		this.enemyId = id;
 
@@ -134,5 +141,20 @@ class EnemyCheckbox extends PIXI.Sprite{
 		this.setState(!this.checkState);
 		let arr = this.editorstate.enemySpawn;
 		arr[this.enemyId] = Number(this.checkState);
+	}
+
+	getTooltipId(){
+		let id = this.enemyId;
+		return (id == 0) ? 0 : id + 2;
+	}
+
+	pointerOver(e){
+		let state = this.editorstate;
+		state.tooltip.set(2, "enemy", this.getTooltipId(), this.texture);
+	}
+
+	pointerOut(e){
+		let state = this.editorstate;
+		state.tooltip.checkAndClear(2, "enemy", this.getTooltipId());
 	}
 }

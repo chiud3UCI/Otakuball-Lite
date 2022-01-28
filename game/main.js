@@ -535,7 +535,7 @@ function setup(){
 	game.stage.mask = new Mask(0, 0, DIM.w, DIM.h);
 
 	game.push(new MainMenuState());
-	// game.push(new EditorState());
+	game.push(new EditorState());
 	// game.top.configPowerupButton.onClick();
 	// game.top.enemySpawnButton.onClick();
 	// game.push(new TestState());
@@ -763,6 +763,17 @@ function arrayEqual(arr1, arr2){
 			return false;
 	}
 	return true;
+}
+
+//borrowed from:
+//https://stackoverflow.com/questions/610406/javascript-equivalent-to-printf-string-format/610415
+function stringFormat(str, ...args){
+    return str.replace(/{(\d+)}/g, function(match, number) { 
+      return typeof args[number] != 'undefined'
+        ? args[number]
+        : match
+      ;
+    });
 }
 
 //Remove all dead Sprites from a PIXI.Container

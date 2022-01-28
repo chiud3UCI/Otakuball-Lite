@@ -5,10 +5,13 @@ var brickData = {
 	//contains all brick data
 	//NOTE: with the addition of Powerup bricks,
 	//lookup no longer has consecutive ids
-	lookup: {},
+	lookup: new Map(),
 	//contains same brick data but divided
 	//into named groups
 	group: {},
+	//tooltip will be used for tooltip generation in documentation.js
+	//key: brick id, value: format index
+	tooltip: new Map(),
 
 	init(){
 		//All textures for the brick buttons are assumed
@@ -196,7 +199,7 @@ var brickData = {
 				let data = {
 					tex, brickType, args, id: index
 				};
-				this.lookup[index] = data;
+				this.lookup.set(index, data);
 				group.push(data);
 				index++;
 			}
@@ -212,38 +215,30 @@ var brickData = {
 				args: [i],
 				id: 1000 + i,
 			};
-			this.lookup[1000 + i] = data;
+			this.lookup.set(1000 + i, data);
 			this.group.powerup.push(data);
 		}
-		this.group.other.push(this.lookup[1000]);
+		this.group.other.push(this.lookup.get(1000));
 
-		/*
-		//Laser Gate Bricks ids 2000 to 2999
-		//there are 5 colors * 100 channels * on/off state = 1000 bricks?
-		let laser = [];
-		//initial on/off state
-		for (let i = 0; i < 2; i++){
-			//switch id colors
-			for (let j = 0; j < 5; j++){
-				//channels
-				for (let k = 0; k < 100; k++){
-					let id = 2000 + i*500 + j*100 + k;
-					let data = {
-						tex: `brick_laser_${i}_${j}`,
-						brickType: "LaserGateBrick",
-						args: [j, k, i == 0],
-						id: id,
-					};
-					this.lookup[id] = data;
-					//only use channel 0 brick data as buttons
-					if (k == 0)
-						laser.push(data);
-				}
-			}
-		}
-		this.group.laser = laser;
-		*/
+
+		//construct tooltip for use with Tooltips
 		
+		//first group the ids by data.brickType
+		let map = new Map();
+		let entries = Array.from(this.lookup.entries());
+		entries.sort((a, b) => a[0] - b[0]);
+		for (let [id, data] of entries){
+			let brickType = data.brickType;
+			if (!map.has(brickType))
+				map.set(brickType, []);
+			map.get(brickType).push(id);
+		}
+
+		//for each id array, set tooltip[id] to index of id
+		for (let arr of map.values()){
+			for (let [index, id] of arr.entries())
+				this.tooltip.set(id, index);
+		}
 	}
 };
 

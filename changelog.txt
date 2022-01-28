@@ -1,3 +1,14 @@
+[01/27/22]
+-Added Tooltips
+-Link Lasers Tools now gets deselected when the player clicks on a Brick or Patch button
+-Global Powerup Spawn Chance changed from 15% -> 12%
+-Fixed Orbit not releasing balls when it gets cleared
+-Also made Orbit behave more like Catch, preventing the paddle's weapons from firing while
+    there are balls attached
+-Added Tiki Brick and Slot Machine Brick sounds
+-Added Menacer coating Brick sound
+-Added Acid Ball particle effects
+
 [01/21/22]
 -Added "Edit Powerup Chances" menu
 -Moved enemy spawn config to a separate menu

@@ -108,14 +108,22 @@ class EditorState extends State{
 		};
 
 		//enemy spawn
-		this.enemySpawn = new Array(9).fill(0); //should only contain 1s or 0s
+		this.enemySpawn = new Array(9).fill(0); //should only contain 1s and 0s
 		this.enemySpawnTimes = [...DEFAULT_SPAWN_TIMES];
+
+		//tooltip display
+		this.tooltip = new ToolTipDisplay(this);
+		this.tooltip.position.set(DIM.lwallx, 0);
+		this.add("hud", this.tooltip);
 
 		//initial selection
 		this.selectedTool = null;
 		this.selectedBrick = null;
 		this.selectedPatch = null;
 		this.selectedMode = null;
+
+		//for use with link laser button
+		this.previousSelectedTool = null;
 
 		this.toolButtons[0].pointerDown();
 		this.widget.tabs[0].pointerDown();
@@ -164,6 +172,18 @@ class EditorState extends State{
 		}
 		this.add("hud", butt);
 
+		let tooltip = this.tooltip;
+		function assignTooltip(button, name){
+			button.pointerOver = function(e){
+				Button.prototype.pointerOver.call(this, e);
+				tooltip.set(1, "menu", name, this.stage.children[0].texture);
+			};
+			button.pointerOut = function(e){
+				Button.prototype.pointerOut.call(this, e);
+				tooltip.checkAndClear(1, "menu", name);
+			};
+		}
+
 		//Background Select Button
 		butt = new Button(10, 240, 44, 44);
 		butt.add(makeSprite("editorbutton_0_0", 2, 5, 5));
@@ -172,6 +192,7 @@ class EditorState extends State{
 		};
 		this.add("hud", butt);
 		this.bgSelectButton = butt;
+		assignTooltip(butt, "background");
 
 		//Powerup Chances Button
 		butt = new Button(60, 240, 44, 44);
@@ -181,6 +202,7 @@ class EditorState extends State{
 		};
 		this.add("hud", butt);
 		this.configPowerupButton = butt;
+		assignTooltip(butt, "powerup");
 
 		//Enemy Spawn Button
 		butt = new Button(110, 240, 44, 44);
@@ -190,6 +212,7 @@ class EditorState extends State{
 		};
 		this.add("hud", butt);
 		this.enemySpawnButton = butt;
+		assignTooltip(butt, "enemy");
 
 		//Import/Export buttons
 		butt = new Button(2, 440, 96, 36);
@@ -289,10 +312,22 @@ class EditorState extends State{
 			"editorbutton_1_0",
 			"editorbutton_1_0",
 			"editorbutton_1_1",
-		]
+		];
+		let tooltipNames = [
+			"bricktab",
+			"bricktab2",
+			"patchtab"
+		];
 		for (let i = 0; i < 3; i++){
 			let tab = new TabButton((tw-6)*i, 0, tw, th, widget.tabs, i);
 			tab.addCentered(new Sprite(textures[i]));
+			tab.on("pointerover", (e) => {
+				this.tooltip.set(1, "menu", tooltipNames[i], tab.stage.children[0].texture);
+			});
+			tab.on("pointerout", (e) => {
+				this.tooltip.checkAndClear(1, "menu", tooltipNames[i]);
+			});
+
 			widget.addChild(tab);
 			widget.tabs.push(tab);
 
@@ -395,7 +430,7 @@ class EditorState extends State{
 
 		panel.addChild(this.brickButtonHighlight2);
 
-		let linkButton = new ToolButton(this, 2, 54, 10, null);
+		let linkButton = new ToolButton(this, 2, 54, "linklaser");
 		panel.addChild(linkButton);
 
 		linkButton.pointerDown = function(e){
@@ -409,7 +444,9 @@ class EditorState extends State{
 			gr.lineStyle(2, 0xFFFF00);
 			gr.drawRect(this.x-1, this.y-1, this.width, this.height);
 
-			state.selectedTool = new EditorState.tools.linkLaser(state);
+			if (!(state.selectedTool instanceof EditorState.tools.linklaser))
+				state.previousSelectedTool = state.selectedTool;
+			state.selectedTool = new EditorState.tools.linklaser(linkButton);
 		};
 
 		this.linkLaserButtonHighlight = new PIXI.Graphics();
@@ -424,8 +461,7 @@ class EditorState extends State{
 	//these powerup buttons are used for selecting powerups
 	//for the slot machine bricks and powerup brick
 	initPowerupButtons(){
-		let proto = PlayState.prototype;
-		proto.initPowerupButtons.call(this);
+		PlayState.prototype.initPowerupButtons.call(this);
 
 		let state = this;
 		let powerPanel = this.powerPanel;
@@ -436,6 +472,7 @@ class EditorState extends State{
 		//repurpose the powerup buttons
 		for (let butt of this.powerButtons){
 			butt.highlight = EditorButton.prototype.highlight;
+			butt.tooltipLayer = 1;
 			butt.pointerDown = function(e){
 				if (powerPanel.mode == "slotmachine"){
 					let newPows = state.newSlotPowerups;
@@ -458,7 +495,7 @@ class EditorState extends State{
 					let butt = state.powerupButton;
 					let id = 1000 + this.id;
 					butt.id = id;
-					butt.dat = brickData.lookup[id];
+					butt.dat = brickData.lookup.get(id);
 					butt.updateAppearance();
 					state.selectedBrick = id;
 
@@ -542,11 +579,11 @@ class EditorState extends State{
 	}
 
 	initToolButtons(){
-		let arr = [
-			["free", 0],
-			["lineRect", 2],
-			["fillRect", 3]
-		]
+		let toolNames = [
+			"free",
+			"linerect",
+			"fillrect",
+		];
 
 		let panel = new PIXI.Container();
 		panel.x = 10;
@@ -555,8 +592,8 @@ class EditorState extends State{
 
 		this.toolButtons = [];
 
-		for (let [i, [name, index]] of arr.entries()){
-			let butt = new ToolButton(this, 32*i, 0, index, name);
+		for (let [i, name] of toolNames.entries()){
+			let butt = new ToolButton(this, 32*i, 0, name);
 			panel.addChild(butt);
 			this.toolButtons.push(butt);
 		}
@@ -853,13 +890,15 @@ class EditorState extends State{
 	}
 }
 
-let tools = {};
-EditorState.tools = tools;
+EditorState.tools = {};
+let tools = EditorState.tools;
 
 //this is an abstract class (not an actual tool)
 tools.base = class{
-	constructor(editorstate){
-		this.es = editorstate;
+	//button is the button that selected this tool
+	constructor(button){
+		this.button = button;
+		this.es = button.parentState;
 	}
 	destructor(){
 
@@ -889,7 +928,7 @@ tools.free = class extends tools.base{
 	}
 };
 
-tools.fillRect = class extends tools.base{
+tools.fillrect = class extends tools.base{
 	constructor(editorstate){
 		super(editorstate);
 		this.start = null;
@@ -940,7 +979,7 @@ tools.fillRect = class extends tools.base{
 	}
 };
 
-tools.lineRect = class extends tools.fillRect{
+tools.linerect = class extends tools.fillrect{
 	selectNodes(i0, j0, i1, j1){
 		let grid = this.es.grid;
 
@@ -960,9 +999,9 @@ tools.lineRect = class extends tools.fillRect{
 	}
 };
 
-tools.linkLaser = class extends tools.base{
-	constructor(editorstate){
-		super(editorstate);
+tools.linklaser = class extends tools.base{
+	constructor(button){
+		super(button);
 		this.start = null;
 		this.down = false;
 
@@ -1077,13 +1116,6 @@ class GridNode{
 		overlay.visible = false;
 		stage.addChild(overlay);
 
-		//laser gate brick channel
-		let channel = printText("0", "windows", 0xFFFFFF, 1, 0, 0);
-		channel.anchor.set(0.5);
-		this.laserChannel = channel;
-		channel.visible = false;
-		stage.addChild(channel);
-
 		//4 shields, movement, invisible, antilaser
 		this.patch = null;
 		this.patchSprites = [];
@@ -1150,23 +1182,17 @@ class GridNode{
 			this.dat = null;
 			this.sprite.visible = false;
 			this.overlay.visible = false;
-			this.laserChannel.visible = false;
 			this.clearPatch();
 		}
 		else{
 			this.brickId = id;
-			this.dat = brickData.lookup[id];
+			this.dat = brickData.lookup.get(id);
 			this.sprite.setTexture(this.dat.tex);
 			this.sprite.visible = true;
 			this.overlay.visible = false;
-			this.laserChannel.visible = false;
 			//Powerup Brick
 			if (id >= 1000 && id < 2000)
 				this.overlay.visible = true;
-			else if (id >= 2000){
-				this.laserChannel.visible = true;
-				this.laserChannel.text = id % 100;
-			}
 		}
 	}
 
@@ -1222,6 +1248,8 @@ class EditorButton extends PIXI.Sprite{
 
 		this.interactive = true;
 		this.on("pointerdown", (e) => {this.pointerDown(e);});
+		this.on("pointerover", (e) => {this.pointerOver(e);});
+		this.on("pointerout", (e) => {this.pointerOut(e);});
 	}
 
 	//clear graphics and draw a yellow box around button
@@ -1234,11 +1262,19 @@ class EditorButton extends PIXI.Sprite{
 	pointerDown(e){
 		console.log("override this method");
 	}
+
+	pointerOver(e){
+
+	}
+
+	pointerOut(e){
+		
+	}
 }
 
 class BrickButton extends EditorButton{
 	constructor(parentState, x, y, scale, id){
-		let dat = brickData.lookup[id];
+		let dat = brickData.lookup.get(id);
 		super(parentState, dat.tex, x, y, scale);
 		this.id = id;
 		this.dat = dat;
@@ -1252,19 +1288,28 @@ class BrickButton extends EditorButton{
 		this.highlightGraphic.visible = true;
 		this.highlight(this.highlightGraphic);
 		let id = this.id;
-		if (id < 2000)
-			state.selectedBrick = id;
-		else{
-			//for laser gate brick buttons, add channel to id
-			let channel = Number(state.laserChannelInput.text);
-			state.selectedBrick = id + channel;
-		}
+		state.selectedBrick = id;
+		state.tooltip.set(0, "brick", id, this.texture);
+
+		//also deselect the linklaser tool if it's currently selected
+		if (state.selectedTool instanceof EditorState.tools.linklaser)
+			state.previousSelectedTool.button.pointerDown();
+	}
+
+	pointerOver(e){
+		let tooltip = this.parentState.tooltip;
+		tooltip.set(1, "brick", this.id, this.texture);
+	}
+
+	pointerOut(e){
+		let tooltip = this.parentState.tooltip;
+		tooltip.checkAndClear(1, "brick", this.id);
 	}
 }
 
 class ToolButton extends EditorButton{
-	constructor(parentState, x, y, index, toolstr){
-		let tex = "tool_" + index;
+	constructor(parentState, x, y, toolstr){
+		let tex = "tool_" + toolstr;
 		super(parentState, tex, x, y, 2);
 		this.toolstr = toolstr;
 	}
@@ -1277,7 +1322,17 @@ class ToolButton extends EditorButton{
 
 		this.highlight(state.toolButtonHighlight);
 		state.selectedTool?.destructor();
-		state.selectedTool = new EditorState.tools[this.toolstr](state);
+		state.selectedTool = new EditorState.tools[this.toolstr](this);
+	}
+
+	pointerOver(e){
+		let tooltip = this.parentState.tooltip;
+		tooltip.set(1, "tool", this.toolstr, this.texture);
+	}
+
+	pointerOut(e){
+		let tooltip = this.parentState.tooltip;
+		tooltip.checkAndClear(1, "tool", this.toolstr);
 	}
 }
 
@@ -1289,10 +1344,41 @@ class PatchButton extends EditorButton{
 		this.value = value;
 	}
 
+	static tooltipNames = [
+		"shield",
+		"shield",
+		"shield",
+		"shield",
+		"movement",
+		"invisible",
+		"antilaser",
+		"regen",
+	];
+	getToolTipName(){
+		let name = PatchButton.tooltipNames[this.slot];
+		if (name == "movement" && this.value >= 12)
+			name = "movement2";
+		return name;
+	}
+
 	pointerDown(e){
 		let state = this.parentState;
 		this.highlight(state.patchButtonHighlight);
 		state.selectedPatch = [this.slot, this.value];
+
+		//also deselect the linklaser tool if it's currently selected
+		if (state.selectedTool instanceof EditorState.tools.linklaser)
+			state.previousSelectedTool.button.pointerDown();
+	}
+
+	pointerOver(e){
+		let tooltip = this.parentState.tooltip;
+		tooltip.set(1, "patch", this.getToolTipName(), this.texture);
+	}
+
+	pointerOut(e){
+		let tooltip = this.parentState.tooltip;
+		tooltip.checkAndClear(1, "patch", this.getToolTipName());
 	}
 }
 class PatchCycler{

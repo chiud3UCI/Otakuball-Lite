@@ -365,15 +365,6 @@ class PowerupChancesState extends State{
 		return weights.map(x => (x / sum));
 	}
 
-	//pad is the template string such as "      " or "00000"
-	//str is what goes over the pad
-	pad(pad, str, right=false){
-		if (right)
-			return (pad + str).slice(-pad.length);
-		else
-			return (str + pad).substring(0, pad.length);
-	}
-
 	// calculateDiff(arr1, arr2){
 	// 	let diff = 0;
 	// 	for (let i = 0; i < arr1.length; i++){
@@ -441,19 +432,19 @@ class PowerupChancesState extends State{
 		let lines = [];
 		lines.push("-".repeat(rowLength));
 		//each title is left aligned based on columnLength
-		let titles2 = titles.map((title, index) => this.pad(pads[index], title));
+		let titles2 = titles.map((title, index) => stringPad(pads[index], title));
 		lines.push("| " + titles2.join(" | ") + " |");
 		lines.push(lines[0]);
 		//assemble each powerup row
 		for (let [name, weight, chance, default_weight] of table2){
-			name = this.pad(pads[0], name, false);
-			weight = this.pad(pads[1], weight, true);
-			chance = this.pad(pads[2], chance, true);
+			name = stringPad(pads[0], name, false);
+			weight = stringPad(pads[1], weight, true);
+			chance = stringPad(pads[2], chance, true);
 			let diff = Number(weight) !== Number(default_weight);
 			if (diff)
-				default_weight = "* " + this.pad(pads[4], default_weight, true);
+				default_weight = "* " + stringPad(pads[4], default_weight, true);
 			else
-				default_weight = this.pad(pads[3], default_weight, true);
+				default_weight = stringPad(pads[3], default_weight, true);
 
 			lines.push("| " + [name, weight, chance, default_weight].join(" | ") + " |");
 		}

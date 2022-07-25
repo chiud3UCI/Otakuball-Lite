@@ -111,7 +111,6 @@ class Ball extends Sprite{
 		this.setTexture("ball_main_0_0");
 		this.tint = 0xFFFFFF;
 		this.alpha = 1;
-		this.createShape(true);
 
 		this.damage = 10;
 		this.strength = 0;
@@ -122,6 +121,10 @@ class Ball extends Sprite{
 		for (let [key, comp] of Object.entries(this.components))
 			comp.destructor?.();
 		this.components = {};
+
+		//make sure any attached sprites are gone (like Blossom) before
+		//refreshing the shape
+		this.createShape(true);
 	}
 
 	//these 2 methods obey the speed limit

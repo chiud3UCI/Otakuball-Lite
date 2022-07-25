@@ -1,3 +1,5 @@
+var VERSION = "0.0.0";
+
 //all sprites are scaled 2x
 //a single brick is 32 pixels wide and 16 pixels high
 //a powerup is the same size as a brick
@@ -27,6 +29,7 @@ var appMouse;
 var mouse = {};
 var keyboard;
 var keycode;
+/** @type {Game} */
 var game;
 var ENABLE_RIGHT_CLICK = false;
 
@@ -57,7 +60,6 @@ function ALERT_ONCE(message, id = 0){
 }
 
 //base State class for PIXI.TextInputs
-//if handling
 class State{
 	constructor(){
 		this.allowRightClick = true;
@@ -295,14 +297,26 @@ class Game {
 		this.top.incrementScore?.(score);
 	}
 
-	createMonitor(...args){
-		return this.top.createMonitor(...args);
-	}
-
 	get(name, includeNew){
 		return this.top.get(name, includeNew);
 	}
 
+	/**
+	 * @param {number} powerupID - Powerup ID
+	 * @param {"time"|"count"|"exist"} format - how the monitor should interpret the monitored value
+	 * - "time": remaining time in seconds
+	 * - "count": remaining uses/hp
+	 * - "exist": whether the property still exists; will only use verifyChain
+	 * @param {string} containerName - Name of object group such as "balls" or "paddles"
+	 * @param {string[]} valueChain - Property chain to value (example: ["x", "y", "z"] = obj.x.y.z)
+	 * - if format is "exist" then valueChain becomes verifyChain
+	 * @param {string[]} verifyChain - Will ignore object if this property chain doesnt yield a truthy value
+	 * - if the last element contains "=" as the first character, the monitor will chain to 2nd-to-last element
+	 *   and compare the resulting value to the last element (elements will be converted to string first)
+	 */
+	emplaceMonitor(powerupID, format, containerName, valueChain, verifyChain=null){
+		return this.top.monitorManager.emplace(powerupID, format, containerName, valueChain, verifyChain);
+	}
 }
 
 //custom mask class that takes in account of the window offset
@@ -358,7 +372,7 @@ function debugKeyPressed(key){
 	if (!cheats.enabled){
 		//detect cheat code
 		if (!obj.cheatCode)
-		obj.cheatCode = newCheatCode();
+			obj.cheatCode = newCheatCode();
 
 		let len = obj.cheatCode.length;
 		if (obj.cheatCode.length > 0){
@@ -521,12 +535,17 @@ function setup(){
 		createOuterBorder(DIM.w + DIM.outerx, DIM.h + DIM.outery);
 	app.stage.addChild(box);
 
-	//create cheat display
-	let cheatText = printText("CHEATS ENABLED", "arcade", 0xFF0000, 1, 0, 8);
-	cheatText.x = DIM.w - cheatText.width;
-	cheatText.visible = false;
-	box.addChild(cheatText);
-	game.cheatText = cheatText;
+	//create version display on the right side of title bar
+	let versionText = printText(`v${VERSION}`, "arcade", 0xFFFFFF, 1, 0, 8);
+	versionText.x = DIM.w - versionText.width;
+	box.addChild(versionText);
+	game.versionText = versionText;
+
+	let versionTextCheat = printText(`v${VERSION} C`, "arcade", 0xFFFFFF, 1, 0, 8);
+	versionTextCheat.visible = false;
+	versionTextCheat.x = DIM.w - versionTextCheat.width;
+	box.addChild(versionTextCheat);
+	game.versionTextCheat = versionTextCheat;
 
 	game.windowTitle = title;
 	game.outerBox = box;
@@ -774,6 +793,15 @@ function stringFormat(str, ...args){
         : match
       ;
     });
+}
+
+//pad is the template string such as "      " or "00000"
+//str is what goes over the pad
+function stringPad(pad, str, right=false){
+	if (right)
+		return (pad + str).slice(-pad.length);
+	else
+		return (str + pad).substring(0, pad.length);
 }
 
 //Remove all dead Sprites from a PIXI.Container

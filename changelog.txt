@@ -1,3 +1,8 @@
+[07/24/22 v0.0.0]
+-Added Version Number
+-Added Active Powerup Display
+-Fixed Snapper animation not playing
+
 [01/27/22]
 -Added Tooltips
 -Link Lasers Tools now gets deselected when the player clicks on a Brick or Patch button

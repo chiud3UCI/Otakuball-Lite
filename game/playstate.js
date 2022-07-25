@@ -1,3 +1,5 @@
+var MAX_BALLS = 100;
+
 //TODO: use localStorage to keep track of cheats configuration?
 var cheats = {
 	enabled: false, //set manually; will enable cheats in normal play
@@ -7,13 +9,13 @@ var cheats = {
 		disable_pit: true,
 		instant_powerups: true,
 		fling_existing: false,
-		show_forbidden: false,
-		disable_powerup_spawning: false,
+		show_forbidden: false
 	},
 
 	setEnabled(value){
 		this.enabled = value;
-		game.cheatText.visible = value;
+		game.versionText.visible = !value;
+		game.versionTextCheat.visible = value;
 	},
 
 	isEnabled(){
@@ -133,7 +135,6 @@ class PlayState extends State{
 			"background",
 			"game",
 			"walls",
-			"monitors",
 			"hud",
 		];
 
@@ -168,6 +169,14 @@ class PlayState extends State{
 		this.newObjects = {};
 		for (let name of gameLayerNames){
 			let cont = new PIXI.Container;
+			cont.interactiveChildren = false;
+			// if (name == "particles"){
+			// 	cont = new PIXI.ParticleContainer(10000, {
+			// 		position: true,
+			// 		tint: true,
+			// 		vertices: true,
+			// 	});
+			// }
 			this.game.addChild(cont);
 			this[name] = cont;
 			this.newObjects[name] = [];
@@ -183,6 +192,11 @@ class PlayState extends State{
 		//callbacks are special because they're not sprites
 		this.callbacks = [];
 		this.newCallbacks = [];
+
+		//effects are objects with no sprites and affect objects globally
+		//also they are contained in maps instead of arrays
+		this.effects = new Map();
+		this.newEffects = new Map();
 
 		//add a shadow effect to the game layer
 		let dropShadow = new PIXI.filters.DropShadowFilter({
@@ -302,13 +316,30 @@ class PlayState extends State{
 
 		this.initOtherInfo();
 
+		//monitor for actual powerups
+		this.monitorManager = new MonitorManager(this, 150);
+		this.add("hud", this.monitorManager);
+
 		//testing/cheat stuff
 		if (cheats.isEnabled()){
 			this.initPowerupButtons();
 			this.initEnemyButtons();
-			this.initCheckboxes();
+			this.initCheatCheckboxes();
 			// this.livesDisplay.visible = false;
 		}
+
+		//fps display
+		this.fpsDisplay = printText("FPS", "windows", 0x000000, 1, DIM.w - 60, 2);
+		this.fpsDisplay.update = function(){
+			let fps = PIXI.Ticker.shared.FPS;
+			fps = Math.floor(fps);
+			this.text = "FPS: " + stringPad("   ", String(fps), true);
+		};
+		this.add("hud", this.fpsDisplay);
+
+		//stored destructors (currently used by Acid only)
+		//TODO: make a particle emitter
+		this.storedDestructors = {};
 
 		this.stateName = "playstate";
 	}
@@ -326,6 +357,12 @@ class PlayState extends State{
 			for (let obj of this[name].children){
 				obj.destructor?.();
 			}
+		}
+
+		//call any stored destructor functions
+		for (let [key, func] of Object.entries(this.storedDestructors)){
+			console.log("calling stored destructor: " + key);
+			func();
 		}
 	}
 
@@ -640,10 +677,11 @@ class PlayState extends State{
 		this.add("hud", panel);
 	}
 
-	initCheckboxes(){
+	initCheatCheckboxes(){
 		let ps = this;
 		let x = 20;
 		let y = DIM.ceiling + 150;
+		let arr = [];
 		function create(dy, flag_name, text, font_size=16, func=null){
 			let curr_val = cheats.flags[flag_name];
 			let func2 = function(val){
@@ -656,6 +694,7 @@ class PlayState extends State{
 			);
 			ps.add("hud", cb);
 			y += dy;
+			arr.push(cb);
 		}
 
 		let text = "Disable Pit";
@@ -679,9 +718,25 @@ class PlayState extends State{
 			}
 		});
 
-		text = "Disable Normal Brick";
-		text += "\nPowerup Drops";
-		create(50, "disable_powerup_spawning", text, 12);
+		//create special checkbox that hides other checkboxes
+		//it will also shift itself and the powerup monitors up
+		let hide = new Checkbox(x, y, false);
+		hide.activateFunc = (val) => {
+			for (let cb of arr){
+				cb.visible = !val;
+			}
+			if (val)
+				hide.position.set(arr[0].x, arr[0].y);
+			else
+				hide.position.set(x, y);
+			this.monitorManager.y = hide.y + 24;
+		};
+		hide.addLabel(
+			new PIXI.Text("Hide Checkboxes", {fontSize: 16, fill: 0x000000})
+		);
+		this.add("hud", hide);
+
+		this.monitorManager.y = hide.y + 24;
 	}
 
 	//score has 8 digits
@@ -751,7 +806,7 @@ class PlayState extends State{
 			return;
 		}
 		//limit the number of balls
-		if (name == "balls" && this.ballCount + arr.length >= 100)
+		if (name == "balls" && this.ballCount + arr.length >= MAX_BALLS)
 			return;
 		arr.push(obj);
 	}
@@ -776,46 +831,6 @@ class PlayState extends State{
 
 	}
 
-	//See Monitor class for info on parameters
-	createMonitor(name, containerName, ...properties){
-		//prevent duplicate monitors
-		if (this.searchMonitor(name))
-			return null;
-
-		let monitor = new Monitor(...arguments);
-
-		//its recommended to create the monitors after
-		//setting the powerup components so the monitor
-		//will start with the correct value
-		monitor.update();
-
-		this.monitors.addChild(monitor);
-		this.repositionMonitors();
-
-		return monitor;
-	}
-
-	repositionMonitors(monitor){
-		for (let [i, m] of this.monitors.children.entries())
-			m.position.set(20, 400 + i*20);
-	}
-
-	searchMonitor(name){
-		for (let m of this.monitors.children){
-			if (m.name == name)
-				return m;
-		}
-		return null;
-	}
-
-	//delete monitors that matches all arguments
-	killMonitor(contName, compName){
-		for (let m of this.monitors.children){
-			if (m.contName == contName && m.compName == compName)
-				m.kill();
-		}
-	}
-
 	//callbacks have a special add method
 	//because they are not sprites
 	emplaceCallback(timer, func, name){
@@ -831,6 +846,16 @@ class PlayState extends State{
 	add(name, obj){
 		let cont = this[name];
 		cont.addChild(obj);
+	}
+
+	//effects are assigned using key, value
+	emplaceEffect(name, effect){
+		this.newEffects.set(name, effect);
+	}
+
+	//currently does not check in newEffects yet
+	getEffect(name){
+		return this.effects.get(name);
 	}
 
 	//spawns an enemy through a random vacant gate
@@ -1079,6 +1104,8 @@ class PlayState extends State{
 
 	//collision -> update objects -> add new objects
 	update(delta){
+		this.fpsDisplay.update();
+
 		if (keyboard.isPressed(keycode.ESCAPE)){
 			game.pop();
 			return;
@@ -1128,6 +1155,19 @@ class PlayState extends State{
 			brickClass.update?.(delta);
 		}
 
+		//update and remove effects
+		for (let [name, effect] of this.effects){
+			effect.update?.(delta);
+			//this should be safe
+			if (effect.isDead?.())
+				this.effects.delete(name);
+		}
+		//add new effects
+		for (let [name, effect] of this.newEffects){
+			this.effects.set(name, effect);
+		}
+		this.newEffects.clear();
+
 		//update enemy spawner
 		this.spawner?.update(delta);
 
@@ -1170,17 +1210,8 @@ class PlayState extends State{
 			}
 		}
 
-		//update and remove monitors
-		let deadMonitors = [];
-		for (let m of this.monitors.children){
-			m.update();
-			if (m.isDead())
-				deadMonitors.push(m);
-		}
-		if (deadMonitors.length > 0){
-			this.monitors.removeChild(...deadMonitors);
-			this.repositionMonitors();
-		}
+		//update the active powerup monitors
+		this.monitorManager.update(delta);
 
 		//count balls
 		let ballCount = this.balls.children.length;
@@ -1899,36 +1930,65 @@ class Monitor extends PIXI.Container{
 	}
 
 	/**
-	 * Alternate properties param: [string[], function, format]
-	 * If function is not null, Monitor will only check objects
-	 * that satisfy the function
-	 * 
-	 * Possible formats: "time"(default), "health"
-	 * 
-	 * @param {string} name - Name of monitor to be displayed
+	 * @param {number} powerupID - Powerup ID
+	 * @param {"time"|"count"|"exist"} format - how the monitor should interpret the monitored value
+	 * - "time": remaining time in seconds
+	 * - "count": remaining uses/hp
+	 * - "exist": whether the property still exists; will only use verifyChain
 	 * @param {string} containerName - Name of object group such as "balls" or "paddles"
-	 * @param {...string} properties - Property chain (example: ["x", "y", "z"] = obj.x.y.z)
+	 * @param {string[]} valueChain - Property chain to value (example: ["x", "y", "z"] = obj.x.y.z)
+	 * - if format is "exist" then valueChain becomes verifyChain
+	 * @param {string[]} verifyChain - Will ignore object if this property chain doesnt yield a truthy value
+	 * - if the last element contains "=" as the first character, the monitor will chain to 2nd-to-last element
+	 *   and compare the resulting value to the last element (values will be converted to string first)
 	 */
-	constructor(name, containerName, ...properties){
+	constructor(powerupID, format, containerName, valueChain, verifyChain=null){
 		super();
 
-		this.name = name;
+		const off_y = 2;
+		const name_x = 40;
+		const num_x = DIM.wallw - 38;
+		const suffix_x = num_x + 2;
+
+		this.powerupID = powerupID;
+		this.name = POWERUP_NAMES[powerupID];
+		this.format = format;
 		this.containerName = containerName;
-		if (Array.isArray(properties[0])){
-			this.properties = properties[0].slice();
-			this.filterFunc = properties[1];
-			this.format = properties[2] ?? "time";
+		this.valueChain = valueChain;
+		this.verifyChain = verifyChain;
+		this.verifyValue = null;
+
+		if (format == "exist"){
+			this.verifyChain = valueChain;
 		}
-		else{
-			this.properties = properties.slice();
-			this.filterFunc = null;
-			this.format = "time";
+		if (this.verifyChain){
+			if (this.verifyChain[this.verifyChain.length-1][0] == "="){
+				let str = this.verifyChain.pop();
+				this.verifyValue = str.slice(1);
+			}
 		}
+
+		// console.log(JSON.stringify([powerupID, format, containerName, valueChain, verifyChain]));
 
 		this.dead = false;
 
-		this.text = printText("", "windows", 0x000000, 1, 0, 0);
-		this.addChild(this.text);
+		let sprite = new Sprite("powerup_default_"+powerupID, 0, 0);
+		sprite.anchor.set(0, 0);
+		this.addChild(sprite);
+
+		this.nameText = printText(this.name, "windows", 0x000000, 1, name_x, off_y);
+		this.addChild(this.nameText);
+
+		if (format != "exist"){
+			this.valueText = printText("0", "windows", 0x000000, 1, num_x, off_y);
+			this.valueText.anchor.set(1, 0); //make it right-aligned
+			this.addChild(this.valueText);
+
+			if (format == "time"){
+				this.suffixText = printText("s", "windows", 0x000000, 1, suffix_x, off_y);
+				this.addChild(this.suffixText);
+			}
+		}
 	}
 
 	isDead(){
@@ -1940,36 +2000,113 @@ class Monitor extends PIXI.Container{
 	}
 
 	update(){
-		let values = [];
-		for (let obj of game.get(this.containerName, true)){
-			let val = Monitor.getPropertyChain(obj, this.properties);
+		//"exist" only needs one positive check to stay alive
+		if (this.format == "exist"){
+			if (!this.verifyChain)
+				return;
+			for (let obj of game.get(this.containerName, true)){
+				let value = Monitor.getPropertyChain(obj, this.verifyChain);
+				if (this.verifyValue !== null){
+					if (String(value) == this.verifyValue)
+						return;
+				}
+				else{
+					if (value !== null)
+						return;
+				}
+			}
 
-			if (val === null)
-				continue;
-
-			if (this.filterFunc && !this.filterFunc(obj))
-				continue;
-
-			values.push(val);
-		}
-		if (values.length == 0){
 			this.kill();
-			return;
 		}
-		let value = Math.max(...values);
-		this.setValue(value);
+		else{
+			let values = [];
+			for (let obj of game.get(this.containerName, true)){
+				if (this.verifyChain){
+					let value = Monitor.getPropertyChain(obj, this.verifyChain);
+					if (this.verifyValue !== null){
+						if (String(value) != this.verifyValue)
+							continue;
+					}
+					else{
+						if (value === null)
+							continue;
+					}
+				}
+	
+				let val = Monitor.getPropertyChain(obj, this.valueChain);
+				if (val === null)
+					continue;
+				values.push(val);
+			}
+	
+			if (values.length == 0){
+				this.kill();
+				return;
+			}
+	
+			if (this.format == "time"){
+				let value = Math.max(...values);
+				value = (value/1000).toFixed(1);
+				this.valueText.text = String(value);
+			}
+			else if (this.format == "count"){
+				let value = Math.max(...values);
+				this.valueText.text = String(value);
+			}
+		}
+	}
+}
+
+class MonitorManager extends PIXI.Container{
+	static y_offset = 20;
+
+	constructor(playstate, y){
+		super();
+
+		this.position.set(10, y);
+		this.playstate = playstate;
+
+		let text = printText("Active Powerups:", "windows", 0x000000, 1, 0, 0);
+		this.addChild(text);
+
+		this.monitors = new PIXI.Container();
+		this.monitors.position.set(0, 16);
+		this.addChild(this.monitors);
 	}
 
-	setValue(value){
-		let text = `${this.name}: `;
-		if (this.format == "time"){
-			value = (value/1000).toFixed(2);
-			text += `${value} s`;
+	emplace(powerupID, format, containerName, valueChain, verifyChain){
+		//check for duplicate monitors first
+		for (let m of this.monitors.children){
+			if (m.powerupID == powerupID)
+			return null;
 		}
-		else if (this.format == "health"){
-			text += `${value} hp`;
+		let monitor = new Monitor(powerupID, format, containerName, valueChain, verifyChain);
+		this.monitors.addChild(monitor);
+
+		this.respositionMonitors();
+
+		return monitor;
+	}
+
+	//TODO: sort the monitors alphabetically or by category?
+	respositionMonitors(){
+		let dy = MonitorManager.y_offset;
+		for (let [i, m] of this.monitors.children.entries())
+			m.position.set(0, i*dy);
+	}
+
+	update(delta){
+		let deadMonitors = [];
+
+		for (let m of this.monitors.children){
+			m.update();
+			if (m.isDead())
+				deadMonitors.push(m);
 		}
-		this.text.text = text;
+		if (deadMonitors.length > 0){
+			this.monitors.removeChild(...deadMonitors);
+			this.respositionMonitors();
+		}
 	}
 }
 

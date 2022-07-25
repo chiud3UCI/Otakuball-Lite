@@ -109,7 +109,6 @@ class Paddle extends Sprite{
 		if (!comp)
 			return;
 		comp.destructor?.();
-		game.top.killMonitor("paddles", key);
 		delete components[key];
 	}
 
@@ -185,8 +184,8 @@ class Paddle extends Sprite{
 	}
 
 	normal(){
-		this.resize(0);
 		this.clearPowerups();
+		this.resize(0);
 	}
 
 	//does not revert size
@@ -211,9 +210,12 @@ class Paddle extends Sprite{
 		this.reboundBall(ball);
 	}
 
+	/**
+	 * @returns {boolean} true if at least one ball has been released
+	 */
 	releaseBalls(){
 		//Glue is the only powerup that prevents the release of balls
-		if (this.components.catch?.name == "glue")
+		if (this.components.catch?.isGlue)
 			return false;
 
 		//release balls on the paddle first

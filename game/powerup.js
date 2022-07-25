@@ -1,4 +1,6 @@
 //There are a total of 135 powerups
+
+//NOTE: the order of names is based on the design document and is not entirely alphabetical
 var POWERUP_NAMES = [ 
 	"Acid", "AntiGravity", "Assist", "Attract", "Autopilot", "Ball Cannon", "Barrier", "Blackout", "Beam", "Blossom",
 	"Bomber", "Bulk", "Bypass", "Cannon", "Catch", "Change", "Chaos", "Column Bomber", "Combo", "Control",
@@ -62,12 +64,7 @@ class PowerupSpawner{
 	//randomly decide if powerup should spawn
 	//will be false if all weights are 0
 	canSpawn(){
-		if (cheats.get("disable_powerup_spawning"))
-			return false;
-		return (
-			this.sum > 0 &&
-			Math.random() < this.globalRate
-		);
+		return (this.sum > 0) && (Math.random() < this.globalRate);
 	}
   
 	//get a random powerup id or null if all weights are 0
@@ -309,6 +306,7 @@ f[70] = function(){
 				ball.pierce = true;
 				ball.components.mega = new Mega(ball);
 				game.emplace("balls", ball);
+				game.emplaceMonitor(65, "exist", "balls", ["components", "mega"]);
 			};
 			game.emplace("projectiles", nano);
 		}
@@ -379,12 +377,75 @@ f[133] = function(){
 
 //General Bomber Component
 class Bomber{
-	constructor(ball, explosionFunc){
+	static bomberNormal(i0, j0){
+		let cells = [];
+		let abs = Math.abs;
+		for (let di = -3; di <= 3; di++){
+			for (let dj = -3; dj <= 3; dj++){
+				if (abs(di) + abs(dj) > 3)
+					continue;
+				let i = i0 + di;
+				let j = j0 + dj;
+				if (!boundCheck(i, j))
+					continue;
+				cells.push([i, j]);
+			}
+		}
+		for (let [i, j] of cells){
+			let [x, y] = getGridPosInv(i, j);
+			let p = new Particle("white_pixel",
+				x, y, 0, 0, 0, 32, 16);
+			p.setGrowth(-0.005, 0, 0, true);
+			game.emplace("particles", p);
+	
+			let e = new Explosion(x, y, 32-1, 16-1);
+			game.emplace("projectiles", e);
+		}
+	}
+	static bomberColumn(i0, j0){
+		let [x, y] = getGridPosInv(i0, j0);
+		y = DIM.ceiling + DIM.boardh/2;
+		let w = 32;
+		let h = DIM.boardh;
+		let p = new Particle("white_pixel",
+			x, y, 0, 0, 0, w, h);
+		p.update = function(delta){
+			this.scale.x -= 0.2 * delta;
+			if (this.scale.x <= 0)
+				this.kill();
+		};
+		game.emplace("particles", p);
+	
+		let e = new Explosion(x, y, w-1, h-1);
+		game.emplace("projectiles", e);
+	}
+	static bomberRow(i0, j0){
+		let [x, y] = getGridPosInv(i0, j0);
+		x = DIM.lwallx + DIM.boardw/2;
+		let w = DIM.boardw;
+		let h = 16;
+		let p = new Particle("white_pixel",
+			x, y, 0, 0, 0, w, h);
+		p.update = function(delta){
+			this.scale.y -= 0.2 * delta / 2;
+			if (this.scale.y <= 0)
+				this.kill();
+		};
+		game.emplace("particles", p);
+	
+		let e = new Explosion(x, y, w-1, h-1);
+		game.emplace("projectiles", e);
+	}
+
+	constructor(ball, explosionString){
 		this.ball = ball;
-		this.explosionFunc = explosionFunc;
+		this.explosionString = explosionString;
+		this.explosionFunc = Bomber[explosionString];
 		this.fuse = new PIXI.Container();
 		ball.addChild(this.fuse);
 		playSound("bomber_fuse", true);
+
+		this.bomberType = explosionString;
 	}
 	destructor(){
 		this.ball.removeChild(this.fuse);
@@ -392,7 +453,7 @@ class Bomber{
 	}
 	//return array of any extra args after ball
 	getArgs(){
-		return [this.explosionFunc];
+		return [this.explosionString];
 	}
 	preUpdate(delta){
 		let fuse = this.fuse;
@@ -434,65 +495,6 @@ class Bomber{
 		this.explosionFunc(i0, j0);
 	}
 }
-function bomberNormal(i0, j0){
-	let cells = [];
-	let abs = Math.abs;
-	for (let di = -3; di <= 3; di++){
-		for (let dj = -3; dj <= 3; dj++){
-			if (abs(di) + abs(dj) > 3)
-				continue;
-			let i = i0 + di;
-			let j = j0 + dj;
-			if (!boundCheck(i, j))
-				continue;
-			cells.push([i, j]);
-		}
-	}
-	for (let [i, j] of cells){
-		let [x, y] = getGridPosInv(i, j);
-		let p = new Particle("white_pixel",
-			x, y, 0, 0, 0, 32, 16);
-		p.setGrowth(-0.005, 0, 0, true);
-		game.emplace("particles", p);
-
-		let e = new Explosion(x, y, 32-1, 16-1);
-		game.emplace("projectiles", e);
-	}
-}
-function bomberColumn(i0, j0){
-	let [x, y] = getGridPosInv(i0, j0);
-	y = DIM.ceiling + DIM.boardh/2;
-	let w = 32;
-	let h = DIM.boardh;
-	let p = new Particle("white_pixel",
-		x, y, 0, 0, 0, w, h);
-	p.update = function(delta){
-		this.scale.x -= 0.2 * delta;
-		if (this.scale.x <= 0)
-			this.kill();
-	};
-	game.emplace("particles", p);
-
-	let e = new Explosion(x, y, w-1, h-1);
-	game.emplace("projectiles", e);
-}
-function bomberRow(i0, j0){
-	let [x, y] = getGridPosInv(i0, j0);
-	x = DIM.lwallx + DIM.boardw/2;
-	let w = DIM.boardw;
-	let h = 16;
-	let p = new Particle("white_pixel",
-		x, y, 0, 0, 0, w, h);
-	p.update = function(delta){
-		this.scale.y -= 0.2 * delta / 2;
-		if (this.scale.y <= 0)
-			this.kill();
-	};
-	game.emplace("particles", p);
-
-	let e = new Explosion(x, y, w-1, h-1);
-	game.emplace("projectiles", e);
-}
 
 //Bomber
 f[10] = function(){
@@ -500,9 +502,9 @@ f[10] = function(){
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.setTexture("ball_main_1_0");
-		ball.components.bomber =
-			new Bomber(ball, bomberNormal);
+		ball.components.bomber = new Bomber(ball, "bomberNormal");
 	}
+	game.emplaceMonitor(10, "exist", "balls", ["components", "bomber", "bomberType", "=bomberNormal"]);
 };
 
 //Column Bomber
@@ -511,9 +513,9 @@ f[17] = function(){
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.setTexture("ball_main_1_0");
-		ball.components.bomber =
-			new Bomber(ball, bomberColumn);
+		ball.components.bomber = new Bomber(ball, "bomberColumn");
 	}
+	game.emplaceMonitor(17, "exist", "balls", ["components", "bomber", "bomberType", "=bomberColumn"]);
 };
  
 //Row Bomber
@@ -522,31 +524,33 @@ f[96] = function(){
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.setTexture("ball_main_1_0");
-		ball.components.bomber =
-			new Bomber(ball, bomberRow);
+		ball.components.bomber = new Bomber(ball, "bomberRow");
 	}
+	game.emplaceMonitor(96, "exist", "balls", ["components", "bomber", "bomberType", "=bomberRow"]);
 };
 
 /*==== Miscellaneous ====*/
 
 //Acid
 class Acid{
-	static particleConfig = {
-		//delay should not go under 16 ms because that will exceed 60 fps
-		delay: 16, //delay between particle spawn ticks
-		count: 5, //how many particles to spawn per tick
-	};
-
 	constructor(ball){
 		this.ball = ball;
 		this.timer = 0;
 	}
 	preUpdate(delta){
-		let config = Acid.particleConfig;
+		const spawn_delay = 16; //delay should not go under 16 ms because that will exceed 60 fps
+		const spawn_count = 5; //how many particles to spawn per tick
+
+		//every n balls will reduce spawn_count by 1 to a max of 1 spawn_count
+		const throttle = 10;
+
 		this.timer -= delta;
 		if (this.timer <= 0){
-			this.timer += config.delay;
-			for (let n = 0; n < config.count; n++){
+			this.timer += spawn_delay;
+
+			let num_balls = game.get("balls").length;
+			let n = Math.max(1, spawn_count - Math.floor(num_balls/throttle));
+			for (let i = 0; i < n; i++){
 				let p = this.createParticle();
 				game.emplace("particles", p);
 			}
@@ -564,10 +568,7 @@ class Acid{
 		let pos = center.add(norm.scale(randRangeFloat(ball.radius)));
 		let vel = norm.scale(randRangeFloat(0.005, 0.02));
 
-
-		//TODO: Make the particle start out light green
-		//	then make it decay to dark green and then disappear
-		let p = new Particle("white_pixel", pos.x, pos.y, vel.x, vel.y, 0, 3, 3);
+		let p = new Sprite("white_pixel", pos.x, pos.y, vel.x, vel.y, 0, 3, 3);
 
 		p.update = function(delta){
 			this.acidTint -= delta * tint_decay_rate;
@@ -582,7 +583,7 @@ class Acid{
 				this.tint = 0x000100*tint;
 			}
 			
-			Projectile.prototype.update.call(this, delta);
+			Sprite.prototype.update.call(this, delta);
 		}
 
 		p.acidTint = randRange(...light_range);
@@ -607,6 +608,8 @@ f[0] = function(){
 		}
 		ball.components.acid = new Acid(ball);
 	}
+
+	game.emplaceMonitor(0, "exist", "balls", ["components", "acid"]);
 };
 
 //Antigravity
@@ -629,8 +632,8 @@ f[1] = function(){
 		ball.components.antigravity = new Antigravity(ball);
 	}
 
-	game.createMonitor(
-		"Antigravity", "balls", "components", "antigravity", "timer");
+	game.emplaceMonitor(
+		1, "time", "balls", ["components", "antigravity", "timer"]);
 };
 
 //Attract
@@ -666,6 +669,8 @@ f[3] = function(){
 		ball.normal();
 		ball.components.attract = new Attract(ball);
 	}
+
+	game.emplaceMonitor(3, "exist", "balls", ["components", "attract"]);
 };
 
 //Blossom
@@ -730,6 +735,8 @@ f[9] = function(){
 		ball.setTexture("ball_main_2_0");
 		ball.components.blossom = new Blossom(ball);
 	};
+
+	game.emplaceMonitor(9, "exist", "balls", ["components", "blossom"]);
 };
 
 //Combo
@@ -833,6 +840,8 @@ f[18] = function(){
 		ball.normal();
 		ball.components.combo = new Combo(ball);
 	}
+
+	game.emplaceMonitor(18, "exist", "balls", ["components", "combo"]);
 };
 
 //Domino
@@ -927,6 +936,8 @@ f[22] = function(){
 		ball.normal();
 		ball.components.domino = new Domino(ball);
 	}
+
+	game.emplaceMonitor(22, "exist", "balls", ["components", "domino"]);
 };
 
 //EMP
@@ -974,6 +985,8 @@ f[25] = function(){
 		ball.setTexture("ball_main_1_1");
 		ball.components.emp = new Emp(ball);
 	}
+
+	game.emplaceMonitor(25, "exist", "balls", ["components", "emp"]);
 };
 
 //Energy
@@ -1074,6 +1087,7 @@ f[26] = function(){
 			ball.components.energy = new Energy(ball);
 		}
 	}
+	game.emplaceMonitor(26, "exist", "balls", ["components", "energy"]);
 };
 
 //FireBall
@@ -1099,6 +1113,7 @@ f[31] = function(){
 			ball.components.fireball = new FireBall(ball);
 		}
 	}
+	game.emplaceMonitor(31, "exist", "balls", ["components", "fireball"]);
 };
 
 //Generator Ball
@@ -1184,6 +1199,7 @@ f[35] = function(){
 			ball.components.generator = new GeneratorBall(ball);
 		}
 	}
+	game.emplaceMonitor(35, "exist", "balls", ["components", "generator"]);
 };
 
 //Giga
@@ -1232,6 +1248,7 @@ f[37] = function(){
 		}
 	}
 	playSound("giga_collected");
+	game.emplaceMonitor(37, "exist", "balls", ["components", "giga"]);
 };
 
 //Gravity
@@ -1253,8 +1270,7 @@ f[39] = function(){
 		ball.normal();
 		ball.components.gravity = new Gravity(ball);
 	}
-	game.createMonitor(
-		"Gravity", "balls", "components", "gravity", "timer");
+	game.emplaceMonitor(39, "time", "balls", ["components", "gravity", "timer"]);
 };
 
 //Halo
@@ -1325,6 +1341,7 @@ f[42] = function(){
 		ball.normal();
 		ball.components.halo = new Halo(ball);
 	}
+	game.emplaceMonitor(42, "exist", "balls", ["components", "halo"]);
 };
 
 //Ice Ball
@@ -1362,6 +1379,7 @@ f[45] = function(){
 		ball.components.iceball = new IceBall(ball);
 	}
 	playSound("iceball_collected");
+	game.emplaceMonitor(45, "exist", "balls", ["components", "iceball"]);
 };
 
 //Irritate
@@ -1387,10 +1405,12 @@ f[50] = function(){
 		ball.setTexture("ball_main_4_0");
 		ball.components.irritate = new Irritate(ball);
 	}
+	game.emplaceMonitor(50, "exist", "balls", ["components", "irritate"]);
 };
 
 //Kamikaze
 //it's just a copy of Attract
+//suggestion: make it home in on balls only on lcick?
 class Kamikaze extends Attract{
 	constructor(ball){
 		super(ball);
@@ -1404,6 +1424,7 @@ f[55] = function(){
 		ball.setTexture("ball_main_1_0");
 		ball.components.kamikaze = new Kamikaze(ball);
 	}
+	game.emplaceMonitor(55, "exist", "balls", ["components", "kamikaze"]);
 };
 
 //Knocker
@@ -1448,9 +1469,15 @@ f[56] = function(){
 		ball.setTexture("ball_main_2_3");
 		ball.components.knocker = new Knocker(ball);
 	}
+	game.emplaceMonitor(56, "exist", "balls", ["components", "knocker"]);
 };
 
 //Large Ball
+class LargeBall{
+	constructor(ball){
+		this.ball = ball;
+	}
+}
 f[58] = function(){
 	playSound("large_ball_collected");
 	for (let ball of game.get("balls")){
@@ -1459,6 +1486,9 @@ f[58] = function(){
 		ball.createShape(true);
 		ball.damage = 40;
 		ball.strength = 1;
+		//for monitoring purposes only
+		ball.components.largeball = new LargeBall(ball);
+		game.emplaceMonitor(58, "exist", "balls", ["components", "largeball"]);
 	}
 };
 
@@ -1510,6 +1540,7 @@ f[61] = function(){
 			ball.components.laserball = new LaserBall(ball);
 		}
 	}
+	game.emplaceMonitor(61, "exist", "balls", ["components", "laserball"]);
 };
 
 //Mega Ball
@@ -1542,6 +1573,7 @@ f[65] = function(){
 		ball.pierce = true;
 		ball.components.mega = new Mega(ball);
 	}
+	game.emplaceMonitor(65, "exist", "balls", ["components", "mega"]);
 };
 
 //Node.js
@@ -1584,6 +1616,7 @@ f[73] = function(){
 		ball.setTexture("ball_main_1_8");
 		ball.components.node = new Node(ball);
 	}
+	game.emplaceMonitor(73, "exist", "balls", ["components", "node"]);
 };
 
 //Normal Ball
@@ -1691,6 +1724,7 @@ f[80] = function(){
 			ball.components.particle = new ParticlePowerup(ball);			
 		}
 	}
+	game.emplaceMonitor(80, "exist", "balls", ["components", "particle"]);
 };
 
 //Probe
@@ -1815,6 +1849,7 @@ f[83] = function(){
 			ball.components.probe = new Probe(ball);
 		}
 	}
+	game.emplaceMonitor(83, "exist", "balls", ["components", "probe"]);
 };
 
 //Shrink
@@ -1919,6 +1954,7 @@ f[100] = function(){
 		if (!ball.components.sightlaser)
 			ball.components.sightlaser = new SightLaser(ball);
 	}
+	game.emplaceMonitor(100, "exist", "balls", ["components", "sightlaser"]);
 };
 
 //Snapper
@@ -1945,6 +1981,7 @@ f[102] = function(){
 		ball.damage = 0;
 		ball.components.snapper = new Snapper(ball);
 	}
+	game.emplaceMonitor(102, "exist", "balls", ["components", "snapper"]);
 };
 
 //Volt
@@ -2067,8 +2104,9 @@ f[120] = function(){
 	for (let ball of game.get("balls")){
 		ball.normal();
 		ball.setTexture("ball_main_1_2");
-		ball.components.weak = new Volt(ball);
+		ball.components.volt = new Volt(ball);
 	}
+	game.emplaceMonitor(120, "exist", "balls", ["components", "volt"]);
 };
 
 //Voodoo
@@ -2101,6 +2139,7 @@ f[121] = function(){
 		ball.setTexture("ball_main_1_1");
 		ball.components.voodoo = new Voodoo(ball);
 	}
+	game.emplaceMonitor(121, "exist", "balls", ["components", "voodoo"]);
 };
 
 //Weak
@@ -2126,7 +2165,7 @@ f[123] = function(){
 		ball.setTexture("ball_main_3_1");
 		ball.components.weak = new Weak(ball);
 	}
-	game.createMonitor("Weak", "balls", "components", "weak", "timer");
+	game.emplaceMonitor(123, "time", "balls", ["components", "weak", "timer"]);
 };
 
 //Whiskey or Whisky if you're Canadian
@@ -2174,6 +2213,7 @@ f[126] = function(){
 		ball.setTexture("ball_main_3_2");
 		ball.components.whiskey = new Whiskey(ball);
 	}
+	game.emplaceMonitor(126, "exist", "balls", ["components", "whiskey"]);
 };
 
 //YoYo
@@ -2199,6 +2239,7 @@ f[129] = function(){
 		ball.setTexture("ball_main_4_5");
 		ball.components.yoyo = new Yoyo(ball);
 	}
+	game.emplaceMonitor(129, "exist", "balls", ["components", "yoyo"]);
 };
 
 //Y-Return YReturn
@@ -2225,6 +2266,7 @@ f[131] = function(){
 		ball.setTexture("ball_main_1_5");
 		ball.components.yreturn = new YReturn(ball);
 	}
+	game.emplaceMonitor(131, "exist", "balls", ["components", "yreturn"]);
 };
 
 /*****************
@@ -2303,6 +2345,7 @@ f[5] = function(){
 		paddle.setTexture("paddle_26_2");
 		paddle.setComponent("weapon", new BallCannon(paddle));
 	}
+	game.emplaceMonitor(5, "exist", "paddles", ["components", "weapon", "name", "=ballcannon"]);
 };
 
 //Beam
@@ -2486,6 +2529,7 @@ f[8] = function(){
 			paddle.setComponent("weapon", new Beamer(paddle));
 		}
 	}
+	game.emplaceMonitor(8, "exist", "paddles", ["components", "weapon", "name", "=beamer"]);
 };
 
 //Control
@@ -2618,6 +2662,7 @@ f[19] = function(){
 			paddle.setComponent("weapon", new Control(paddle));
 		}
 	}
+	game.emplaceMonitor(19, "exist", "paddles", ["components", "weapon", "name", "=control"]);
 };
 
 //Drill Missile
@@ -2677,6 +2722,7 @@ f[23] = function(){
 		paddle.setTexture("paddle_24_1");
 		paddle.setComponent("weapon", new DrillMissile(paddle));
 	}
+	game.emplaceMonitor(23, "exist", "paddles", ["components", "weapon", "name", "=drillmissile"]);
 };
 
 //Erratic Missile
@@ -2737,6 +2783,7 @@ f[27] = function(){
 		paddle.setTexture("paddle_24_1");
 		paddle.setComponent("weapon", new ErraticMissile(paddle));
 	}
+	game.emplaceMonitor(27, "exist", "paddles", ["components", "weapon", "name", "=erraticmissile"]);
 };
 
 //Hacker
@@ -2760,6 +2807,8 @@ class Hacker{
 		let sprite = new GraphicsSprite();
 		game.emplace("particles", sprite);
 		this.sprite = sprite;
+
+		this.name = "hacker";
 	}
 
 	destructor(){
@@ -2847,6 +2896,7 @@ f[41] = function(){
 		paddle.setTexture("paddle_21_1");
 		paddle.setComponent("weapon", new Hacker(paddle));
 	}
+	game.emplaceMonitor(41, "exist", "paddles", ["components", "weapon", "name", "=hacker"]);
 }
 
 //Invert
@@ -2855,6 +2905,7 @@ class Invert{
 		this.paddle = paddle;
 		this.cdMax = 2000;
 		this.cd = 0;
+		this.name = "invert";
 	}
 
 	onClick(mouseVal){
@@ -2889,12 +2940,14 @@ f[49] = function(){
 		paddle.setTexture("paddle_29_1");
 		paddle.setComponent("weapon", new Invert(paddle));
 	}
+	game.emplaceMonitor(49, "exist", "paddles", ["components", "weapon", "name", "=invert"]);
 };
 
 class Laser extends PaddleWeapon{
 	constructor(paddle, plus=false){
 		super(paddle, "laser", plus ? 6 : 4);
 		this.isPlus = plus;
+		this.laserType = plus ? "plus" : "normal";
 	}
 
 	twinClone(twin){
@@ -2906,6 +2959,7 @@ class Laser extends PaddleWeapon{
 	upgrade(plus){
 		this.isPlus = this.isPlus || plus;
 		this.maxBullets += 2;
+		this.laserType = plus ? "plus" : "normal";
 	}
 
 	onClick(mouseVal){
@@ -2937,6 +2991,7 @@ f[59] = function(){
 				paddle, false));
 		}
 	}
+	game.emplaceMonitor(59, "exist", "paddles", ["components", "weapon", "laserType", "=normal"]);
 };
 //Laser Plus
 f[60] = function(){
@@ -2955,6 +3010,7 @@ f[60] = function(){
 				paddle, true));
 		}
 	}
+	game.emplaceMonitor(60, "exist", "paddles", ["components", "weapon", "laserType", "=plus"]);
 };
 
 //Missile
@@ -2994,6 +3050,7 @@ f[66] = function(){
 		paddle.setTexture("paddle_23_1");
 		paddle.setComponent("weapon", new Missile(paddle));
 	}
+	game.emplaceMonitor(66, "exist", "paddles", ["components", "weapon", "name", "=missile"]);
 };
 
 //Pause
@@ -3015,6 +3072,8 @@ class Pause{
 		ring.maxRadius = Math.sqrt(DIM.boardw**2 + DIM.boardh**2);
 		game.emplace("particles", ring);
 		this.ring = ring;
+
+		this.name = "pause";
 	}
 
 	destructor(){
@@ -3076,6 +3135,7 @@ f[81] = function(){
 		paddle.clearPowerups();
 		paddle.setComponent("weapon", new Pause(paddle));
 	}
+	game.emplaceMonitor(81, "exist", "paddles", ["components", "weapon", "name", "=pause"]);
 }
 
 //Rapidfire
@@ -3129,6 +3189,7 @@ f[89] = function(){
 		paddle.setTexture("paddle_4_1");
 		paddle.setComponent("weapon", new RapidFire(paddle));
 	}
+	game.emplaceMonitor(89, "exist", "paddles", ["components", "weapon", "name", "=rapidfire"]);
 };
 
 //Shotgun
@@ -3170,6 +3231,7 @@ f[99] = function(){
 		paddle.setTexture("paddle_26_1");
 		paddle.setComponent("weapon", new Shotgun(paddle));
 	}
+	game.emplaceMonitor(99, "exist", "paddles", ["components", "weapon", "name", "=shotgun"]);
 };
 
 //Transform
@@ -3224,6 +3286,8 @@ class Transform{
 		let lasers = new GraphicsSprite(0, 0);
 		game.emplace("particles", lasers);
 		this.lasers = lasers;
+
+		this.name = "transform";
 	}
 
 	destructor(){
@@ -3307,6 +3371,7 @@ f[108] = function(){
 			paddle.setComponent("weapon", new Transform(paddle));
 		}
 	}
+	game.emplaceMonitor(108, "exist", "paddles", ["components", "weapon", "name", "=transform"]);
 }
 
 /*==== Sub-Weapon Subcategory ====*/
@@ -3438,6 +3503,7 @@ f[51] = function(){
 			return;
 		paddle.setComponent("subweapon", new Javelin(paddle));
 	}
+	game.emplaceMonitor(51, "exist", "paddles", ["components", "subweapon", "name", "=javelin"]);
 };
 
 //Rocket
@@ -3460,6 +3526,8 @@ class Rocket{
 		this.rocketSpeed = 1;
 		this.state = "ready";
 		this.loop = 0;
+
+		this.name = "rocket";
 	}
 
 	destructor(){
@@ -3517,6 +3585,7 @@ f[95] = function(){
 		paddle.setComponent("weapon", new Rocket(paddle, rocketMov));
 		paddle.setComponent("movement", rocketMov);
 	}
+	game.emplaceMonitor(95, "exist", "paddles", ["components", "weapon", "name", "=rocket"]);
 
 }
 
@@ -3675,6 +3744,7 @@ f[127] = function(){
 
 		paddle.setComponent("subweapon", new XBomb(paddle));
 	}
+	game.emplaceMonitor(127, "exist", "paddles", ["components", "subweapon", "name", "=xbomb"]);
 };
 
 /****************
@@ -3704,6 +3774,7 @@ f[14] = function(){
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_10_2");
 	paddle.setComponent("catch", new Catch(paddle));
+	game.emplaceMonitor(14, "exist", "paddles", ["components", "catch", "name", "=catch"]);
 };
 
 //Hold Once
@@ -3723,6 +3794,7 @@ f[40] = function(){
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_30_1");
 	paddle.setComponent("catch", new HoldOnce(paddle));
+	game.emplaceMonitor(40, "exist", "paddles", ["components", "catch", "name", "=holdonce"]);
 };
 
 //Glue
@@ -3745,7 +3817,13 @@ f[38] = function(){
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_18_3");
 	paddle.setComponent("catch", new Glue(paddle));
-	game.createMonitor("Glue", "paddles", "components", "catch", "timer");
+	game.emplaceMonitor(
+		38,
+		"time",
+		"paddles", 
+		["components", "catch", "timer"],
+		["components", "catch", "name", "=glue"]
+	);
 };
 
 /**
@@ -3845,7 +3923,7 @@ class Autopilot{
 	constructor(paddle){
 		this.paddle = paddle;
 		this.timer = 10000;
-		this.isAutopilot = true;
+		this.name = "autopilot";
 	}
 
 	updateMovement(){
@@ -3862,17 +3940,16 @@ class Autopilot{
 f[4] = function(){
 	let paddle = game.get("paddles")[0];
 	let move = paddle.components.movement;
-	if (move?.isAutopilot){
+	if (move?.name == "autopilot"){
 		move.timer += 10000;
 		return;
 	}
 	paddle.clearPowerups();
 	paddle.setComponent("movement", new Autopilot(paddle));
-	game.createMonitor(
-		"Autopilot",
-		"paddles",
+	game.emplaceMonitor(
+		4, "time", "paddles",
 		["components", "movement", "timer"],
-		obj => obj.components.movement instanceof Autopilot
+		["components", "movement", "name", "=autopilot"]
 	);
 };
 
@@ -3899,6 +3976,8 @@ class Cannonball{
 		let rad = randRange(-45, 45) * Math.PI / 180;
 		[vx, vy] = Vector.rotate(vx, vy, rad);
 		ball.setVel(vx, vy);
+
+		game.emplaceMonitor(31, "exist", "balls", ["components", "fireball"]);
 	}
 }
 class Cannon{
@@ -3965,6 +4044,7 @@ f[13] = function(){
 		paddle.setTexture("paddle_31_1");
 		paddle.setComponent("subweapon", new Cannon(paddle));
 	}
+	game.emplaceMonitor(13, "exist", "paddles", ["components", "subweapon", "name", "=cannon"]);
 };
 
 //Change
@@ -3972,6 +4052,7 @@ class Change{
 	constructor(paddle){
 		this.paddle = paddle;
 		paddle.revertSpeedLimit();
+		this.name = "change";
 	}
 
 	updateMovement(){
@@ -3982,6 +4063,7 @@ f[15] = function(){
 	playSound("change_collected");
 	let paddle = game.get("paddles")[0];
 	paddle.setComponent("movement", new Change(paddle));
+	game.emplaceMonitor(15, "exist", "paddles", ["components", "movement", "name", "=change"]);
 };
 
 //Extend
@@ -4031,57 +4113,8 @@ f[30] = function(){
 	playSound("freeze_collected");
 	let paddle = game.get("paddles")[0];
 	paddle.setComponent("freeze", new Freeze(paddle));
+	game.emplaceMonitor(30, "time", "paddles", ["components", "freeze", "timer"]);
 };
-
-//Gelato
-function chooseRow(gelato=false){
-	let grid = game.top.brickGrid;
-	let arr = [];
-	let maxCount = 0;
-	for (let i = 0; i < 32; i++){
-		let count = 0;
-		for (let j = 0; j < 13; j++){
-			let br = grid.getStatic(i, j);
-			if (br === null || br.armor >= 2)
-				continue;
-			if (!gelato || br.brickType != "ice")
-				count++;
-		}
-		arr.push(count);
-		maxCount = Math.max(maxCount, count);
-	}
-	let indices = [];
-	for (let [i, v] of arr.entries()){
-		if (v == maxCount)
-			indices.push(i);
-	}
-	return indices[randRange(indices.length)];
-}
-f[34] = function(){
-	playSound("gelato_collected");
-
-	let gelato = new Projectile("gelato", 0, 0, 0.5, 0);
-	let i = chooseRow(true);
-	let [x, y] = getGridPosInv(i, 0);
-	x = DIM.lwallx + gelato.w/2;
-	gelato.setPos(x, y);
-
-	gelato.damage = 100;
-	gelato.strength = 1;
-	gelato.pierce = "strong";
-	gelato.canHit  = function(obj){
-		if (obj instanceof IceBrick)
-			return false;
-		return Projectile.prototype.canHit.call(this, obj);
-	};
-	gelato.onSpriteHit = function(obj, norm, mag){
-		Projectile.prototype.onSpriteHit.call(this, obj, norm, mag);
-		if (obj.gameType == "brick" && obj.isDead())
-			freezeBrick(obj);
-	};
-
-	game.emplace("projectiles", gelato);
-}
 
 //Ghost
 class Ghost{
@@ -4148,8 +4181,7 @@ f[36] = function(){
 	let paddle = game.get("paddles")[0];
 	paddle.clearPowerups();
 	paddle.setComponent("ghost", new Ghost(paddle));
-	game.createMonitor(
-		"Ghost", "paddles", "components", "ghost", "timer");
+	game.emplaceMonitor(36, "time", "paddles", ["components", "ghost", "timer"]);
 };
 
 //Heaven
@@ -4216,6 +4248,7 @@ f[44] = function(){
 	let paddle = game.get("paddles")[0];
 	paddle.clearPowerups();
 	paddle.setComponent("heaven", new Heaven(paddle));
+	game.emplaceMonitor(44, "exist", "paddles", ["components", "heaven"]);
 };
 
 //Illusion
@@ -4310,6 +4343,7 @@ f[46] = function(){
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_17_1");
 	paddle.setComponent("illusion", new Illusion(paddle));
+	game.emplaceMonitor(46, "exist", "paddles", ["components", "illusion"]);
 }
 
 //Normal Ship
@@ -4325,7 +4359,7 @@ class Nervous{
 		this.paddle = paddle;
 		this.timer = 20000;
 		this.timer2 = 0;
-		this.isNervous = true;
+		this.name = "nervous";
 	}
 
 	updateMovement(){
@@ -4349,11 +4383,12 @@ f[76] = function(){
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_3_3");
 	paddle.setComponent("movement", new Nervous(paddle));
-	game.createMonitor(
-		"Nervous", 
+	game.emplaceMonitor(
+		76,
+		"time",
 		"paddles", 
 		["components", "movement", "timer"],
-		obj => obj.components.movement instanceof Nervous
+		["components", "movement", "name", "=nervous"]
 	);
 };
 
@@ -4471,6 +4506,7 @@ f[79] = function(){
 	if (paddle.components.orbit)
 		return;
 	paddle.setComponent("orbit", new Orbit(paddle));
+	game.emplaceMonitor(79, "exist", "paddles", ["components", "orbit"]);
 }
 
 //Poison
@@ -4495,8 +4531,7 @@ f[84] = function(){
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_3_3");
 	paddle.setComponent("poison", new Poison(paddle));
-	game.createMonitor(
-		"Poison", "paddles", "components", "poison", "timer");
+	game.emplaceMonitor(84, "time", "paddles", ["components", "poison", "timer"]);
 };
 
 //Protect
@@ -4552,6 +4587,7 @@ f[85] = function(){
 		return;
 	}
 	paddle.setComponent("protect", new Protect(paddle));
+	game.emplaceMonitor(85, "exist", "paddles", ["components", "protect"]);
 }
 
 //Restrict
@@ -4586,8 +4622,7 @@ f[91] = function(){
 	let paddle = game.get("paddles")[0];
 	paddle.clearPowerups();
 	paddle.setComponent("regenerate", new Regenerate(paddle));
-	game.createMonitor(
-		"Regenerate", "paddles", "components", "regenerate", "timer");
+	game.emplaceMonitor(91, "time", "paddles", ["components", "regenerate", "timer"]);
 };
 
 //Re-Serve (Reserve)
@@ -4625,8 +4660,7 @@ function activateShadowPaddle(paddle){
 	paddle.setTexture("paddle_2_0");
 	paddle.alpha = 0.5;
 	paddle.setComponent("shadow", new Shadow(paddle));
-	game.createMonitor(
-		"Shadow", "paddles", "components", "shadow", "timer");
+	game.emplaceMonitor(98, "time", "paddles", ["components", "shadow", "timer"]);
 }
 f[98] = function(){
 	//sound manager will prevent duplicate sounds
@@ -4645,7 +4679,7 @@ class VectorComponent{
 
 		this.timer = 10000;
 
-		this.isVector = true;
+		this.name = "vector";
 	}
 
 	destructor(){
@@ -4675,23 +4709,25 @@ class VectorComponent{
 f[118] = function(){
 	playSound("vector_collected");
 	let paddle = game.get("paddles")[0];
-	if (paddle.components.movement?.isVector){
+	if (paddle.components.movement?.name == "vector"){
 		paddle.components.movement.timer += 10000;
 	}
 	else{
 		paddle.clearPowerups();
 		paddle.setTexture("paddle_31_1");
 		paddle.setComponent("movement", new VectorComponent(paddle));
-		game.createMonitor(
-			"Vector", 
+		game.emplaceMonitor(
+			118,
+			"time", 
 			"paddles", 
 			["components", "movement", "timer"],
-			obj => obj.components.movement instanceof VectorComponent
+			["components", "movement", "name", "=vector"]
 		);
 	}
 };
 
 //Weight
+//TODO: fix weird interaction with Yoga
 f[124] = function(){
 	playSound("weight_collected");
 	let paddle = game.get("paddles")[0];
@@ -4703,6 +4739,7 @@ f[124] = function(){
 			paddle.revertSpeedLimit();
 		}
 	});
+	game.emplaceMonitor(124, "exist", "paddles", ["components", "weight"]);
 };
 
 //Yoga
@@ -4710,6 +4747,7 @@ class Yoga{
 	constructor(paddle){
 		this.paddle = paddle;
 		paddle.revertSpeedLimit();
+		this.name = "yoga";
 	}
 
 	updateMovement(){
@@ -4726,6 +4764,7 @@ f[130] = function(){
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_20_3");
 	paddle.setComponent("movement", new Yoga(paddle));
+	game.emplaceMonitor(130, "exist", "paddles", ["components", "movement", "name", "=yoga"]);
 };
 
 //Zen Shove
@@ -4775,6 +4814,7 @@ f[134] = function(){
 	paddle.clearPowerups();
 	paddle.setTexture("paddle_0_1");
 	paddle.setComponent("zenshove", new ZenShove(paddle));
+	game.emplaceMonitor(134, "exist", "paddles", ["components", "zenshove"]);
 };
 
 /****************
@@ -5093,6 +5133,56 @@ f[24] = function(){
 		game.emplace("powerups", pow);
 		br.suppress = true;
 	}
+}
+
+//Gelato
+function chooseRow(gelato=false){
+	let grid = game.top.brickGrid;
+	let arr = [];
+	let maxCount = 0;
+	for (let i = 0; i < 32; i++){
+		let count = 0;
+		for (let j = 0; j < 13; j++){
+			let br = grid.getStatic(i, j);
+			if (br === null || br.armor >= 2)
+				continue;
+			if (!gelato || br.brickType != "ice")
+				count++;
+		}
+		arr.push(count);
+		maxCount = Math.max(maxCount, count);
+	}
+	let indices = [];
+	for (let [i, v] of arr.entries()){
+		if (v == maxCount)
+			indices.push(i);
+	}
+	return indices[randRange(indices.length)];
+}
+f[34] = function(){
+	playSound("gelato_collected");
+
+	let gelato = new Projectile("gelato", 0, 0, 0.5, 0);
+	let i = chooseRow(true);
+	let [x, y] = getGridPosInv(i, 0);
+	x = DIM.lwallx + gelato.w/2;
+	gelato.setPos(x, y);
+
+	gelato.damage = 100;
+	gelato.strength = 1;
+	gelato.pierce = "strong";
+	gelato.canHit  = function(obj){
+		if (obj instanceof IceBrick)
+			return false;
+		return Projectile.prototype.canHit.call(this, obj);
+	};
+	gelato.onSpriteHit = function(obj, norm, mag){
+		Projectile.prototype.onSpriteHit.call(this, obj, norm, mag);
+		if (obj.gameType == "brick" && obj.isDead())
+			freezeBrick(obj);
+	};
+
+	game.emplace("projectiles", gelato);
 }
 
 //HaHa
@@ -5729,7 +5819,7 @@ f[115] = function(){
 	}
 }
 
-//Undestructible
+//Undestructible (not a real word)
 class Undestructible extends Special{
 	constructor(){
 		super(null, 0, 0);
@@ -5737,8 +5827,8 @@ class Undestructible extends Special{
 		this.record = new Map();
 		this.overlay = new PIXI.Graphics();
 		this.addChild(this.overlay);
-
 		this.timer = 4000;
+		this.name = "undestructible";
 	}
 
 	destructor(){
@@ -5793,12 +5883,15 @@ f[116] = function(){
 		return;
 	}
 	game.emplace("specials2", new Undestructible());
-	game.createMonitor(
-		"Undestructible", 
+	let monitor = game.emplaceMonitor(
+		116,
+		"time",
 		"specials2", 
 		["timer"],
-		obj => obj instanceof Undestructible
+		["name", "=undestructible"]
 	);
+	// monitor.nameText.x -= 10;
+	monitor.nameText.text = "Undestruct.";
 }
 
 //Vendetta
@@ -6082,6 +6175,8 @@ class Mobility extends Special{
 		super(null);
 		this.record = new Set();
 		this.timer = 20000;
+
+		this.isMobility = true;
 	}
 
 	destructor(){
@@ -6122,11 +6217,12 @@ f[67] = function(){
 	}
 
 	game.emplace("specials1", new Mobility());
-	game.createMonitor(
-		"Mobility", 
+	game.emplaceMonitor(
+		67,
+		"time",
 		"specials1", 
 		["timer"], 
-		obj => obj instanceof Mobility
+		["isMobility"]
 	);
 }
 
@@ -6260,6 +6356,8 @@ class Barrier extends Special{
 
 		this.timer = 10000;
 
+		this.isBarrier = true;
+
 		game.top.pit_blockers++;
 	}
 
@@ -6284,11 +6382,12 @@ f[6] = function(){
 		}
 	}
 	game.emplace("specials2", new Barrier());
-	game.createMonitor(
-		"Barrier",
+	game.emplaceMonitor(
+		6,
+		"time",
 		"specials2",
 		["timer"],
-		obj => obj instanceof Barrier
+		["isBarrier"]
 	);
 }
 
@@ -6304,6 +6403,7 @@ class Blackout extends Special{
 		this.alpha = 0;
 
 		this.timer = 10000;
+		this.name = "blackout";
 	}
 
 	update(delta){
@@ -6327,6 +6427,7 @@ f[7] = function(){
 	let black = new Blackout();
 	game.emplace("specials2", black);
 	playSound("blackout_collected");
+	game.emplaceMonitor(7, "time", "specials2", ["timer"], ["name", "=blackout"]);
 };
 
 //Forcefield
@@ -6365,6 +6466,7 @@ f[32] = function(){
 			return;
 	}
 	game.emplace("specials2", new Forcefield());
+	game.emplaceMonitor(32, "exist", "specials2", ["name", "=forcefield"]);
 };
 
 //Intelligent Shadow
@@ -6417,12 +6519,15 @@ f[48] = function(){
 	let shadow = new IntelligentShadow(paddle);
 
 	game.emplace("specials2", shadow);
-	game.createMonitor(
-		"I. Shadow", 
+	let monitor = game.emplaceMonitor(
+		48,
+		"time", 
 		"specials2", 
 		["timer"],
-		obj => obj instanceof IntelligentShadow
+		["isIntelligentShadow"]
 	);
+
+	monitor.nameText.text = "Int. Shadow";
 };
 
 //Junk
@@ -6467,12 +6572,19 @@ f[63] = function(){
 	}
 	spawner.sum = weights.reduce((a, b) => a + b, 0);
 	spawner.globalRate *= 1.6;
+
+	let monitor = game.emplaceMonitor(63, "exist");
+	monitor.update = () => {
+		if (!spawner.luckActivated)
+			monitor.kill();
+	};
 };
 
 //Magnet
 class Magnet extends Special{
 	constructor(){
 		super(null);
+		this.name = "magnet";
 	}
 
 	update(delta){
@@ -6490,6 +6602,7 @@ f[64] = function(){
 	if (checkExistingInstance("specials1", Magnet))
 		return;
 	game.emplace("specials1", new Magnet());
+	game.emplaceMonitor(64, "exist", "specials1", ["name", "=magnet"]);
 }
 
 //Nebula
@@ -6498,6 +6611,7 @@ class Nebula extends GraphicsSprite{
 		super(DIM.w/2, DIM.ceiling + DIM.boardh/2);
 
 		this.timer = 10000;
+		this.name = "nebula";
 		this.ringTimer = 0;
 		this.ringDelay = 500;
 		this.ringRadius = 20 + Vector.dist(
@@ -6576,11 +6690,12 @@ f[71] = function(){
 		return;
 	}
 	game.emplace("specials1", new Nebula());
-	game.createMonitor(
-		"Nebula",
+	game.emplaceMonitor(
+		71,
+		"time",
 		"specials1",
 		["timer"],
-		obj => obj instanceof Nebula
+		["name", "=nebula"]
 	);
 };
 
@@ -6644,16 +6759,16 @@ f[105] = function(){
 	let timewarp = new TimeWarp(playstate);
 	playstate.timewarp = timewarp;
 
-	let monitor = new Monitor("Time Warp", null, null, "time");
+	let monitor = game.emplaceMonitor(105, "time");
 	monitor.update = function(delta){
 		let value = timewarp.timer;
-		if (value < 0)
+		if (value <= 0){
 			this.kill();
-		this.setValue(value);
+			return;
+		}
+		value = (value/1000).toFixed(1);
+		this.valueText.text = String(value);
 	};
-	playstate.monitors.addChild(monitor);
-	playstate.repositionMonitors();
-
 }
 
 //Tractor
@@ -6669,6 +6784,7 @@ class Tractor extends Special{
 		this.shockTimer = 0;
 		this.shockDelay = 1000 / 30;
 
+		this.name = "trator";
 		game.top.pit_blockers++;
 	}
 
@@ -6696,7 +6812,7 @@ class Tractor extends Special{
 			this.shock.clear();
 			let colors = [0x00FF00, 0xCCFFCC, 0xFFFF00];
 			for (let i = 0; i < this.health; i++){
-				let color = colors[i];
+				let color = colors[i%3];
 				shockify(this.shock, -w/2, 0, w/2, 0, {
 					color: color,
 					amplitude: 16,
@@ -6709,7 +6825,13 @@ class Tractor extends Special{
 }
 f[107] = function(){
 	playSound("tractor_collected");
+	let obj = checkExistingInstance("specials2", Tractor);
+	if (obj){
+		obj.health += 3;
+		return;
+	}
 	game.emplace("specials2", new Tractor());
+	game.emplaceMonitor(107, "count", "specials2", ["health"], ["name", "=tractor"]);
 };
 
 //Undead
@@ -6730,6 +6852,7 @@ class Undead extends Special{
 		this.addChild(rect);
 
 		this.health = 1;
+		this.name = "undead";
 
 		game.top.pit_blockers++;
 	}
@@ -6759,6 +6882,7 @@ f[114] = function(){
 		}
 	}
 	game.emplace("specials2", new Undead());
+	game.emplaceMonitor(114, "count", "specials2", ["health"], ["name", "=undead"]);
 }
 
 /********
@@ -6881,4 +7005,5 @@ f[110] = function(){
 	if (paddle.twinWrapper)
 		return;
 	paddle.twinWrapper = new TwinWrapper(paddle);
+	game.emplaceMonitor(110, "exist", "paddles", ["twinWrapper"]);
 }

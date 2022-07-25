@@ -75,7 +75,7 @@ class Brick extends Sprite{
 			shield: {},
 			move: null,
 			storedMove: null,
-			invisible: false,
+			invisible: null,
 			antilaser: null,
 			snapper: null
 		}
@@ -163,8 +163,8 @@ class Brick extends Sprite{
 		let i = Math.floor(n / 3); //dir
 		let j = n % 3; //speed
 
-		let speeds = [0.05, 0.1, 0.2];
-		let vectors = [[0,-1], [0,1], [-1,0], [1,0]];
+		const speeds = [0.05, 0.1, 0.2];
+		const vectors = [[0,-1], [0,1], [-1,0], [1,0]];
 
 		let spd = speeds[j];
 		let [vx, vy] = vectors[i];
@@ -244,16 +244,16 @@ class Brick extends Sprite{
 	attachSnapper(){
 		if (this.patch.snapper)
 			return;
-		this.patch.snapper = true;
-		let ani = [];
-		for (let i = 0; i < 5; i++)
+			let ani = [];
+			for (let i = 0; i < 5; i++)
 			ani.push(`snapper_${i}`);
-		for (let i = 3; i >= 1; i--)
+			for (let i = 3; i >= 1; i--)
 			ani.push(ani[i]);
-		let snapper = new Sprite("snapper_0");
-		snapper.scale.set(1);
-		snapper.addAnim("glow", ani, 0.25, true, true);
-		this.addChild(snapper);
+			let snapper = new Sprite("snapper_0");
+			snapper.scale.set(1);
+			snapper.addAnim("glow", ani, 0.25, true, true);
+			this.addChild(snapper);
+			this.patch.snapper = snapper;
 	}
 
 	static travelComplete = {
@@ -486,7 +486,10 @@ class Brick extends Sprite{
 			else
 				this.overlap.delete(obj);
 		}
+
 		this.regenMask?.updateRegen(delta);
+		this.patch.snapper?.update(delta);
+
 		super.update(delta);
 	}
 }

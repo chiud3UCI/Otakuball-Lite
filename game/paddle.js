@@ -215,7 +215,7 @@ class Paddle extends Sprite{
 	 */
 	releaseBalls(){
 		//Glue is the only powerup that prevents the release of balls
-		if (this.components.catch?.isGlue)
+		if (this.components.catch?.name == "glue")
 			return false;
 
 		//release balls on the paddle first

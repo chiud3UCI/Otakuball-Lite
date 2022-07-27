@@ -237,6 +237,7 @@ class PlayState extends State{
 		this.add("borders", border);
 		this.border = border;
 		this.initGates();
+		this.levelSkip = 0;
 
 		//create paddle
 		let paddle = new Paddle();
@@ -376,7 +377,7 @@ class PlayState extends State{
 		}
 		if (mode == "playlist"){
 			let playlist = this.playlist;
-			let index = this.playlistIndex;
+			let index = this.playlistIndex + this.levelSkip;
 			if (index < playlist.length - 1){
 				game.replace(new PlayState("playlist", playlist, index+1, this));
 			}
@@ -853,8 +854,10 @@ class PlayState extends State{
 		this.newEffects.set(name, effect);
 	}
 
-	//currently does not check in newEffects yet
-	getEffect(name){
+	getEffect(name, includeNew=false){
+		if (includeNew)
+			return this.effects.get(name) ?? this.newEffects.get(name);
+
 		return this.effects.get(name);
 	}
 
@@ -1159,11 +1162,16 @@ class PlayState extends State{
 		for (let [name, effect] of this.effects){
 			effect.update?.(delta);
 			//this should be safe
-			if (effect.isDead?.())
+			if (effect.isDead?.()){
+				effect.destructor?.();
 				this.effects.delete(name);
+			}
 		}
 		//add new effects
 		for (let [name, effect] of this.newEffects){
+			let oldEffect = this.effects.get(name);
+			if (oldEffect)
+				oldEffect.destructor?.();
 			this.effects.set(name, effect);
 		}
 		this.newEffects.clear();
@@ -1850,7 +1858,7 @@ class Bypass extends Sprite{
 		this.openHeightMax = 60;
 		this.openHeight = 0;
 		this.openSpeed = 0.1;
-		this.mode = 1; //1 = bypass, 2 = warp
+		this.mode = 0; //0 = off, 1 = bypass, 2 = warp
 		this.state = "closed"; //"closed", "opening", "open"
 
 		this.exitTimer = 0;
@@ -1909,6 +1917,7 @@ class Bypass extends Sprite{
 				playSound("bypass_exit");
 				text.visible = false;
 				this.playstate.setState("victory");
+				this.playstate.levelSkip = this.mode - 1; //either skip 0 or 1 levels
 				if (this.playstate.mode == "campaign")
 					campaign_save.onVictory(this.playstate, this.mode-1);
 			}
@@ -2057,6 +2066,44 @@ class Monitor extends PIXI.Container{
 	}
 }
 
+class EffectMonitor extends Monitor{
+	constructor(powerupID, format, effectName, valueChain){
+		super(powerupID, format, "effect", null, null);
+
+		this.effectName = effectName;
+		this.effectValueChain = valueChain;
+	}
+
+	update(){
+		//remember, there's at most one effect per effectName
+		let effect = game.getEffect(this.effectName, true);
+		if (!effect){
+			this.kill();
+			return;
+		}
+
+		//the purpose of "exist" format is to check for existence of the effect
+		//so we can stop here
+		if (this.format == "exist"){
+			return;
+		}
+
+		//"time" and "count" format
+		let value = Monitor.getPropertyChain(effect, this.effectValueChain);
+		if (value === null){
+			this.kill();
+			return;
+		}
+		if (this.format == "time"){
+			value = (value/1000).toFixed(1);
+			this.valueText.text = String(value);
+		}
+		else if (this.format == "count"){
+			this.valueText.text = String(value);
+		}
+	}
+}
+
 class MonitorManager extends PIXI.Container{
 	static y_offset = 20;
 
@@ -2081,6 +2128,17 @@ class MonitorManager extends PIXI.Container{
 			return null;
 		}
 		let monitor = new Monitor(powerupID, format, containerName, valueChain, verifyChain);
+		this.monitors.addChild(monitor);
+
+		this.respositionMonitors();
+
+		return monitor;
+	}
+
+	emplaceEffect(powerupID, format, effectName, valueChain){
+		if (game.getEffect(effectName))
+			return null;
+		let monitor = new EffectMonitor(powerupID, format, effectName, valueChain);
 		this.monitors.addChild(monitor);
 
 		this.respositionMonitors();

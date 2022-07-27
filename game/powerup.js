@@ -263,6 +263,22 @@ let f = powerupFunc; //alias
  * 7. Twin
  */
 
+//Generic Effect
+class Effect{
+	constructor(){
+		this.dead = false;
+	}
+
+	isDead(){
+		return this.dead;
+	}
+
+	kill(){
+		this.dead = true;
+	}
+}
+//TODO: Create generic Component class and have the other components extend it
+
 /*****************
  * Ball Addition *
  *****************/
@@ -372,6 +388,218 @@ f[133] = function(){
 	for (let ball of game.get("balls"))
 		ball.setSpeed2(ball.getSpeed() + 0.15*4);
 }
+
+/*==== Ball Effect Subcategory ====*/
+//ball effects do not override previous ball powreups
+
+//Gravity Effect
+class Gravity extends Effect{
+	constructor(antigravity=false){
+		super();
+		this.timer = 10000;
+		let sign = antigravity ? -1 : 1;
+		this.sign = sign;
+
+		//Gravity Lines Particle Effect
+		let line = new GraphicsSprite(0, 0);
+		this.line = line;
+		game.emplace("particles", line);
+
+		//prevent lines from appearing over the border
+		line.mask = new Mask(DIM.lwallx, DIM.ceiling, DIM.boardw, DIM.boardh);
+
+		const spawn_delay = 500;
+		const V0 = 0.1 * sign; //initial velocity
+		const A = -0.0000175 * sign; //acceleration
+		const offset = 0; //offset from middle of the board
+		const Y0 = DIM.ceiling + DIM.boardh * (0.5 - sign * offset); //initial y-pos
+		const fade_time = 1000; //amount of time before line becomes completely opaque
+
+		const lifespan = Math.abs(V0 / A); //how much time before velocity crosses 0
+
+		//keeps track of times of various lines
+		line.values = [];
+		line.spawnTimer = 0;
+		
+		line.update = function(delta){
+			//spawn new lines
+			this.spawnTimer -= delta;
+			if (this.spawnTimer <= 0){
+				this.spawnTimer += spawn_delay;
+				this.values.unshift(0);
+			}
+
+			this.clear();
+
+			//update and draw lines
+			let values = this.values;
+			for (let i = 0; i < values.length; i++){
+				values[i] += delta;
+				let t = values[i];
+
+				//calculate alpha based on lifetime
+				let alpha = Math.min(1, t / fade_time);
+				//calculate position based on displacement formula
+				let y = Y0 + V0*t + 0.5*A*t*t;
+				//draw horizontal line based on displacement
+				this.lineStyle(2, 0xFFFFFF, alpha);
+				this.moveTo(DIM.lwallx, y).lineTo(DIM.rwallx, y);
+			}
+
+			//remove values that exceed the lifespan
+			while (values.length > 0 && values[values.length-1] > lifespan)
+				values.pop();
+		};
+	}
+	destructor(){
+		this.line.kill();
+	}
+	update(delta){
+		for (let ball of game.get("balls")){
+			ball.setSteer(0, 1, this.sign * 0.005);
+		}
+		this.timer -= delta;
+		if (this.timer <= 0)
+			this.kill();
+
+		this.line.update(delta);
+	}
+}
+
+//Antigravity
+f[1] = function(){
+	playSound("antigravity_collected");
+
+	let gravity = game.getEffect("gravity", true);
+	if (gravity){
+		gravity.kill();
+	}
+
+	let effect = game.getEffect("antigravity", true);
+	if (effect){
+		effect.timer += 10000;
+		return;
+	}
+	game.emplaceEffect("antigravity", new Gravity(true));
+	game.emplaceEffectMonitor(1, "time", "antigravity", ["timer"]);
+};
+
+//Gravity
+f[39] = function(){
+	playSound("gravity_collected");
+
+	let antigrav = game.getEffect("antigravity", true);
+	if (antigrav){
+		antigrav.kill();
+	}
+
+	let effect = game.getEffect("gravity", true);
+	if (effect){
+		effect.timer += 10000;
+		return;
+	}
+	game.emplaceEffect("gravity", new Gravity(false));
+	game.emplaceEffectMonitor(39, "time", "gravity", ["timer"]);
+};
+
+//Sight laser
+class SightLaser extends Effect{
+	constructor(){
+		super();
+		//create a graphics object in order to draw lasers on it
+		let laser = new PIXI.Graphics();
+		game.top.hud.addChild(laser);
+		this.laser = laser;
+		//previously used for drawing the ball's hitbox for debugging
+		//now it's a visual feature
+		this.debugHitbox = new PIXI.Graphics();
+		laser.addChild(this.debugHitbox);
+	}
+	destructor(){
+		game.top.hud.removeChild(this.laser);
+		game.top.hud.removeChild(this.debugHitbox);
+	}
+	update(delta){
+		let laser = this.laser;
+		laser.clear();
+
+		let debugHitbox = this.debugHitbox;
+		debugHitbox.clear();
+
+		let paddle = game.get("paddles")[0];
+		
+		for (let ball of game.get("balls")){
+			let [x0, y0] = ball.getPos();
+			let [x1, y1] = [null, null];		
+			let vx = ball.vx;
+			let vy = ball.vy;
+			[vx, vy] = Vector.normalize(vx, vy);
+			let r = ball.shape.radius;
+			let lwall = DIM.lwallx + r;
+			let rwall = DIM.rwallx - r;
+			let floor = DIM.height;
+			let ceil = DIM.ceiling;
+
+			laser.lineStyle(1, 0xFFFF00).moveTo(x0, y0);
+
+			//limit number of laser bounces to 10
+			for (let i = 0; i < 10; i++){
+				let [check, mag] = Ball.raycastTo(
+					paddle, x0, y0, vx, vy, r, //debugHitbox
+				);
+				if (check && vy > 0){
+					//Rebound off paddle
+					//draw line to paddle hit location
+					x1 = x0 + vx * mag;
+					y1 = y0 + vy * mag;
+					laser.lineTo(x1, y1);
+					[x0, y0] = [x1, y1];
+					//draw projected ball hit location
+					debugHitbox.beginFill(0xFF0000, 0.5)
+						.drawCircle(x1, y1, r)
+						.endFill();
+					//change velocity based on paddle rebound
+					//see Paddle.reboundBall()
+					let dx = x1 - paddle.x;
+					let mag2 = dx / (paddle.paddleWidth/2);
+					mag2 = Math.max(-1, Math.min(1, mag2));
+					let rad = 60 * mag2 * Math.PI / 180; //radians
+					[vx, vy] = Vector.rotate(0, -1, rad);
+				}
+				else{
+					if (vx == 0)
+						break;
+					let wall = (vx < 0) ? lwall : rwall;
+					let dx = wall - x0;
+					let dy = dx * vy / vx;
+					x1 = x0 + dx;
+					y1 = y0 + dy;
+					//stop the laser if it goes above the ceiling
+					//or below the floor
+					if (y1 < ceil || y1 > floor){
+						y1 = (y1 < ceil) ? ceil : floor;
+						x1 = x0 + ((y1 - y0) * vx / vy);
+						laser.lineTo(x1, y1);
+						break;
+					}
+					laser.lineTo(x1, y1);
+					vx = -vx;
+					[x0, y0] = [x1, y1];
+				}
+			}
+		}
+	}
+}
+f[100] = function(){
+	playSound("sightlaser_collected");
+
+	let effect = game.getEffect("sightlaser", true);
+	if (effect)
+		return;
+
+	game.emplaceEffect("sightlaser", new SightLaser());
+	game.emplaceEffectMonitor(100, "exist", "sightlaser");
+};
 
 /*==== Bomber Subcategory ====*/
 
@@ -610,30 +838,6 @@ f[0] = function(){
 	}
 
 	game.emplaceMonitor(0, "exist", "balls", ["components", "acid"]);
-};
-
-//Antigravity
-class Antigravity{
-	constructor(ball){
-		this.ball = ball;
-		this.timer = 10000;
-	}
-	update(delta){
-		this.ball.setSteer(0, -1, 0.005);
-		this.timer -= delta;
-		if (this.timer <= 0)
-			this.ball.normal();
-	}
-}
-f[1] = function(){
-	playSound("antigravity_collected");
-	for (let ball of game.get("balls")){
-		ball.normal();
-		ball.components.antigravity = new Antigravity(ball);
-	}
-
-	game.emplaceMonitor(
-		1, "time", "balls", ["components", "antigravity", "timer"]);
 };
 
 //Attract
@@ -1251,28 +1455,6 @@ f[37] = function(){
 	game.emplaceMonitor(37, "exist", "balls", ["components", "giga"]);
 };
 
-//Gravity
-class Gravity{
-	constructor(ball){
-		this.ball = ball;
-		this.timer = 10000;
-	}
-	update(delta){
-		this.ball.setSteer(0, 1, 0.005);
-		this.timer -= delta;
-		if (this.timer <= 0)
-			this.ball.normal();
-	}
-}
-f[39] = function(){
-	playSound("gravity_collected");
-	for (let ball of game.get("balls")){
-		ball.normal();
-		ball.components.gravity = new Gravity(ball);
-	}
-	game.emplaceMonitor(39, "time", "balls", ["components", "gravity", "timer"]);
-};
-
 //Halo
 class Halo{
 	constructor(ball){
@@ -1853,6 +2035,11 @@ f[83] = function(){
 };
 
 //Shrink
+class Shrink{
+	constructor(ball){
+		this.ball = ball;
+	}
+}
 f[97] = function(){
 	playSound("shrink_collected");
 	for (let ball of game.get("balls")){
@@ -1860,101 +2047,10 @@ f[97] = function(){
 		ball.setTexture("ball_small");
 		ball.createShape(true);
 		ball.damage = 5;
+		//for monitoring purposes only
+		ball.components.shrink = new Shrink(ball);
+		game.emplaceMonitor(97, "exist", "balls", ["components", "shrink"]);
 	}
-};
-
-//Sight laser
-class SightLaser{
-	constructor(ball){
-		this.ball = ball;
-		//create a graphics object in order to draw lasers on it
-		let laser = new PIXI.Graphics();
-		game.top.hud.addChild(laser);
-		this.laser = laser;
-		//used for drawing the paddle's hitbox for debugging
-		this.debugHitbox = new PIXI.Graphics();
-		laser.addChild(this.debugHitbox);
-	}
-	destructor(){
-		game.top.hud.removeChild(this.laser);
-	}
-	preUpdate(delta){
-		let paddle = game.get("paddles")[0];
-		let ball = this.ball;
-		let [x0, y0] = ball.getPos();
-		let [x1, y1] = [null, null];		
-		let vx = ball.vx;
-		let vy = ball.vy;
-		[vx, vy] = Vector.normalize(vx, vy);
-		let r = ball.shape.radius;
-		let lwall = DIM.lwallx + r;
-		let rwall = DIM.rwallx - r;
-		let floor = DIM.height;
-		let ceil = DIM.ceiling;
-
-		let laser = this.laser;
-		laser.clear()
-			.lineStyle(1, 0xFFFF00)
-			.moveTo(x0, y0);
-
-		let debugHitbox = this.debugHitbox;
-
-		debugHitbox.clear();
-
-		//limit number of laser bounces to 10
-		for (let i = 0; i < 10; i++){
-			let [check, mag] = Ball.raycastTo(
-				paddle, x0, y0, vx, vy, r, //debugHitbox
-			);
-			if (check && vy > 0){
-				//Rebound off paddle
-				//draw line to paddle hit location
-				x1 = x0 + vx * mag;
-				y1 = y0 + vy * mag;
-				laser.lineTo(x1, y1);
-				[x0, y0] = [x1, y1];
-				//draw projected ball hit location
-				debugHitbox.beginFill(0xFF0000, 0.5)
-					.drawCircle(x1, y1, r)
-					.endFill();
-				//change velocity based on paddle rebound
-				//see Paddle.reboundBall()
-				let dx = x1 - paddle.x;
-				let mag2 = dx / (paddle.paddleWidth/2);
-				mag2 = Math.max(-1, Math.min(1, mag2));
-				let rad = 60 * mag2 * Math.PI / 180; //radians
-				[vx, vy] = Vector.rotate(0, -1, rad);
-			}
-			else{
-				if (vx == 0)
-					break;
-				let wall = (vx < 0) ? lwall : rwall;
-				let dx = wall - x0;
-				let dy = dx * vy / vx;
-				x1 = x0 + dx;
-				y1 = y0 + dy;
-				//stop the laser if it goes above the ceiling
-				//or below the floor
-				if (y1 < ceil || y1 > floor){
-					y1 = (y1 < ceil) ? ceil : floor;
-					x1 = x0 + ((y1 - y0) * vx / vy);
-					laser.lineTo(x1, y1);
-					break;
-				}
-				laser.lineTo(x1, y1);
-				vx = -vx;
-				[x0, y0] = [x1, y1];
-			}
-		}
-	}
-}
-f[100] = function(){
-	playSound("sightlaser_collected");
-	for (let ball of game.get("balls")){
-		if (!ball.components.sightlaser)
-			ball.components.sightlaser = new SightLaser(ball);
-	}
-	game.emplaceMonitor(100, "exist", "balls", ["components", "sightlaser"]);
 };
 
 //Snapper
@@ -4363,9 +4459,16 @@ class Nervous{
 	}
 
 	updateMovement(){
-		const spd = 3;
+		const spd = 9;
 		const mag = 32;
+		let pw = this.paddle.paddleWidth / 2;
+
 		let mx = mouse.x;
+		mx = clamp(
+			mx, 
+			DIM.lwallx + pw + (mag * 1), 
+			DIM.rwallx - pw - (mag * 1)
+		);
 		mx += Math.sin(spd * this.timer2 / 1000) * mag;
 		return [mx, Paddle.baseLine];
 	}
@@ -6167,6 +6270,12 @@ f[57] = function(){
 			return (arr[0] != "dropper_0");
 		});
 	}
+
+	//create visible monitor
+	if (!game.getEffect("laceration", true)){
+		game.emplaceEffect("laceration", new Effect());
+		game.emplaceEffectMonitor(57, "exist", "laceration");
+	}
 }
 
 //Mobility
@@ -6227,11 +6336,11 @@ f[67] = function(){
 }
 
 //Slug
-class Slug extends Special{
+class Slug extends Effect{
 	//Slug permamently slows down all enemies and hostile projectiles
 
 	constructor(){
-		super(null);
+		super();
 		this.record = new Set();
 
 		//[name, time multiplier]
@@ -6249,9 +6358,8 @@ class Slug extends Special{
 
 	update(delta){
 		let record = this.record;
-		//remove dead objects
+		//remove dead objects to save memory
 		for (let obj of record){
-			//don't need to restore dead objects
 			if (obj.shouldBeRemoved())
 				record.delete(obj);
 		}
@@ -6276,9 +6384,11 @@ class Slug extends Special{
 	}
 }
 f[103] = function(){
-	if (checkExistingInstance("specials1", Slug))
+	if (game.getEffect("slug", true))
 		return;
-	game.emplace("specials1", new Slug());
+
+	game.emplaceEffect("slug", new Slug());
+	game.emplaceEffectMonitor(103, "exist", "slug");
 };
 
 /*==== Mystery Subcategory ====*/
@@ -6332,12 +6442,24 @@ f[94] = function(){
 f[12] = function(){
 	playSound("bypass_collected");
 	game.top.bypass.open(1);
+
+	let monitor = game.emplaceMonitor(12, "exist");
+	monitor.update = () => {
+		if (game.top.bypass.mode != 1)
+			monitor.kill();
+	};
 }
 
 //Warp
 f[122] = function(){
 	playSound("bypass_collected");
 	game.top.bypass.open(2);
+
+	let monitor = game.emplaceMonitor(122, "exist");
+	monitor.update = () => {
+		if (game.top.bypass.mode != 2)
+			monitor.kill();
+	};
 }
 
 /*==== Miscellaneous ====*/
@@ -6440,6 +6562,7 @@ class Forcefield extends Special{
 			.beginFill(0xE6E68A, 0.5)
 			.drawRect(0, -height/2, DIM.boardw, height)
 		);
+		this.name = "forcefield";
 	}
 
 	update(delta){
@@ -6784,7 +6907,7 @@ class Tractor extends Special{
 		this.shockTimer = 0;
 		this.shockDelay = 1000 / 30;
 
-		this.name = "trator";
+		this.name = "tractor";
 		game.top.pit_blockers++;
 	}
 

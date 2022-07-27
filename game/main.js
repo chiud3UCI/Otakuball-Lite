@@ -1,4 +1,8 @@
-var VERSION = "0.0.0";
+var VERSION = "0.0.1";
+
+//choose which game state to start in to streamline debugging
+//"main", "editor"
+var START_STATE = "main";
 
 //all sprites are scaled 2x
 //a single brick is 32 pixels wide and 16 pixels high
@@ -317,6 +321,25 @@ class Game {
 	emplaceMonitor(powerupID, format, containerName, valueChain, verifyChain=null){
 		return this.top.monitorManager.emplace(powerupID, format, containerName, valueChain, verifyChain);
 	}
+
+	/**
+	 * 
+	 * @param {number} powerupID - Powerup ID
+	 * @param {"time"|"count"|"exist"} format  - how the monitor should interpret the monitored value
+	 * @param {string} effectName - Name of the effect
+	 * @param {string[]} valueChain - Property chain to value (optional if format is "exist")
+	 */
+	emplaceEffectMonitor(powerupID, format, effectName, valueChain){
+		return this.top.monitorManager.emplaceEffect(powerupID, format, effectName, valueChain);
+	}
+
+	emplaceEffect(name, effect){
+		this.top.emplaceEffect(name, effect);
+	}
+
+	getEffect(name, includeNew){
+		return this.top.getEffect(name, includeNew);
+	}
 }
 
 //custom mask class that takes in account of the window offset
@@ -554,7 +577,11 @@ function setup(){
 	game.stage.mask = new Mask(0, 0, DIM.w, DIM.h);
 
 	game.push(new MainMenuState());
-	// game.push(new EditorState());
+
+	if (START_STATE == "editor"){
+		game.push(new EditorState());
+	}
+	
 	// game.top.configPowerupButton.onClick();
 	// game.top.enemySpawnButton.onClick();
 	// game.push(new TestState());

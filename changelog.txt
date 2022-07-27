@@ -1,3 +1,12 @@
+[07/27/22 v0.0.1]
+-These powerups now appear on the Active Powerup Display:
+    -Large Ball, Shrink, Bypass, Warp, Forcefield, Laceration, Slug, Tractor
+-Added visual effects for Gravity and Antigravity
+-Gravity, Antigravity, and Sight Laser now affect all balls all the time without
+    overriding the previous ball Powerups
+-Fixed Glue not working
+-Nervous Paddle now shakes 3 times as fast and no longer crashes against the walls
+
 [07/24/22 v0.0.0]
 -Added Version Number
 -Added Active Powerup Display

@@ -102,7 +102,7 @@ class Sprite extends PIXI.Sprite{
 		return new this.constructor(...info.args);
 	}
 
-	isClonable(){
+	isCloneable(){
 		let info = this._constructorInfo;
 		if (!info)
 			return false;

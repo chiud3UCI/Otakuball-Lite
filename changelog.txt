@@ -1,3 +1,9 @@
+[08/01/22 v0.0.2]
+-Slime Brick Rework
+    -Slime Bricks now spread every second with the # of new bricks 
+     dependent on the size of the Slime cluster
+    -Added a giant Slime texture that’s shared by all Slime Bricks
+
 [07/27/22 v0.0.1]
 -These powerups now appear on the Active Powerup Display:
     -Large Ball, Shrink, Bypass, Warp, Forcefield, Laceration, Slug, Tractor

@@ -1,4 +1,4 @@
-var VERSION = "0.0.1";
+var VERSION = "0.0.2";
 
 //choose which game state to start in to streamline debugging
 //"main", "editor"

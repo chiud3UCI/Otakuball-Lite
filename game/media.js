@@ -1,3 +1,4 @@
+//IMPORTANT: Set this to false before uploading the changes
 var FORCE_RELOAD = false;
 
 //media handles the loading of assets(textures, sounds) as well

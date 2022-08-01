@@ -2291,7 +2291,7 @@ class SlotMachineBrick extends Brick{
 		}
 	}
 
-	//must be activated by calling SlotMachineBrick.initialize() right before the game starts
+	//must be activated by calling SlotMachineBrick.initialize() right after bricks are loaded
 	constructor(x, y, isYellow){
 		super("brick_invis", x, y);
 
@@ -2763,32 +2763,262 @@ class ResetBrick extends TriggerBrick{
 
 class SlimeBrick extends Brick{
 	static spreadDelay = 1000;
-	static spreadChance = 0.25;
 	static transformDelay = 100;
+	static crossOffsets = [[1,0], [-1,0], [0,1], [0,-1]];
 
-	//update all Slime Bricks
-	// static update(delta){
-	// 	for (let br of game.get("bricks")){
-	// 		if (!(br instanceof SlimeBrick))
-	// 			continue;
+	static activate(ps){
+		function slimeBrickCheck(){
+			for (let br of ps.get("bricks", true)){
+				if (br instanceof SlimeBrick)
+					return true;
+			}
+			return false;
+		}
+
+		//do not continue if there are no slime bricks at all
+		if (!slimeBrickCheck())
+			return;
+
+		//create a global slime sprite that spans the entire background.
+		//then use masks cut out the rectangles based on each slime brick's position
+		let underlay = new Special(null, DIM.lwallx, DIM.ceiling);
+		let tile = new PIXI.TilingSprite(
+			media.textures["bg_12_2"], 
+			DIM.boardw/2 + 64, 
+			DIM.boardh/2 + 64
+		);
+		underlay.addChild(tile);
+		ps.emplace("specials1", underlay);
+
+		let mask = new PIXI.Graphics();
+		tile.mask = mask;
+
+		//create an effect that will coordinate the spread of slime bricks
+		let slimeManager = {
+			spreadTimer: SlimeBrick.spreadDelay,
+			dead: false,
+
+			isDead(){
+				return this.dead;
+			},
+			kill(){
+				this.dead = true;
+			},
+			update(delta){
+				this.spreadTimer -= delta;
+				if (this.spreadTimer <= 0){
+					this.spreadTimer += SlimeBrick.spreadDelay;
+					SlimeBrick.updateAllSlimes();
+					//die if there are absolutely no more slime bricks
+					if (!slimeBrickCheck())
+						this.kill();
+				}
+				//update the masks
+				SlimeBrick.updateMask(mask);
+			},
 			
-	// 	}
-	// }
+		};
+
+		ps.emplaceEffect("slime", slimeManager);
+	}
+
+	//for each slime brick
+	static updateMask(mask){
+		const bw = 32;
+		const bh = 16;
+		const offx = DIM.offx;
+		const offy = DIM.offy;
+
+		mask.clear().beginFill(0xFFFFFF);
+
+		for (let br of game.get("bricks")){
+			if (br instanceof SlimeBrick){
+				let [x, y] = br.getPos();
+				mask.drawRect(x - bw/2 + offx, y + - bh/2 + offy, bw, bh);
+			}
+		}
+	}
+
+	/*
+		Algorithm:
+		1. Place all idle (not transforming or moving) slime bricks into a global slime set
+		2. Select a slime brick from the global slime and create a slime cluster by repeatedly
+		   searching for adjacent slime bricks
+		   2.1 While creating the cluster, keep track of adjacent empty spaces and non-slime bricks
+		   2.2 Empty spaces will be added to the "spread candidates" list
+		   2.3 Non-slime bricks will be added to the "transform candidates" list
+		3. After the cluster has been developed, remove the slime bricks from the global slime set
+           and repeat step 2 until there are no more slime bricks remaining
+		4. For each cluster, handle the Transform and Spread actions
+			4.1 If there are valid transform candidates, then randomly select a transform target
+			    and make the entire slime brick cluster transform into that target
+			4.2 Otherwise, if there are valid spread candidates, then randomly select a few spaces
+			    and have the slime bricks copy and spread into those spaces
+	*/
+	static updateAllSlimes(){
+		let grid = game.top.brickGrid;
+
+		let all_slimes = new Set();
+		for (let br of game.get("bricks")){
+			if (br instanceof SlimeBrick && br.canAct())
+				all_slimes.add(br);
+		}
+		//unprocessed_slimes will slowly decrease in size as slimes are placed into clusters
+		//all_slimes should remain unmodified
+		let unprocessed_slimes = new Set(all_slimes);
+
+		let clusters = [];
+
+		while (unprocessed_slimes.size > 0){
+			//get a single brick from unprocessed_slimes
+			let initial = unprocessed_slimes.values().next().value;
+
+			let remaining_slimes = [initial]; //adjacent slime bricks that haven't been processed yet
+			let visited_slimes = new Set([initial]); //keeps track of visited slime bricks
+			let spread_candidates = []; //element format: [slime brick, i, j] (the space to spread to)
+			let transform_candidates = []; //element format: [slime brick, target brick]
+
+			while (remaining_slimes.length > 0){
+				let slime = remaining_slimes.pop();
+				let {i: i0, j: j0} = slime.gridDat;
+
+				for (let [di, dj] of SlimeBrick.crossOffsets){
+					let i = i0 + di;
+					let j = j0 + dj;
+					if (!boundCheck(i, j)){
+						continue;
+					}
+
+					if (grid.isEmpty(i, j)){
+						spread_candidates.push([slime, i, j]);
+					}
+					else{
+						let br = grid.getStatic(i, j);
+						if (br){
+							if (all_slimes.has(br)){
+								//make sure to not revisit slime bricks
+								if (!visited_slimes.has(br)){
+									remaining_slimes.push(br);
+									visited_slimes.add(br);
+								}
+							}
+							else if (SlimeBrick.validTransformTarget(br)){
+								transform_candidates.push([slime, br]);
+							}
+						}
+					}
+				}
+			}
+			//remove visted slimes from unprocessed_slimes
+			for (let slime of visited_slimes){
+				unprocessed_slimes.delete(slime);
+			}
+			//create a new cluster with all of these slime data structures
+			clusters.push({
+				visited_slimes,
+				spread_candidates,
+				transform_candidates
+			});
+		}
+
+		//for each cluster, handle transform and spreading behavior
+		//Transform when possible, otherwise spread to empty spaces
+		for (let [index, cluster] of clusters.entries()){
+			let visited = cluster.visited_slimes;
+			let spread = cluster.spread_candidates;
+			let trans = cluster.transform_candidates;
+
+			if (trans.length > 0){
+				//randomly select a transformation candidate
+				let [start_slime, target] = trans[randRange(trans.length)];
+				//transform all contiguous slime bricks using breadth-first traversal
+				let queue = [[start_slime, 0]];
+				//use the existing visited_slimes set to keep track of already transforming bricks
+				visited.delete(start_slime);
+				while (queue.length > 0){
+					let [slime, dist] = queue.shift();
+					slime.beginTransform(target, dist);
+					let {i: i0, j: j0} = slime.gridDat;
+					for (let [di, dj] of SlimeBrick.crossOffsets){
+						let i = i0 + di;
+						let j = j0 + dj;
+						if (!boundCheck(i, j))
+							continue;
+						let br = grid.getStatic(i, j);
+						if (visited.has(br)){
+							visited.delete(br);
+							queue.push([br, dist + 1]);
+						}
+					}
+				}
+			}
+			//spread to a random spread candidate
+			else{
+				let size = visited.size;
+				let spread_count = Math.floor(size / 10) + 1;
+				for (let i = 0; i < spread_count; i++){
+					if (spread.length == 0)
+						break;
+					//randomly select a spread candidate
+					let spread_index = randRange(spread.length);
+					let [start_slime, i1, j1] = spread[spread_index];
+					start_slime.spreadTo(i1, j1);
+					//prevent multiple slime bricks from spreading into the same space
+					//by removing the spread coordinate from the current and subsequent clusters
+					for (let index2 = index; index2 < clusters.length; index2++){
+						let cluster2 = clusters[index2];
+						remove_if(cluster2.spread_candidates, 
+							([s, ix, jx]) => i1 == ix && j1 == jx);
+					}
+				}
+			}
+		}
+	}
+
+	//TODO: use "assimilate" instead of "transform" because it sounds better
+	static validTransformTarget(br){
+		if (br.brickType == "slime")
+			return false;
+		if (!br.isCloneable())
+			return false;
+		return br.armor < 1;
+	}
 
 	constructor(x, y){
-		super("brick_main_6_19", x, y);
+		// super("brick_main_6_19", x, y);
+		super("brick_invis", x, y);
 
-		this.spreadTimer = SlimeBrick.spreadDelay;
 		this.transformTimer = null;
 		this.transformTarget = null;
-
-		this.tint = 0x00FF00;
+		// this.tint = 0x00FF00;
 
 		this.brickType = "slime";
 	}
 
-	//when spreading to an existing brick, immediately trigger 
-	//transformation and do a fake spread using particles
+	//return true if the slime brick is able to spread or transform
+	canAct(){
+		if (this.transformTarget)
+			return false;
+		if (this.isMoving())
+			return false;
+		return true;
+	}
+
+	beginTransform(target, distance){
+		this.transformTarget = target;
+		this.transformTimer = (distance + 1) * SlimeBrick.transformDelay;
+		this.slimeMode = "transforming";
+		// this.tint = 0xFFFF00;
+	}
+
+	spreadTo(i, j){
+		let br = new SlimeBrick(...this.getPos());
+		let [x, y] = getGridPosInv(i, j);
+		br.setTravel(x, y, "time", 250);
+		game.emplace("bricks", br);
+		game.top.brickGrid.reserve(i, j);
+	}
+
 	update(delta){
 		if (this.transformTarget){
 			this.transformTimer -= delta;
@@ -2799,104 +3029,15 @@ class SlimeBrick extends Brick{
 				game.emplace("bricks", br);
 			}
 		}
-		else{
-			this.spreadTimer -= delta;
-			if (this.spreadTimer <= 0){
-				this.spreadTimer = SlimeBrick.spreadDelay;
-				if (Math.random() < SlimeBrick.spreadChance)
-					this.spreadOrTransform();
-			}
-		}
 
 		super.update(delta);
-	}
-
-	//Will first check if there is a suitable adjacent brick
-	//to transform to. Otherwise, will spread to empty adjacent brick.
-	static crossOffsets = [[1,0], [-1,0], [0,1], [0,-1]];
-
-	static canTransformTo(br){
-		if (br.brickType == "slime")
-			return false;
-		return br.armor < 1;
-	}
-	spreadOrTransform(){
-		let grid = game.top.brickGrid;
-
-		let [i0, j0] = getGridPos(...this.getPos());
-
-		let transformTargets = [];
-		let spreadTargets = [];
-		for (let [di, dj] of SlimeBrick.crossOffsets){
-			let i = i0 + di;
-			let j = j0 + dj;
-			if (!boundCheck(i, j))
-				continue;
-			if (grid.isEmpty(i, j))
-				spreadTargets.push([i, j]);
-			else{
-				let br = grid.getStatic(i, j);
-				if (br && SlimeBrick.canTransformTo(br))
-					transformTargets.push(br);
-			}
-		}
-
-		if (transformTargets.length > 0){
-			let index = randRange(transformTargets.length);
-			let brick = transformTargets[index];
-			this.transformAllSlime(brick, grid);
-		}
-
-		else if (spreadTargets.length > 0){
-			let [i, j] = spreadTargets[randRange(spreadTargets.length)];
-			let br = new SlimeBrick(...this.getPos());
-			br.zIndex = -1;
-			let [x, y] = getGridPosInv(i, j);
-			br.setTravel(x, y, "time", 250);
-			game.emplace("bricks", br);
-			grid.reserve(i, j);
-		}
-	}
-
-	//transform itself and all connecting slime to the target brick
-	transformAllSlime(brick, grid){
-		const delay = SlimeBrick.transformDelay;
-
-		//temporary measure - delete all new slime bricks
-		remove_if(
-			game.top.newObjects.bricks, br => br.brickType == "slime")
-
-		this.transformTarget = brick;
-		this.transformTimer = delay;
-		this.tint = 0xFFFF00;
-
-		let stack = [[this, delay]]; //[slimeBrick, tranformDelay]
-
-		while (stack.length > 0){
-			// console.log("stack: " + stack.length);
-			let [slime, time] = stack.shift();
-			let [i0, j0] = getGridPos(...slime.getPos());
-			for (let [di, dj] of SlimeBrick.crossOffsets){
-				let i = i0 + di;
-				let j = j0 + dj;
-				if (!boundCheck(i, j))
-					continue;
-				for (let br of grid.get(i, j)){
-					if (br.brickType == "slime" && !br.transformTarget){
-						br.transformTarget = brick;
-						br.transformTimer = time + delay;
-						br.tint = 0xFFFF00;
-						stack.push([br, time + delay]);
-					}
-				}
-			}
-		}
 	}
 }
 
 class ScatterBombBrick extends Brick{
 	constructor(x, y){
 		super("brick_main_12_22", x, y);
+		setConstructorInfo(this, ScatterBombBrick, arguments);
 
 		this.addAnim("glow", "scatter_glow", 1/8, true, true);
 
@@ -2968,6 +3109,7 @@ class ScatterBombBrick extends Brick{
 class ScatterBrick extends Brick{
 	constructor(x, y){
 		super("brick_invis", x, y);
+		setConstructorInfo(this, ScatterBrick, arguments);
 		this.intangible = true;
 		let ani = this.addAnim("spawn", "scatter_spawn", 1/4, false, true);
 		ani.onCompleteCustom = () => {
